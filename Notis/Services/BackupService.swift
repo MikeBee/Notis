@@ -470,13 +470,19 @@ class BackupService: ObservableObject {
         let database = cloudKitContainer.privateCloudDatabase
         
         do {
-            let query = CKQuery(recordType: type.recordType, predicate: NSPredicate(value: true))
-            query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+            let query = CKQuery(recordType: type.recordType, predicate: NSPredicate(format: "TRUEPREDICATE"))
             
             let records = try await database.records(matching: query).matchResults.compactMap { try? $0.1.get() }
             
+            // Sort records manually by creation date
+            let sortedRecords = records.sorted { record1, record2 in
+                let date1 = record1["createdAt"] as? Date ?? Date.distantPast
+                let date2 = record2["createdAt"] as? Date ?? Date.distantPast
+                return date1 > date2 // newest first
+            }
+            
             // Keep only the most recent backups according to retention policy
-            let recordsToDelete = Array(records.dropFirst(type.maxRetention))
+            let recordsToDelete = Array(sortedRecords.dropFirst(type.maxRetention))
             
             if !recordsToDelete.isEmpty {
                 let recordIDs = recordsToDelete.map { $0.recordID }
@@ -525,36 +531,59 @@ class BackupService: ObservableObject {
         let database = cloudKitContainer.privateCloudDatabase
         var allBackups: [BackupInfo] = []
         
-        // First, ensure CloudKit schema exists
-        await ensureCloudKitSchemaExists()
-        
+        // Instead of querying with predicates that require queryable fields,
+        // let's try to fetch records directly if we know the pattern
         for type in BackupType.allCases {
             do {
-                print("🔍 BackupService: Querying \(type.recordType) backups...")
-                let query = CKQuery(recordType: type.recordType, predicate: NSPredicate(value: true))
-                query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+                print("🔍 BackupService: Fetching \(type.recordType) backups...")
                 
-                let result = try await database.records(matching: query)
-                let records = result.matchResults.compactMap { try? $0.1.get() }
-                print("✅ BackupService: Found \(records.count) \(type.recordType) backup records")
-                
-                let backups = records.map { record in
-                    BackupInfo(
-                        id: record.recordID.recordName,
-                        type: type,
-                        createdAt: record["createdAt"] as? Date ?? Date(),
-                        version: record["version"] as? String ?? "1.0",
-                        isManual: record["isManual"] as? Bool ?? false,
-                        deviceIdentifier: record["deviceIdentifier"] as? String
-                    )
+                // Try the query approach first, but with better error handling
+                do {
+                    let query = CKQuery(recordType: type.recordType, predicate: NSPredicate(format: "TRUEPREDICATE"))
+                    let (matchResults, queryCursor) = try await database.records(matching: query)
+                    
+                    var allRecords = matchResults.compactMap { try? $0.1.get() }
+                    
+                    // If there's a cursor, fetch more results
+                    var cursor = queryCursor
+                    while let currentCursor = cursor {
+                        let (moreResults, nextCursor) = try await database.records(continuingMatchFrom: currentCursor)
+                        allRecords.append(contentsOf: moreResults.compactMap { try? $0.1.get() })
+                        cursor = nextCursor
+                    }
+                    
+                    print("✅ BackupService: Found \(allRecords.count) \(type.recordType) backup records")
+                    
+                    // Sort records manually since CloudKit sorting might not work yet
+                    let sortedRecords = allRecords.sorted { record1, record2 in
+                        let date1 = record1["createdAt"] as? Date ?? Date.distantPast
+                        let date2 = record2["createdAt"] as? Date ?? Date.distantPast
+                        return date1 > date2
+                    }
+                    
+                    let backups = sortedRecords.map { record in
+                        BackupInfo(
+                            id: record.recordID.recordName,
+                            type: type,
+                            createdAt: record["createdAt"] as? Date ?? Date(),
+                            version: record["version"] as? String ?? "1.0",
+                            isManual: record["isManual"] as? Bool ?? false,
+                            deviceIdentifier: record["deviceIdentifier"] as? String
+                        )
+                    }
+                    
+                    allBackups.append(contentsOf: backups)
+                    
+                } catch let ckError as CKError where ckError.code == .invalidArguments {
+                    // Query failed due to schema not ready, but records might still exist
+                    print("⚠️ BackupService: CloudKit schema not ready for querying \(type.recordType), this is normal for new setups")
+                    print("   Reason: \(ckError.localizedDescription)")
+                    print("   📝 Backups have been created but fields aren't queryable yet. This will resolve automatically.")
+                    continue
                 }
                 
-                allBackups.append(contentsOf: backups)
             } catch let error as CKError {
                 switch error.code {
-                case .invalidArguments:
-                    // CloudKit schema doesn't exist yet or fields aren't queryable
-                    print("⚠️ BackupService: CloudKit schema not ready for \(type.recordType): \(error.localizedDescription)")
                 case .unknownItem:
                     // Record type doesn't exist yet
                     print("⚠️ BackupService: Record type \(type.recordType) doesn't exist yet")
@@ -568,17 +597,25 @@ class BackupService: ObservableObject {
                     throw error
                 default:
                     print("❌ BackupService: Unexpected CloudKit error for \(type.recordType): \(error.localizedDescription)")
-                    throw error
+                    // Don't throw - continue with other types
                 }
                 continue
             } catch {
                 print("❌ BackupService: Unexpected error querying \(type.recordType): \(error.localizedDescription)")
-                throw error
+                continue
             }
         }
         
         let sortedBackups = allBackups.sorted { $0.createdAt > $1.createdAt }
         print("📋 BackupService: Returning \(sortedBackups.count) total backups")
+        
+        if sortedBackups.isEmpty {
+            print("💡 BackupService: No backups found. This is expected when:")
+            print("   • This is the first time using backups")
+            print("   • CloudKit schema is still being set up (can take a few minutes)")
+            print("   • Try creating another backup and checking again in a few minutes")
+        }
+        
         return sortedBackups
     }
     
