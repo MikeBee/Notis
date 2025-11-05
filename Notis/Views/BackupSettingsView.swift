@@ -238,18 +238,21 @@ struct BackupListView: View {
     let isLoading: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var backupService = BackupService.shared
+    @State private var availableBackups: [BackupInfo] = []
+    @State private var isLoadingBackups = false
     
     var body: some View {
         NavigationView {
             VStack {
-                if isLoading {
+                if isLoadingBackups {
                     VStack {
                         ProgressView()
                         Text("Loading backups...")
                             .font(.caption)
                             .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
                     }
-                } else if backups.isEmpty {
+                } else if availableBackups.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "icloud.slash")
                             .font(.system(size: 48))
@@ -280,19 +283,24 @@ struct BackupListView: View {
                     }
                     .padding()
                 } else {
-                    List(backups) { backup in
+                    List(availableBackups) { backup in
                         BackupRow(backup: backup)
                     }
                 }
             }
             .navigationTitle("Backup History")
             .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                // Initialize with passed data, then load fresh
+                availableBackups = backups
+                loadBackups()
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Refresh") {
-                        loadAvailableBackups()
+                        loadBackups()
                     }
-                    .disabled(isLoading)
+                    .disabled(isLoadingBackups)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -300,6 +308,24 @@ struct BackupListView: View {
                         dismiss()
                     }
                 }
+            }
+        }
+    }
+    
+    private func loadBackups() {
+        isLoadingBackups = true
+        Task {
+            do {
+                let backups = try await backupService.getAvailableBackups()
+                await MainActor.run {
+                    self.availableBackups = backups
+                    self.isLoadingBackups = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoadingBackups = false
+                }
+                print("Failed to load backups: \(error)")
             }
         }
     }

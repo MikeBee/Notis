@@ -509,7 +509,6 @@ class BackupService: ObservableObject {
             do {
                 // Check if we can query for records of this type
                 let query = CKQuery(recordType: type.recordType, predicate: NSPredicate(format: "TRUEPREDICATE"))
-                query.resultsLimit = 1
                 _ = try await database.records(matching: query)
                 print("✅ BackupService: Schema exists for \(type.recordType)")
             } catch let error as CKError {
