@@ -11,6 +11,11 @@ import SwiftUI
 struct NotisApp: App {
     let persistenceController = PersistenceController.shared
 
+    init() {
+        // Check and reset daily goals on app launch
+        GoalsService.shared.checkAndResetDailyGoals()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

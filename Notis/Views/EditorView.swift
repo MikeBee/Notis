@@ -282,6 +282,7 @@ struct EditorView: View {
 
 struct WordCounterView: View {
     @ObservedObject var sheet: Sheet
+    @ObservedObject private var sessionService = WritingSessionService.shared
     
     private var characterCount: Int {
         sheet.content?.count ?? 0
@@ -295,23 +296,38 @@ struct WordCounterView: View {
     var body: some View {
         HStack(spacing: 16) {
             Spacer()
-            
+
+            // Writing session timer (if active)
+            if sessionService.isSessionActive {
+                Image(systemName: "clock.fill")
+                    .font(.caption)
+                    .foregroundColor(.green)
+
+                Text(sessionService.formattedSessionTime)
+                    .font(.caption)
+                    .foregroundColor(.green)
+
+                Text("•")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             Text("\(sheet.wordCount) words")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            
+
             Text("•")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            
+
             Text("\(characterCount) characters")
                 .font(.caption)
                 .foregroundColor(.secondary)
-                
+
             Text("•")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            
+
             Text("\(readingTime) min read")
                 .font(.caption)
                 .foregroundColor(.secondary)

@@ -277,6 +277,7 @@ struct ProgressContent: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var goalsService = GoalsService.shared
     @State private var showingGoalEditor = false
+    @State private var showingHistory = false
     @State private var editingGoal: Goal?
     
     private var statistics: SheetStatistics {
@@ -295,12 +296,26 @@ struct ProgressContent: View {
                     Text("🎯 Goals")
                         .font(UlyssesDesign.Typography.editorTitle)
                         .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
-                    
+
                     Spacer()
-                    
-                    Button(action: { 
+
+                    // History button
+                    Button(action: {
+                        showingHistory = true
+                    }) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .frame(width: 20, height: 20)
+                    .background(UlyssesDesign.Colors.hover.opacity(0.3))
+                    .cornerRadius(4)
+
+                    // Add goal button
+                    Button(action: {
                         editingGoal = nil
-                        showingGoalEditor = true 
+                        showingGoalEditor = true
                     }) {
                         Image(systemName: "plus")
                             .font(.system(size: 12, weight: .medium))
@@ -415,6 +430,11 @@ struct ProgressContent: View {
                 }
             )
         }
+        
+        .sheet(isPresented: $showingHistory) {
+            GoalHistoryView()
+        }
+        
         .onReceive(NotificationCenter.default.publisher(for: .goalCompleted)) { notification in
             if let goal = notification.object as? Goal, goal.sheet == sheet {
                 // Could show celebration animation here
@@ -1155,35 +1175,46 @@ struct GoalProgressCard: View {
                     }
                 }
                 
-                // Progress bar
-                VStack(spacing: 4) {
+                // Progress visualization (bar or pie chart)
+                if goal.visualTypeEnum == .pieChart {
+                    // Pie chart view
                     HStack {
-                        Text("\(goal.currentCount) / \(goal.targetCount)")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
-                        
                         Spacer()
-                        
-                        Text("\(Int(goal.progressPercentage * 100))%")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(progressColor)
+                        GoalPieChartView(goal: goal, size: 100)
+                        Spacer()
                     }
-                    
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            Rectangle()
-                                .fill(UlyssesDesign.Colors.hover.opacity(0.3))
-                                .frame(height: 6)
-                                .cornerRadius(3)
+                    .padding(.vertical, UlyssesDesign.Spacing.sm)
+                } else {
+                    // Progress bar view
+                    VStack(spacing: 4) {
+                        HStack {
+                            Text("\(goal.currentCount) / \(goal.targetCount)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
                             
-                            Rectangle()
-                                .fill(progressColor)
-                                .frame(width: geometry.size.width * goal.progressPercentage, height: 6)
-                                .cornerRadius(3)
-                                .animation(.easeInOut(duration: 0.3), value: goal.progressPercentage)
+                            Spacer()
+                            
+                            Text("\(Int(goal.progressPercentage * 100))%")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(progressColor)
                         }
+                        
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                Rectangle()
+                                    .fill(UlyssesDesign.Colors.hover.opacity(0.3))
+                                    .frame(height: 6)
+                                    .cornerRadius(3)
+                                
+                                Rectangle()
+                                    .fill(progressColor)
+                                    .frame(width: geometry.size.width * goal.progressPercentage, height: 6)
+                                    .cornerRadius(3)
+                                    .animation(.easeInOut(duration: 0.3), value: goal.progressPercentage)
+                            }
+                        }
+                        .frame(height: 6)
                     }
-                    .frame(height: 6)
                 }
                 
                 // Deadline info
@@ -1227,7 +1258,48 @@ struct GoalProgressCard: View {
                 isHovering = hovering
             }
         }
+        .contextMenu {
+            Button(action: {
+                toggleVisualType()
+            }) {
+                Label(
+                    goal.visualTypeEnum == .progressBar ? "Switch to Pie Chart" : "Switch to Progress Bar",
+                    systemImage: goal.visualTypeEnum == .progressBar ? "chart.pie.fill" : "chart.bar.fill"
+                )
+            }
+            
+            Divider()
+            
+            Button(action: {
+                goalsService.pauseResumeGoal(goal)
+            }) {
+                Label(
+                    goal.isActive ? "Pause Goal" : "Resume Goal",
+                    systemImage: goal.isActive ? "pause.circle" : "play.circle"
+                )
+            }
+            
+            Button(role: .destructive, action: {
+                goalsService.deleteGoal(goal)
+            }) {
+                Label("Delete Goal", systemImage: "trash")
+            }
+        }
     }
+
+    private func toggleVisualType() {
+        let context = PersistenceController.shared.container.viewContext
+        goal.visualType = goal.visualTypeEnum == .progressBar ? "pieChart" : "progressBar"
+        goal.modifiedAt = Date()
+
+        do {
+            try context.save()
+            goalsService.objectWillChange.send()
+        } catch {
+            print("Failed to toggle visual type: \(error)")
+        }
+    }
+    
 }
 
 struct GoalEditorView: View {

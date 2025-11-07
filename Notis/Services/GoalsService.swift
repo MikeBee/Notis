@@ -52,11 +52,12 @@ class GoalsService: ObservableObject {
         type: GoalType,
         deadline: Date? = nil,
         sheet: Sheet? = nil,
-        tag: Tag? = nil
+        tag: Tag? = nil,
+        visualType: GoalVisualType = .progressBar
     ) -> Goal {
         let context = PersistenceController.shared.container.viewContext
         let goal = Goal(context: context)
-        
+
         goal.id = UUID()
         goal.title = title
         goal.goalDescription = description
@@ -68,9 +69,11 @@ class GoalsService: ObservableObject {
         goal.isCompleted = false
         goal.createdAt = Date()
         goal.modifiedAt = Date()
+        goal.lastResetDate = Date()
+        goal.visualType = visualType.rawValue
         goal.sheet = sheet
         goal.tag = tag
-        
+
         do {
             try context.save()
             updateCurrentCount(for: goal)
@@ -78,7 +81,7 @@ class GoalsService: ObservableObject {
         } catch {
             print("Failed to create goal: \(error)")
         }
-        
+
         return goal
     }
     
@@ -165,20 +168,10 @@ class GoalsService: ObservableObject {
             } else if let tag = goal.tag {
                 newCount = getCharacterCountForTag(tag)
             }
-        // case .sessions:
-            // For sessions, we would need to track writing sessions separately
-            // For now, we'll keep the current count as is
-           //  break
         case .time:
-            // For time tracking, we would need separate session tracking
-            // For now, we'll keep the current count as is
+            // Writing time is tracked separately via WritingSessionService
+            // Just keep the current count that's updated by the session tracker
             return
-       //  case .completion:
-          //  if let sheet = goal.sheet {
-       //         newCount = (sheet.content?.isEmpty == false) ? 1 : 0
-         //   } else if let tag = goal.tag {
-           //     newCount = getCompletionCountForTag(tag)
-            // }
         }
         
         let previousCount = goal.currentCount
@@ -280,12 +273,7 @@ class GoalsService: ObservableObject {
         guard let sheetTags = tag.sheetTags as? Set<SheetTag> else { return 0 }
         return sheetTags.compactMap { Int32($0.sheet?.content?.count ?? 0) }.reduce(0, +)
     }
-    
-    // private func getCompletionCountForTag(_ tag: Tag) -> Int32 {
-    //    guard let sheetTags = tag.sheetTags as? Set<SheetTag> else { return 0 }
-    //    return Int32(sheetTags.filter { !($0.sheet?.content?.isEmpty ?? true) }.count)
-    // }
-    
+
     func updateAllGoals() {
         let context = PersistenceController.shared.container.viewContext
         let request: NSFetchRequest<Goal> = Goal.fetchRequest()
@@ -298,6 +286,108 @@ class GoalsService: ObservableObject {
             }
         } catch {
             print("Failed to update all goals: \(error)")
+        }
+    }
+
+    // MARK: - Daily Reset Logic
+
+    func checkAndResetDailyGoals() {
+        let context = PersistenceController.shared.container.viewContext
+        let request: NSFetchRequest<Goal> = Goal.fetchRequest()
+        request.predicate = NSPredicate(format: "isActive == YES")
+
+        do {
+            let goals = try context.fetch(request)
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+
+            for goal in goals {
+                // Only reset goals without a specific deadline (daily goals)
+                guard goal.deadline == nil else { continue }
+
+                // Check if goal needs to be reset
+                if let lastReset = goal.lastResetDate {
+                    let lastResetDay = calendar.startOfDay(for: lastReset)
+
+                    // If last reset was before today, save history and reset
+                    if lastResetDay < today {
+                        saveGoalHistory(for: goal, date: lastResetDay)
+                        resetGoal(goal)
+                    }
+                } else {
+                    // No last reset date, initialize it
+                    goal.lastResetDate = Date()
+                }
+            }
+
+            try context.save()
+            objectWillChange.send()
+        } catch {
+            print("Failed to check and reset daily goals: \(error)")
+        }
+    }
+
+    private func resetGoal(_ goal: Goal) {
+        goal.currentCount = 0
+        goal.isCompleted = false
+        goal.lastResetDate = Date()
+        goal.modifiedAt = Date()
+    }
+
+    // MARK: - History Tracking
+
+    func saveGoalHistory(for goal: Goal, date: Date? = nil) {
+        let context = PersistenceController.shared.container.viewContext
+        let history = GoalHistory(context: context)
+
+        history.id = UUID()
+        history.date = date ?? Date()
+        history.completedCount = goal.currentCount
+        history.targetCount = goal.targetCount
+        history.wasCompleted = goal.isCompleted
+        history.goal = goal
+
+        do {
+            try context.save()
+        } catch {
+            print("Failed to save goal history: \(error)")
+        }
+    }
+
+    func getGoalHistory(for goal: Goal, limit: Int = 30) -> [GoalHistory] {
+        let context = PersistenceController.shared.container.viewContext
+        let request: NSFetchRequest<GoalHistory> = GoalHistory.fetchRequest()
+        request.predicate = NSPredicate(format: "goal == %@", goal)
+        request.sortDescriptors = [NSSortDescriptor(key: "date", ascending: false)]
+        request.fetchLimit = limit
+
+        do {
+            return try context.fetch(request)
+        } catch {
+            print("Failed to fetch goal history: \(error)")
+            return []
+        }
+    }
+
+    func getAllGoalHistoryForDate(_ date: Date) -> [(goal: Goal, history: GoalHistory)] {
+        let context = PersistenceController.shared.container.viewContext
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+
+        let request: NSFetchRequest<GoalHistory> = GoalHistory.fetchRequest()
+        request.predicate = NSPredicate(format: "date >= %@ AND date < %@", startOfDay as NSDate, endOfDay as NSDate)
+        request.sortDescriptors = [NSSortDescriptor(key: "date", ascending: false)]
+
+        do {
+            let histories = try context.fetch(request)
+            return histories.compactMap { history in
+                guard let goal = history.goal else { return nil }
+                return (goal: goal, history: history)
+            }
+        } catch {
+            print("Failed to fetch goal history for date: \(error)")
+            return []
         }
     }
 }
@@ -343,6 +433,29 @@ enum GoalType: String, CaseIterable {
     }
 }
 
+enum GoalVisualType: String, CaseIterable {
+    case progressBar = "progressBar"
+    case pieChart = "pieChart"
+
+    var displayName: String {
+        switch self {
+        case .progressBar:
+            return "Progress Bar"
+        case .pieChart:
+            return "Pie Chart"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .progressBar:
+            return "chart.bar.fill"
+        case .pieChart:
+            return "chart.pie.fill"
+        }
+    }
+}
+
 // MARK: - Notification Extensions
 
 extension Notification.Name {
@@ -367,7 +480,7 @@ extension Goal {
         guard let deadline = deadline else { return "No deadline" }
 
         let formatter = DateFormatter()
-        if Calendar.current.isDateInToday(deadline) {  // ← Changed this line
+        if Calendar.current.isDateInToday(deadline) {
             return "Today"
         } else if Calendar.current.isDate(deadline, inSameDayAs: Date().addingTimeInterval(86400)) {
             return "Tomorrow"
@@ -380,11 +493,19 @@ extension Goal {
     var typeEnum: GoalType {
         return GoalType(rawValue: goalType ?? "words") ?? .words
     }
-    
+
+    var visualTypeEnum: GoalVisualType {
+        return GoalVisualType(rawValue: visualType ?? "progressBar") ?? .progressBar
+    }
+
+    var isDailyGoal: Bool {
+        return deadline == nil
+    }
+
     var displayTitle: String {
         return title ?? "Untitled Goal"
     }
-    
+
     var displayDescription: String {
         return goalDescription ?? ""
     }

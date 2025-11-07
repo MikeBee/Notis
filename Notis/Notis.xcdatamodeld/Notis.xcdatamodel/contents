@@ -87,9 +87,12 @@
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="isActive" optional="YES" attributeType="Boolean" defaultValue="YES" usesScalarValueType="YES"/>
         <attribute name="isCompleted" optional="YES" attributeType="Boolean" defaultValue="NO" usesScalarValueType="YES"/>
+        <attribute name="lastResetDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="modifiedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="title" optional="YES" attributeType="String"/>
         <attribute name="targetCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="visualType" optional="YES" attributeType="String" defaultValue="progressBar"/>
+        <relationship name="history" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="GoalHistory" inverseName="goal" inverseEntity="GoalHistory"/>
         <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Sheet" inverseName="goals" inverseEntity="Sheet"/>
         <relationship name="tag" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Tag" inverseName="goals" inverseEntity="Tag"/>
     </entity>
@@ -99,9 +102,18 @@
         <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Sheet" inverseName="tags" inverseEntity="Sheet"/>
         <relationship name="tag" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Tag" inverseName="sheetTags" inverseEntity="Tag"/>
     </entity>
+    <entity name="GoalHistory" representedClassName="GoalHistory" syncable="YES" codeGenerationType="class">
+        <attribute name="completedCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="targetCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="wasCompleted" optional="YES" attributeType="Boolean" defaultValue="NO" usesScalarValueType="YES"/>
+        <relationship name="goal" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Goal" inverseName="history" inverseEntity="Goal"/>
+    </entity>
     <elements>
         <element name="Annotation" positionX="556" positionY="-18" width="128" height="149"/>
-        <element name="Goal" positionX="1132" positionY="-18" width="128" height="269"/>
+        <element name="Goal" positionX="1132" positionY="-18" width="128" height="299"/>
+        <element name="GoalHistory" positionX="1276" positionY="-18" width="128" height="134"/>
         <element name="Group" positionX="-63" positionY="-18" width="128" height="164"/>
         <element name="Note" positionX="700" positionY="-18" width="128" height="149"/>
         <element name="Sheet" positionX="144" positionY="-18" width="128" height="239"/>
