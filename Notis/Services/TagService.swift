@@ -37,6 +37,11 @@ class TagService: ObservableObject {
         let savedSortOrder = UserDefaults.standard.string(forKey: "tagSortOrder")
         self.currentSortOrder = TagSortOrder(rawValue: savedSortOrder ?? "") ?? .alphabetical
         self.sortAscending = UserDefaults.standard.object(forKey: "tagSortAscending") as? Bool ?? true
+        
+        // Recalculate tag usage counts on startup to ensure accuracy
+        DispatchQueue.main.async {
+            self.recalculateAllTagUsageCounts()
+        }
     }
     
     // MARK: - Tag Management
@@ -466,15 +471,30 @@ class TagService: ObservableObject {
         #endif
     }
     
+    func recalculateAllTagUsageCounts() {
+        let allTags = getAllTags()
+        for tag in allTags {
+            let actualUsageCount = tag.sheetTags?.count ?? 0
+            tag.usageCount = Int32(actualUsageCount)
+        }
+        
+        do {
+            try viewContext.save()
+        } catch {
+            print("Failed to recalculate tag usage counts: \(error)")
+        }
+    }
+    
     private func updateTagUsage(_ tag: Tag) {
-        tag.usageCount += 1
+        // Calculate actual usage count based on sheet associations
+        let actualUsageCount = tag.sheetTags?.count ?? 0
+        tag.usageCount = Int32(actualUsageCount)
         tag.lastUsedAt = Date()
         tag.modifiedAt = Date()
         
         // Save the usage update immediately
         do {
             try viewContext.save()
-            print("🏷️ Updated usage for '\(tag.displayName)': \(tag.usageCount)")
         } catch {
             print("Failed to save tag usage update: \(error)")
         }

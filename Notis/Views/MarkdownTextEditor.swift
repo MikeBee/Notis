@@ -93,11 +93,14 @@ struct MarkdownHighlightedText: View {
         // Create attributed string with both prefix and content
         var fullAttributed = AttributedString()
         
-        // Add the # symbols with small, light gray styling (if enabled)
+        // Add the header level indicators (H1, H2, H3) with light gray styling (if enabled)
         if appState.showMarkdownHeaderSymbols {
-            var prefixAttributed = AttributedString(prefix)
-            prefixAttributed.font = UIFont.systemFont(ofSize: baseFontSize * 0.5) // Half size
-            prefixAttributed.foregroundColor = Color.gray.opacity(0.5) // Light gray
+            let headerLabels = ["H1 ", "H2 ", "H3 "]
+            let headerLabel = headerLabels[min(headerLevel - 1, headerLabels.count - 1)]
+            
+            var prefixAttributed = AttributedString(headerLabel)
+            prefixAttributed.font = UIFont.systemFont(ofSize: baseFontSize * 0.7, weight: .medium)
+            prefixAttributed.foregroundColor = Color.gray.opacity(0.6)
             fullAttributed.append(prefixAttributed)
         }
         
@@ -108,6 +111,14 @@ struct MarkdownHighlightedText: View {
         contentAttributed.foregroundColor = Color.primary
         
         fullAttributed.append(contentAttributed)
+        
+        // Apply paragraph style for outdenting if header symbols are shown
+        if appState.showMarkdownHeaderSymbols {
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.headIndent = 30 // Regular text indented to align with body
+            paragraphStyle.firstLineHeadIndent = 0 // First line (with H1/H2/H3) starts at margin
+            fullAttributed.paragraphStyle = paragraphStyle
+        }
         
         return fullAttributed
     }

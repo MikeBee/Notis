@@ -407,9 +407,15 @@ struct ProgressContent: View {
             GoalEditorView(
                 sheet: sheet,
                 existingGoal: editingGoal,
-                onSave: { title, description, targetCount, type, deadline in
+                onSave: { title, description, targetCount, type, deadline, visualType in
                     if let goal = editingGoal {
                         goalsService.updateGoal(goal, title: title, description: description, targetCount: targetCount, deadline: deadline)
+                        // Update visual type separately since updateGoal doesn't handle it
+                        let context = PersistenceController.shared.container.viewContext
+                        goal.visualType = visualType.rawValue
+                        goal.modifiedAt = Date()
+                        try? context.save()
+                        goalsService.objectWillChange.send()
                     } else {
                         _ = goalsService.createGoal(
                             title: title,
@@ -417,7 +423,8 @@ struct ProgressContent: View {
                             targetCount: targetCount,
                             type: type,
                             deadline: deadline,
-                            sheet: sheet
+                            sheet: sheet,
+                            visualType: visualType
                         )
                     }
                     editingGoal = nil
@@ -541,9 +548,15 @@ struct GoalsContent: View {
             GoalEditorView(
                 sheet: selectedGoalScope == .currentSheet ? sheet : nil,
                 existingGoal: editingGoal,
-                onSave: { title, description, targetCount, type, deadline in
+                onSave: { title, description, targetCount, type, deadline, visualType in
                     if let goal = editingGoal {
                         goalsService.updateGoal(goal, title: title, description: description, targetCount: targetCount, deadline: deadline)
+                        // Update visual type separately since updateGoal doesn't handle it
+                        let context = PersistenceController.shared.container.viewContext
+                        goal.visualType = visualType.rawValue
+                        goal.modifiedAt = Date()
+                        try? context.save()
+                        goalsService.objectWillChange.send()
                     } else {
                         let targetSheet = selectedGoalScope == .currentSheet ? sheet : nil
                         _ = goalsService.createGoal(
@@ -552,7 +565,8 @@ struct GoalsContent: View {
                             targetCount: targetCount,
                             type: type,
                             deadline: deadline,
-                            sheet: targetSheet
+                            sheet: targetSheet,
+                            visualType: visualType
                         )
                     }
                     editingGoal = nil
@@ -1305,7 +1319,7 @@ struct GoalProgressCard: View {
 struct GoalEditorView: View {
     let sheet: Sheet?
     let existingGoal: Goal?
-    let onSave: (String, String?, Int32, GoalType, Date?) -> Void
+    let onSave: (String, String?, Int32, GoalType, Date?, GoalVisualType) -> Void
     let onDelete: () -> Void
     
     @Environment(\.dismiss) private var dismiss
@@ -1314,6 +1328,7 @@ struct GoalEditorView: View {
     @State private var description: String = ""
     @State private var targetCount: String = ""
     @State private var goalType: GoalType = .words
+    @State private var visualType: GoalVisualType = .progressBar
     @State private var hasDeadline: Bool = false
     @State private var deadline: Date = Date().addingTimeInterval(86400 * 7) // 1 week from now
     @State private var showingDeleteAlert = false
@@ -1391,6 +1406,24 @@ struct GoalEditorView: View {
                                 .keyboardType(.numberPad)
                         }
                         
+                        // Visual Type
+                        VStack(alignment: .leading, spacing: UlyssesDesign.Spacing.sm) {
+                            Text("Progress Display")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
+                            
+                            Picker("Visual Type", selection: $visualType) {
+                                ForEach(GoalVisualType.allCases, id: \.self) { type in
+                                    HStack {
+                                        Image(systemName: type.icon)
+                                        Text(type.displayName)
+                                    }
+                                    .tag(type)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                        }
+                        
                         // Deadline
                         VStack(alignment: .leading, spacing: UlyssesDesign.Spacing.sm) {
                             Toggle("Set Deadline", isOn: $hasDeadline)
@@ -1426,7 +1459,7 @@ struct GoalEditorView: View {
                     Button("Save", action: {
                         let target = Int32(targetCount) ?? 0
                         let finalDeadline = hasDeadline ? deadline : nil
-                        onSave(title, description.isEmpty ? nil : description, target, goalType, finalDeadline)
+                        onSave(title, description.isEmpty ? nil : description, target, goalType, finalDeadline, visualType)
                         dismiss()
                     })
                     .disabled(title.isEmpty || targetCount.isEmpty || Int32(targetCount) == nil || Int32(targetCount)! <= 0)
@@ -1444,6 +1477,7 @@ struct GoalEditorView: View {
                 description = goal.displayDescription
                 targetCount = String(goal.targetCount)
                 goalType = goal.typeEnum
+                visualType = goal.visualTypeEnum
                 hasDeadline = goal.deadline != nil
                 if let deadline = goal.deadline {
                     self.deadline = deadline
