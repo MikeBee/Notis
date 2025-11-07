@@ -520,6 +520,8 @@ struct MarkdownTextEditor: View {
             onTextChange(newValue)
             // Don't update cursor position here - let the UIKit notifications handle it
             lastTextLength = newValue.count
+            // Track writing activity for time-based goals
+            WritingSessionService.shared.recordActivity()
         }
         .onChange(of: isTextEditorFocused) { _, focused in
             if focused {

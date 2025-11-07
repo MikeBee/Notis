@@ -165,20 +165,20 @@ class GoalsService: ObservableObject {
             } else if let tag = goal.tag {
                 newCount = getCharacterCountForTag(tag)
             }
-        case .sessions:
+        // case .sessions:
             // For sessions, we would need to track writing sessions separately
             // For now, we'll keep the current count as is
-            break
+           //  break
         case .time:
             // For time tracking, we would need separate session tracking
             // For now, we'll keep the current count as is
-            break
-        case .completion:
-            if let sheet = goal.sheet {
-                newCount = (sheet.content?.isEmpty == false) ? 1 : 0
-            } else if let tag = goal.tag {
-                newCount = getCompletionCountForTag(tag)
-            }
+            return
+       //  case .completion:
+          //  if let sheet = goal.sheet {
+       //         newCount = (sheet.content?.isEmpty == false) ? 1 : 0
+         //   } else if let tag = goal.tag {
+           //     newCount = getCompletionCountForTag(tag)
+            // }
         }
         
         let previousCount = goal.currentCount
@@ -281,10 +281,10 @@ class GoalsService: ObservableObject {
         return sheetTags.compactMap { Int32($0.sheet?.content?.count ?? 0) }.reduce(0, +)
     }
     
-    private func getCompletionCountForTag(_ tag: Tag) -> Int32 {
-        guard let sheetTags = tag.sheetTags as? Set<SheetTag> else { return 0 }
-        return Int32(sheetTags.filter { !($0.sheet?.content?.isEmpty ?? true) }.count)
-    }
+    // private func getCompletionCountForTag(_ tag: Tag) -> Int32 {
+    //    guard let sheetTags = tag.sheetTags as? Set<SheetTag> else { return 0 }
+    //    return Int32(sheetTags.filter { !($0.sheet?.content?.isEmpty ?? true) }.count)
+    // }
     
     func updateAllGoals() {
         let context = PersistenceController.shared.container.viewContext
@@ -307,52 +307,38 @@ class GoalsService: ObservableObject {
 enum GoalType: String, CaseIterable {
     case words = "words"
     case characters = "characters"
-    case sessions = "sessions"
     case time = "time"
-    case completion = "completion"
-    
+
     var displayName: String {
         switch self {
         case .words:
             return "Words"
         case .characters:
             return "Characters"
-        case .sessions:
-            return "Writing Sessions"
         case .time:
             return "Writing Time"
-        case .completion:
-            return "Completion"
         }
     }
-    
+
     var icon: String {
         switch self {
         case .words:
             return "text.word.spacing"
         case .characters:
             return "textformat.abc"
-        case .sessions:
-            return "calendar"
         case .time:
             return "clock"
-        case .completion:
-            return "checkmark.circle"
         }
     }
-    
+
     var unit: String {
         switch self {
         case .words:
             return "words"
         case .characters:
             return "chars"
-        case .sessions:
-            return "sessions"
         case .time:
             return "minutes"
-        case .completion:
-            return "items"
         }
     }
 }
@@ -379,9 +365,9 @@ extension Goal {
     
     var formattedDeadline: String {
         guard let deadline = deadline else { return "No deadline" }
-        
+
         let formatter = DateFormatter()
-        if Calendar.current.isToday(deadline) {
+        if Calendar.current.isDateInToday(deadline) {  // ← Changed this line
             return "Today"
         } else if Calendar.current.isDate(deadline, inSameDayAs: Date().addingTimeInterval(86400)) {
             return "Tomorrow"

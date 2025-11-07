@@ -487,15 +487,23 @@ struct MarkdownEditor: View {
         .onAppear {
             // Force content refresh when view appears
             loadSheetContent()
+            // Start writing session for this sheet
+            WritingSessionService.shared.startSession(for: sheet)
         }
         .onChange(of: sheet) { oldSheet, newSheet in
+            // End session for old sheet
+            WritingSessionService.shared.endSession()
             // Save content to the OLD sheet before switching
             saveContentToSheet(oldSheet)
             // Load content from the NEW sheet
             loadSheetContent()
+            // Start session for new sheet
+            WritingSessionService.shared.startSession(for: newSheet)
         }
         .onDisappear {
             saveContent()
+            // End writing session when leaving editor
+            WritingSessionService.shared.endSession()
         }
         .onChange(of: appState.showLibrary) { _, _ in
             updateViewModeForPaneVisibility()
