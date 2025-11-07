@@ -14,7 +14,11 @@ struct ContentView: View {
     @State private var showCommandPalette = false
     @State private var showSettings = false
     @State private var showDashboard = false
+    @State private var showKeyboardShortcuts = false
+    @State private var showAdvancedSearch = false
+    @State private var showTemplates = false
     @State private var dashboardType: DashboardType = .overview
+    @StateObject private var templateService = TemplateService.shared
     
     private var colorScheme: ColorScheme? {
         switch appState.theme {
@@ -64,10 +68,89 @@ struct ContentView: View {
                                 )
                         }
                         
-                        // Editor Pane (Pane 3) - Ulysses style
-                        EditorView(appState: appState)
-                            .frame(maxWidth: .infinity)
-                            .background(UlyssesDesign.Colors.background(for: colorScheme ?? .light))
+                        // Editor Pane(s) (Pane 3) - Ulysses style
+                        if appState.showSecondaryEditor {
+                            // Dual editor layout
+                            HStack(spacing: 0) {
+                                // Primary Editor
+                                EditorView(appState: appState)
+                                    .background(UlyssesDesign.Colors.background(for: colorScheme ?? .light))
+                                    .onTapGesture {
+                                        if appState.showLibrary {
+                                            withAnimation(.easeInOut(duration: 0.25)) {
+                                                appState.showLibrary = false
+                                            }
+                                        }
+                                    }
+                                
+                                // Divider
+                                Rectangle()
+                                    .fill(UlyssesDesign.Colors.dividerColor(for: colorScheme ?? .light))
+                                    .frame(width: 0.5)
+                                    .opacity(0.6)
+                                
+                                // Secondary Editor
+                                SecondaryEditorView(appState: appState)
+                                    .background(UlyssesDesign.Colors.background(for: colorScheme ?? .light))
+                                    .onTapGesture {
+                                        if appState.showLibrary {
+                                            withAnimation(.easeInOut(duration: 0.25)) {
+                                                appState.showLibrary = false
+                                            }
+                                        }
+                                    }
+                            }
+                        } else {
+                            // Single editor layout
+                            EditorView(appState: appState)
+                                .frame(maxWidth: showDashboard ? .infinity : .infinity)
+                                .background(UlyssesDesign.Colors.background(for: colorScheme ?? .light))
+                                .onTapGesture {
+                                    if appState.showLibrary {
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            appState.showLibrary = false
+                                        }
+                                    }
+                                }
+                        }
+                        
+                        // Outline Pane (Pane 4) - persistent outline panel
+                        if appState.showOutlinePane, let selectedSheet = appState.selectedSheet {
+                            DashboardSidePanel(
+                                sheet: selectedSheet,
+                                dashboardType: .outline,
+                                isPresented: $appState.showOutlinePane
+                            )
+                            .frame(width: UlyssesDesign.Spacing.dashboardWidth)
+                            .background(UlyssesDesign.Colors.libraryBg(for: colorScheme ?? .light))
+                            .overlay(
+                                Rectangle()
+                                    .fill(UlyssesDesign.Colors.dividerColor(for: colorScheme ?? .light))
+                                    .frame(width: 0.5)
+                                    .opacity(0.6),
+                                alignment: .leading
+                            )
+                            .transition(.move(edge: .trailing))
+                        }
+                        
+                        // Dashboard Pane (temporary modal) - when Progress/Overview is selected
+                        if showDashboard && dashboardType != .outline, let selectedSheet = appState.selectedSheet {
+                            DashboardSidePanel(
+                                sheet: selectedSheet,
+                                dashboardType: dashboardType,
+                                isPresented: $showDashboard
+                            )
+                            .frame(width: UlyssesDesign.Spacing.dashboardWidth)
+                            .background(UlyssesDesign.Colors.libraryBg(for: colorScheme ?? .light))
+                            .overlay(
+                                Rectangle()
+                                    .fill(UlyssesDesign.Colors.dividerColor(for: colorScheme ?? .light))
+                                    .frame(width: 0.5)
+                                    .opacity(0.6),
+                                alignment: .leading
+                            )
+                            .transition(.move(edge: .trailing))
+                        }
                     }
                 }
             }
@@ -83,40 +166,43 @@ struct ContentView: View {
                 CommandPalette(appState: appState, isPresented: $showCommandPalette)
             }
             
-            // Dashboard Side Panel
-            if showDashboard, let selectedSheet = appState.selectedSheet {
-                HStack(spacing: 0) {
-                    // Overlay to close dashboard when clicking on main content
-                    Color.clear
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.25)) {
-                                showDashboard = false
-                            }
-                        }
-                    
-                    // Dashboard Panel
-                    DashboardSidePanel(
-                        sheet: selectedSheet,
-                        dashboardType: dashboardType,
-                        isPresented: $showDashboard
-                    )
-                    .frame(width: UlyssesDesign.Spacing.dashboardWidth)
-                    .transition(.move(edge: .trailing))
-                }
-                .ignoresSafeArea(.all, edges: .trailing)
+            // Keyboard Shortcuts Help Overlay
+            if showKeyboardShortcuts {
+                KeyboardShortcutsHelp(isPresented: $showKeyboardShortcuts)
             }
+            
+            // Dashboard Side Panel (moved to be inline with other panes)
         }
         .environmentObject(appState)
         .environment(\.managedObjectContext, viewContext)
         .preferredColorScheme(colorScheme)
+        .overlay(
+            ToastOverlay()
+                .allowsHitTesting(false)
+                .zIndex(999)
+        )
         .sheet(isPresented: $showSettings) {
             SettingsView(appState: appState, isPresented: $showSettings)
+        }
+        .sheet(isPresented: $showAdvancedSearch) {
+            AdvancedSearchView(appState: appState)
+        }
+        .sheet(isPresented: $showTemplates) {
+            TemplateSelectionView(selectedGroup: appState.selectedGroup) { template in
+                createSheetFromTemplate(template)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showCommandPalette)) { _ in
             showCommandPalette = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .showSettings)) { _ in
             showSettings = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showAdvancedSearch)) { _ in
+            showAdvancedSearch = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showKeyboardShortcuts)) { _ in
+            showKeyboardShortcuts = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .showDashboard)) { notification in
             if let type = notification.object as? DashboardType {
@@ -126,44 +212,107 @@ struct ContentView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .showTemplates)) { _ in
+            showTemplates = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .createFromTemplate)) { notification in
+            if let template = notification.object as? Template {
+                createSheetFromTemplate(template)
+            }
+        }
         .onAppear {
             // Keyboard shortcuts are now implemented via SwiftUI modifiers
         }
-        // Keyboard Shortcuts
-        .onKeyPress(.init("k", modifiers: .command)) {
-            showCommandPalette = true
-            return .handled
-        }
-        .onKeyPress(.init("n", modifiers: .command)) {
-            createNewSheet()
-            return .handled
-        }
-        .onKeyPress(.init(",", modifiers: .command)) {
-            showSettings = true
-            return .handled
-        }
-        .onKeyPress(.init("l", modifiers: [.command, .shift])) {
-            appState.showLibrary.toggle()
-            return .handled
-        }
-        .onKeyPress(.init("r", modifiers: [.command, .shift])) {
-            appState.showSheetList.toggle()
-            return .handled
-        }
-        .onKeyPress(.init("d", modifiers: [.command, .shift])) {
-            withAnimation(.easeInOut(duration: 0.25)) {
-                showDashboard.toggle()
+        // Hidden keyboard shortcut buttons
+        .background(
+            VStack {
+                Button("Command Palette") { showCommandPalette = true }
+                    .keyboardShortcut("k", modifiers: .command)
+                Button("New Sheet") { createNewSheet() }
+                    .keyboardShortcut("n", modifiers: .command)
+                Button("Settings") { showSettings = true }
+                    .keyboardShortcut(",", modifiers: .command)
+                Button("Toggle Library") { appState.showLibrary.toggle() }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
+                Button("Toggle Sheet List") { appState.showSheetList.toggle() }
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                Button("Toggle Outline") { 
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        appState.showOutlinePane.toggle()
+                    }
+                }
+                    .keyboardShortcut("o", modifiers: .command)
+                Button("Toggle Dashboard") { 
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showDashboard.toggle()
+                    }
+                }
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
+                Button("Toggle Focus Mode") { appState.isFocusMode.toggle() }
+                    .keyboardShortcut("f", modifiers: .command)
+                Button("Toggle Typewriter Mode") { appState.isTypewriterMode.toggle() }
+                    .keyboardShortcut("t", modifiers: .command)
+                Button("Show Keyboard Shortcuts") { showKeyboardShortcuts = true }
+                    .keyboardShortcut("/", modifiers: .command)
+                Button("All Panes") { appState.viewMode = .threePane }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("Sheets & Editor") { appState.viewMode = .sheetsOnly }
+                    .keyboardShortcut("2", modifiers: .command)
+                Button("Editor Only") { appState.viewMode = .editorOnly }
+                    .keyboardShortcut("3", modifiers: .command)
+                Button("Close Secondary Editor") { 
+                    if appState.showSecondaryEditor {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            appState.closeSecondaryEditor()
+                        }
+                    }
+                }
+                    .keyboardShortcut("w", modifiers: [.command, .shift])
+                Button("Open in Secondary Editor") { 
+                    if let selectedSheet = appState.selectedSheet {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            appState.openSecondaryEditor(with: selectedSheet)
+                        }
+                    }
+                }
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
+                Button("Show Templates") { showTemplates = true }
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+                
+                Button("Tag Sheet") { 
+                    // Focus tag input in TagEditorView
+                    NotificationCenter.default.post(name: .focusTagInput, object: nil)
+                }
+                    .keyboardShortcut("t", modifiers: .command)
+                
+                Button("Filter by Tags") { 
+                    // Switch to tags view in library
+                    NotificationCenter.default.post(name: .showTagFilter, object: nil)
+                }
+                    .keyboardShortcut("f", modifiers: [.command, .shift])
+                
+                Button("Next Sheet") { 
+                    appState.navigateToNextSheet()
+                }
+                    .keyboardShortcut(.rightArrow, modifiers: [.command])
+                
+                Button("Previous Sheet") { 
+                    appState.navigateToPreviousSheet()
+                }
+                    .keyboardShortcut(.leftArrow, modifiers: [.command])
+                
+                // Individual template shortcuts
+                ForEach(templateService.getTemplatesWithShortcuts(), id: \.id) { template in
+                    if let shortcut = template.keyboardShortcut?.lowercased().first {
+                        Button("Template: \(template.displayName)") {
+                            createSheetFromTemplate(template)
+                        }
+                        .keyboardShortcut(KeyEquivalent(shortcut), modifiers: .command)
+                    }
+                }
             }
-            return .handled
-        }
-        .onKeyPress(.init("f", modifiers: .command)) {
-            appState.isFocusMode.toggle()
-            return .handled
-        }
-        .onKeyPress(.init("t", modifiers: .command)) {
-            appState.isTypewriterMode.toggle()
-            return .handled
-        }
+            .hidden()
+        )
     }
     
     private func createNewSheet() {
@@ -219,6 +368,24 @@ struct ContentView: View {
         }
     }
     
+    private func createSheetFromTemplate(_ template: Template) {
+        withAnimation {
+            let newSheet = templateService.createSheetFromTemplate(template, selectedGroup: appState.selectedGroup)
+            
+            // Select the new sheet and clear any essential selection
+            appState.selectedSheet = newSheet
+            appState.selectedEssential = nil
+            
+            // Select the group that contains the new sheet
+            if let group = newSheet.group {
+                appState.selectedGroup = group
+            }
+            
+            // Show a success toast
+            ExportService.shared.toastManager.show("Created '\(newSheet.title ?? "Untitled")' from \(template.displayName)")
+        }
+    }
+    
     private func createNewGroup() {
         withAnimation {
             let newGroup = Group(context: viewContext)
@@ -237,40 +404,21 @@ struct ContentView: View {
         }
     }
     
-    private func createNewSheet() {
-        guard let selectedGroup = appState.selectedGroup else { return }
-        
-        withAnimation {
-            let newSheet = Sheet(context: viewContext)
-            newSheet.id = UUID()
-            newSheet.title = "Untitled"
-            newSheet.content = ""
-            newSheet.group = selectedGroup
-            newSheet.createdAt = Date()
-            newSheet.modifiedAt = Date()
-            newSheet.isInTrash = false
-            newSheet.sortOrder = Int32(selectedGroup.sheets?.count ?? 0)
-            
-            do {
-                try viewContext.save()
-                // Select the new sheet and clear any essential selection
-                appState.selectedSheet = newSheet
-                appState.selectedEssential = nil
-            } catch {
-                print("Failed to create sheet: \(error)")
-            }
-        }
-    }
 }
 
 class AppState: ObservableObject {
     @Published var selectedGroup: Group?
     @Published var selectedSheet: Sheet?
     @Published var selectedEssential: String? = nil
+    @Published var secondarySheet: Sheet? = nil
+    @Published var showSecondaryEditor: Bool = false
     @AppStorage("showLibrary") var showLibrary: Bool = true
     @AppStorage("showSheetList") var showSheetList: Bool = true
+    @AppStorage("showOutlinePane") var showOutlinePane: Bool = false
     @AppStorage("isTypewriterMode") var isTypewriterMode: Bool = false
     @AppStorage("isFocusMode") var isFocusMode: Bool = false
+    @AppStorage("showMarkdownHeaderSymbols") var showMarkdownHeaderSymbols: Bool = true
+    @AppStorage("hideShortcutBar") var hideShortcutBar: Bool = false
     
     @AppStorage("appTheme") private var storedTheme: String = AppTheme.system.rawValue
     @AppStorage("viewMode") private var storedViewMode: String = ViewMode.threePane.rawValue
@@ -321,6 +469,250 @@ class AppState: ObservableObject {
         case sheetsOnly = "Sheets"
         case editorOnly = "Editor"
         case threePane = "All"
+    }
+    
+    enum SheetSortOption: String, CaseIterable {
+        case manual = "Manual"
+        case alphabetical = "Alphabetical"
+        case creationDate = "Creation Date"
+        case modificationDate = "Modified Date"
+        
+        var systemImage: String {
+            switch self {
+            case .manual: return "hand.raised"
+            case .alphabetical: return "textformat.abc"
+            case .creationDate: return "calendar.badge.plus"
+            case .modificationDate: return "calendar.badge.clock"
+            }
+        }
+    }
+    
+    @AppStorage("sheetSortOption") var storedSortOption: String = SheetSortOption.modificationDate.rawValue
+    @AppStorage("sheetSortAscending") var sheetSortAscending: Bool = false
+    
+    var sheetSortOption: SheetSortOption {
+        get {
+            SheetSortOption(rawValue: storedSortOption) ?? .modificationDate
+        }
+        set {
+            storedSortOption = newValue.rawValue
+        }
+    }
+    
+    func openSecondaryEditor(with sheet: Sheet) {
+        secondarySheet = sheet
+        showSecondaryEditor = true
+    }
+    
+    func closeSecondaryEditor() {
+        secondarySheet = nil
+        showSecondaryEditor = false
+    }
+    
+    func navigateToNextSheet() -> Bool {
+        guard let currentSheet = selectedSheet else { return false }
+        
+        let sheets = getSortedSheets()
+        guard let currentIndex = sheets.firstIndex(of: currentSheet),
+              currentIndex < sheets.count - 1 else { return false }
+        
+        selectedSheet = sheets[currentIndex + 1]
+        return true
+    }
+    
+    func navigateToPreviousSheet() -> Bool {
+        guard let currentSheet = selectedSheet else { return false }
+        
+        let sheets = getSortedSheets()
+        guard let currentIndex = sheets.firstIndex(of: currentSheet),
+              currentIndex > 0 else { return false }
+        
+        selectedSheet = sheets[currentIndex - 1]
+        return true
+    }
+    
+    func canNavigateNext() -> Bool {
+        guard let currentSheet = selectedSheet else { return false }
+        
+        let sheets = getSortedSheets()
+        guard let currentIndex = sheets.firstIndex(of: currentSheet) else { return false }
+        
+        return currentIndex < sheets.count - 1
+    }
+    
+    func canNavigatePrevious() -> Bool {
+        guard let currentSheet = selectedSheet else { return false }
+        
+        let sheets = getSortedSheets()
+        guard let currentIndex = sheets.firstIndex(of: currentSheet) else { return false }
+        
+        return currentIndex > 0
+    }
+    
+    private func getSortedSheets() -> [Sheet] {
+        guard let context = selectedSheet?.managedObjectContext else { return [] }
+        
+        let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+        
+        let predicate: NSPredicate?
+        if let selectedGroup = selectedGroup {
+            predicate = NSPredicate(format: "group == %@ AND isInTrash == NO", selectedGroup)
+        } else if let selectedEssential = selectedEssential {
+            switch selectedEssential {
+            case "all":
+                predicate = NSPredicate(format: "isInTrash == NO")
+            case "recent":
+                let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+                predicate = NSPredicate(format: "modifiedAt >= %@ AND isInTrash == NO", sevenDaysAgo as NSDate)
+            case "trash":
+                predicate = NSPredicate(format: "isInTrash == YES")
+            case "open":
+                let oneDayAgo = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+                predicate = NSPredicate(format: "modifiedAt >= %@ AND isInTrash == NO", oneDayAgo as NSDate)
+            case "inbox":
+                predicate = NSPredicate(format: "group.name == %@ AND isInTrash == NO", "Inbox")
+            case "projects":
+                predicate = NSPredicate(format: "group.name != %@ AND isInTrash == NO", "Inbox")
+            default:
+                predicate = NSPredicate(format: "isInTrash == NO")
+            }
+        } else {
+            predicate = NSPredicate(format: "isInTrash == NO")
+        }
+        
+        fetchRequest.predicate = predicate
+        
+        let ascending = sheetSortAscending
+        let sortDescriptors: [NSSortDescriptor]
+        switch sheetSortOption {
+        case .manual:
+            sortDescriptors = [
+                NSSortDescriptor(keyPath: \Sheet.sortOrder, ascending: true),
+                NSSortDescriptor(keyPath: \Sheet.createdAt, ascending: true)
+            ]
+        case .alphabetical:
+            sortDescriptors = [NSSortDescriptor(keyPath: \Sheet.title, ascending: ascending)]
+        case .creationDate:
+            sortDescriptors = [NSSortDescriptor(keyPath: \Sheet.createdAt, ascending: ascending)]
+        case .modificationDate:
+            sortDescriptors = [NSSortDescriptor(keyPath: \Sheet.modifiedAt, ascending: ascending)]
+        }
+        
+        fetchRequest.sortDescriptors = sortDescriptors
+        
+        do {
+            return try context.fetch(fetchRequest)
+        } catch {
+            print("Failed to fetch sheets for navigation: \(error)")
+            return []
+        }
+    }
+}
+
+struct SecondaryEditorView: View {
+    @Environment(\.managedObjectContext) private var viewContext
+    @ObservedObject var appState: AppState
+    
+    @AppStorage("fontSize") private var fontSize: Double = 16
+    @AppStorage("lineSpacing") private var lineSpacing: Double = 1.4
+    @AppStorage("paragraphSpacing") private var paragraphSpacing: Double = 8
+    @AppStorage("fontFamily") private var fontFamily: String = "system"
+    @AppStorage("editorMargins") private var editorMargins: Double = 40
+    @AppStorage("hideShortcutBar") private var hideShortcutBar: Bool = false
+    @AppStorage("disableQuickType") private var disableQuickType: Bool = false
+    
+    @State private var showStats = false
+    @State private var isReadOnlyMode = false
+    
+    var body: some View {
+        ZStack {
+            if let secondarySheet = appState.secondarySheet {
+                VStack(spacing: 0) {
+                    // Secondary Editor Header
+                    HStack {
+                        // Close Secondary Editor Button
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                appState.closeSecondaryEditor()
+                            }
+                        }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Close Secondary Editor")
+                        
+                        Spacer()
+                        
+                        // Sheet Title
+                        Text(secondarySheet.title ?? "Untitled")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        // Favorite Button
+                        FavoriteButton(sheet: secondarySheet)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Color.clear)
+                    
+                    // Stats Overlay (shown when pulled down)
+                    if showStats {
+                        StatsOverlay(sheet: secondarySheet)
+                            .transition(.move(edge: .top))
+                    }
+                    
+                    // Editor Content
+                    MarkdownEditor(
+                        sheet: secondarySheet,
+                        appState: appState,
+                        fontSize: Binding(
+                            get: { CGFloat(fontSize) },
+                            set: { fontSize = Double($0) }
+                        ),
+                        lineSpacing: Binding(
+                            get: { CGFloat(lineSpacing) },
+                            set: { lineSpacing = Double($0) }
+                        ),
+                        paragraphSpacing: Binding(
+                            get: { CGFloat(paragraphSpacing) },
+                            set: { paragraphSpacing = Double($0) }
+                        ),
+                        fontFamily: fontFamily,
+                        editorMargins: Binding(
+                            get: { CGFloat(editorMargins) },
+                            set: { editorMargins = Double($0) }
+                        ),
+                        hideShortcutBar: hideShortcutBar,
+                        disableQuickType: disableQuickType,
+                        showStats: $showStats,
+                        isReadOnlyMode: $isReadOnlyMode
+                    )
+                }
+            } else {
+                // Empty State
+                VStack(spacing: 20) {
+                    Image(systemName: "doc.text.below.doc.text")
+                        .font(.system(size: 64))
+                        .foregroundColor(.secondary)
+                    
+                    Text("Secondary Editor")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                    
+                    Text("Open a sheet here using long press")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .background(Color(.systemBackground))
     }
 }
 

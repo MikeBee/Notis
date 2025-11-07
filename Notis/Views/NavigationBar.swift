@@ -11,6 +11,8 @@ struct NavigationBar: View {
     @ObservedObject var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
     @State private var showViewModeMenu = false
+    @State private var isHelpButtonHovering = false
+    @State private var isSettingsButtonHovering = false
     
     var body: some View {
         HStack(spacing: UlyssesDesign.Spacing.md) {
@@ -78,6 +80,18 @@ struct NavigationBar: View {
             
             // Right side controls
             HStack(spacing: UlyssesDesign.Spacing.sm) {
+                // Template button
+                Button(action: showTemplates) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .frame(width: 28, height: 28)
+                .background(Color.clear)
+                .cornerRadius(UlyssesDesign.CornerRadius.small)
+                .help("Templates")
+                
                 // Dashboard button
                 Menu {
                     Button("Overview") {
@@ -86,8 +100,13 @@ struct NavigationBar: View {
                     Button("Progress") {
                         showDashboard(.progress)
                     }
+                    Button("Goals") {
+                        showDashboard(.goals)
+                    }
                     Button("Outline") {
-                        showDashboard(.outline)
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            appState.showOutlinePane.toggle()
+                        }
                     }
                 } label: {
                     Image(systemName: "chart.line.uptrend.xyaxis")
@@ -100,18 +119,41 @@ struct NavigationBar: View {
                 .cornerRadius(UlyssesDesign.CornerRadius.small)
                 .menuStyle(BorderlessButtonMenuStyle())
                 
+                // Help button
+                Button(action: showHelp) {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                        .scaleEffect(isHelpButtonHovering ? 1.1 : 1.0)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .frame(width: 28, height: 28)
+                .background(UlyssesDesign.Colors.hover.opacity(isHelpButtonHovering ? 1 : 0))
+                .cornerRadius(UlyssesDesign.CornerRadius.small)
+                .scaleEffect(isHelpButtonHovering ? 1.05 : 1.0)
+                .onHover { hovering in
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                        isHelpButtonHovering = hovering
+                    }
+                }
+                
                 // Settings button
                 Button(action: openSettings) {
                     Image(systemName: "gearshape")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                        .scaleEffect(isSettingsButtonHovering ? 1.1 : 1.0)
+                        .rotationEffect(.degrees(isSettingsButtonHovering ? 45 : 0))
                 }
                 .buttonStyle(PlainButtonStyle())
                 .frame(width: 28, height: 28)
-                .background(Color.clear)
+                .background(UlyssesDesign.Colors.hover.opacity(isSettingsButtonHovering ? 1 : 0))
                 .cornerRadius(UlyssesDesign.CornerRadius.small)
+                .scaleEffect(isSettingsButtonHovering ? 1.05 : 1.0)
                 .onHover { hovering in
-                    // Add hover effect if needed
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                        isSettingsButtonHovering = hovering
+                    }
                 }
             }
         }
@@ -148,8 +190,18 @@ struct NavigationBar: View {
         HapticService.shared.buttonTap()
     }
     
+    private func showHelp() {
+        NotificationCenter.default.post(name: .showKeyboardShortcuts, object: nil)
+        HapticService.shared.buttonTap()
+    }
+    
     private func openSettings() {
         NotificationCenter.default.post(name: .showSettings, object: nil)
+        HapticService.shared.buttonTap()
+    }
+    
+    private func showTemplates() {
+        NotificationCenter.default.post(name: .showTemplates, object: nil)
         HapticService.shared.buttonTap()
     }
 }
@@ -158,6 +210,7 @@ enum DashboardType {
     case overview
     case progress 
     case outline
+    case goals
 }
 
 #Preview {

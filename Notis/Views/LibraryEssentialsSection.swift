@@ -13,6 +13,8 @@ struct LibraryEssentialsSection: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var appState: AppState
     
+    @State private var showingEmptyTrashConfirmation = false
+    
     
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Sheet.modifiedAt, ascending: false)],
@@ -39,6 +41,8 @@ struct LibraryEssentialsSection: View {
     )
     private var trashedSheets: FetchedResults<Sheet>
     
+    
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Essential Library Items
@@ -60,14 +64,6 @@ struct LibraryEssentialsSection: View {
                 action: { selectRecentSheets() }
             )
             
-            LibraryEssentialRow(
-                icon: "doc.badge.gearshape",
-                title: "Open Files",
-                count: 0,
-                isSelected: appState.selectedEssential == "open" && appState.selectedGroup == nil,
-                appState: appState,
-                action: { selectOpenFiles() }
-            )
             
             LibraryEssentialRow(
                 icon: "trash",
@@ -75,55 +71,25 @@ struct LibraryEssentialsSection: View {
                 count: trashedSheets.count,
                 isSelected: appState.selectedEssential == "trash" && appState.selectedGroup == nil,
                 appState: appState,
-                action: { selectTrash() }
+                action: { selectTrash() },
+                onEmptyTrash: trashedSheets.count > 0 ? { emptyTrash() } : nil
             )
             
-            // Spacer
-            Rectangle()
-                .fill(Color.clear)
-                .frame(height: UlyssesDesign.Spacing.md)
             
-            // Project Group Header
-            HStack {
-                Image(systemName: "folder.fill")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
-                
-                Text("Projects")
-                    .font(UlyssesDesign.Typography.groupName)
-                    .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
-                
-                Spacer()
-            }
-            .padding(.horizontal, UlyssesDesign.Spacing.lg)
-            .padding(.vertical, UlyssesDesign.Spacing.xs)
-            
-            // Project Sub-items
-            LibraryEssentialRow(
-                icon: "tray",
-                title: "Inbox",
-                count: 0,
-                isSelected: appState.selectedEssential == "inbox" && appState.selectedGroup == nil,
-                appState: appState,
-                level: 1,
-                action: { selectInbox() }
-            )
-            
-            LibraryEssentialRow(
-                icon: "folder",
-                title: "My Projects",
-                count: 0,
-                isSelected: appState.selectedEssential == "projects" && appState.selectedGroup == nil,
-                appState: appState,
-                level: 1,
-                action: { selectMyProjects() }
-            )
         }
         .onReceive(appState.$selectedGroup) { group in
             // Clear essential selection when a regular group is selected
             if group != nil {
                 appState.selectedEssential = nil
             }
+        }
+        .alert("Empty Trash", isPresented: $showingEmptyTrashConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Empty Trash", role: .destructive) {
+                permanentlyDeleteAllTrashedSheets()
+            }
+        } message: {
+            Text("Are you sure you want to permanently delete all \(trashedSheets.count) item\(trashedSheets.count == 1 ? "" : "s") in the trash? This action cannot be undone.")
         }
     }
     
@@ -139,29 +105,37 @@ struct LibraryEssentialsSection: View {
         appState.selectedSheet = nil
     }
     
-    private func selectOpenFiles() {
-        appState.selectedEssential = "open"
-        appState.selectedGroup = nil
-        appState.selectedSheet = nil
-    }
-    
     private func selectTrash() {
         appState.selectedEssential = "trash"
         appState.selectedGroup = nil
         appState.selectedSheet = nil
     }
     
-    private func selectInbox() {
-        appState.selectedEssential = "inbox"
-        appState.selectedGroup = nil
-        appState.selectedSheet = nil
+    private func emptyTrash() {
+        showingEmptyTrashConfirmation = true
     }
     
-    private func selectMyProjects() {
-        appState.selectedEssential = "projects"
-        appState.selectedGroup = nil
-        appState.selectedSheet = nil
+    private func permanentlyDeleteAllTrashedSheets() {
+        withAnimation {
+            // Clear the selected sheet if it's in trash
+            if let selectedSheet = appState.selectedSheet, selectedSheet.isInTrash {
+                appState.selectedSheet = nil
+            }
+            
+            // Delete all trashed sheets
+            for sheet in trashedSheets {
+                viewContext.delete(sheet)
+            }
+            
+            do {
+                try viewContext.save()
+                HapticService.shared.itemDeleted()
+            } catch {
+                print("Failed to empty trash: \(error)")
+            }
+        }
     }
+    
 }
 
 struct LibraryEssentialRow: View {
@@ -174,10 +148,11 @@ struct LibraryEssentialRow: View {
     let appState: AppState
     let level: Int
     let action: () -> Void
+    let onEmptyTrash: (() -> Void)?
     
     @State private var isHovering = false
     
-    init(icon: String, title: String, count: Int, isSelected: Bool, appState: AppState, level: Int = 0, action: @escaping () -> Void) {
+    init(icon: String, title: String, count: Int, isSelected: Bool, appState: AppState, level: Int = 0, action: @escaping () -> Void, onEmptyTrash: (() -> Void)? = nil) {
         self.icon = icon
         self.title = title
         self.count = count
@@ -185,6 +160,7 @@ struct LibraryEssentialRow: View {
         self.appState = appState
         self.level = level
         self.action = action
+        self.onEmptyTrash = onEmptyTrash
     }
     
     var body: some View {
@@ -246,6 +222,19 @@ struct LibraryEssentialRow: View {
         .onTapGesture {
             HapticService.shared.itemSelected()
             action()
+        }
+        .onLongPressGesture(minimumDuration: 0.5) {
+            if let onEmptyTrash = onEmptyTrash {
+                HapticService.shared.impact(.heavy)
+                onEmptyTrash()
+            }
+        }
+        .contextMenu {
+            if let onEmptyTrash = onEmptyTrash {
+                Button("Empty Trash", role: .destructive) {
+                    onEmptyTrash()
+                }
+            }
         }
     }
 }

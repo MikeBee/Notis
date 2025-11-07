@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="1" systemVersion="11A491" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithCloudKit="true" userDefinedModelVersionIdentifier="">
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="1" systemVersion="11A491" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithCloudKit="true" userDefinedModelVersionIdentifier="NotesUpdate_v1.2">
     <entity name="Group" representedClassName="Group" syncable="YES" codeGenerationType="class">
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
@@ -25,10 +25,88 @@
         <attribute name="sortOrder" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
         <attribute name="title" optional="YES" attributeType="String"/>
         <attribute name="wordCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <relationship name="annotations" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Annotation" inverseName="sheet" inverseEntity="Annotation"/>
+        <relationship name="goals" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Goal" inverseName="sheet" inverseEntity="Goal"/>
         <relationship name="group" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Group" inverseName="sheets" inverseEntity="Group"/>
+        <relationship name="notes" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Note" inverseName="sheet" inverseEntity="Note"/>
+        <relationship name="tags" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="SheetTag" inverseName="sheet" inverseEntity="SheetTag"/>
+    </entity>
+    <entity name="Template" representedClassName="Template" syncable="YES" codeGenerationType="class">
+        <attribute name="category" optional="YES" attributeType="String" defaultValue="General"/>
+        <attribute name="content" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isBuiltIn" optional="YES" attributeType="Boolean" defaultValue="NO" usesScalarValueType="YES"/>
+        <attribute name="keyboardShortcut" optional="YES" attributeType="String"/>
+        <attribute name="modifiedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="sortOrder" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="targetGroupName" optional="YES" attributeType="String"/>
+        <attribute name="titleTemplate" optional="YES" attributeType="String"/>
+        <attribute name="usesDateInTitle" optional="YES" attributeType="Boolean" defaultValue="NO" usesScalarValueType="YES"/>
+    </entity>
+    <entity name="Annotation" representedClassName="Annotation" syncable="YES" codeGenerationType="class">
+        <attribute name="annotatedText" optional="YES" attributeType="String"/>
+        <attribute name="content" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="modifiedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="position" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Sheet" inverseName="annotations" inverseEntity="Sheet"/>
+    </entity>
+    <entity name="Note" representedClassName="Note" syncable="YES" codeGenerationType="class">
+        <attribute name="content" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="modifiedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="sortOrder" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Sheet" inverseName="notes" inverseEntity="Sheet"/>
+    </entity>
+    <entity name="Tag" representedClassName="Tag" syncable="YES" codeGenerationType="class">
+        <attribute name="color" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isPinned" optional="YES" attributeType="Boolean" defaultValue="NO" usesScalarValueType="YES"/>
+        <attribute name="lastUsedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="modifiedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="path" optional="YES" attributeType="String"/>
+        <attribute name="sortOrder" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="usageCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <relationship name="children" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Tag" inverseName="parent" inverseEntity="Tag"/>
+        <relationship name="goals" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Goal" inverseName="tag" inverseEntity="Goal"/>
+        <relationship name="parent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Tag" inverseName="children" inverseEntity="Tag"/>
+        <relationship name="sheetTags" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="SheetTag" inverseName="tag" inverseEntity="SheetTag"/>
+    </entity>
+    <entity name="Goal" representedClassName="Goal" syncable="YES" codeGenerationType="class">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="currentCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="deadline" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="goalDescription" optional="YES" attributeType="String"/>
+        <attribute name="goalType" optional="YES" attributeType="String" defaultValue="words"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isActive" optional="YES" attributeType="Boolean" defaultValue="YES" usesScalarValueType="YES"/>
+        <attribute name="isCompleted" optional="YES" attributeType="Boolean" defaultValue="NO" usesScalarValueType="YES"/>
+        <attribute name="modifiedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="title" optional="YES" attributeType="String"/>
+        <attribute name="targetCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Sheet" inverseName="goals" inverseEntity="Sheet"/>
+        <relationship name="tag" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Tag" inverseName="goals" inverseEntity="Tag"/>
+    </entity>
+    <entity name="SheetTag" representedClassName="SheetTag" syncable="YES" codeGenerationType="class">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Sheet" inverseName="tags" inverseEntity="Sheet"/>
+        <relationship name="tag" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Tag" inverseName="sheetTags" inverseEntity="Tag"/>
     </entity>
     <elements>
+        <element name="Annotation" positionX="556" positionY="-18" width="128" height="149"/>
+        <element name="Goal" positionX="1132" positionY="-18" width="128" height="269"/>
         <element name="Group" positionX="-63" positionY="-18" width="128" height="164"/>
-        <element name="Sheet" positionX="144" positionY="-18" width="128" height="209"/>
+        <element name="Note" positionX="700" positionY="-18" width="128" height="149"/>
+        <element name="Sheet" positionX="144" positionY="-18" width="128" height="239"/>
+        <element name="SheetTag" positionX="844" positionY="-18" width="128" height="119"/>
+        <element name="Tag" positionX="988" positionY="-18" width="128" height="224"/>
+        <element name="Template" positionX="350" positionY="-18" width="128" height="209"/>
     </elements>
 </model>

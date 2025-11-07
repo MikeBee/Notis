@@ -76,4 +76,8 @@ class HapticService {
     func dragEnded() {
         impact(.light)
     }
+    
+    func itemDeleted() {
+        impact(.heavy)
+    }
 }

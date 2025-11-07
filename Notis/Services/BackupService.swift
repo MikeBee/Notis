@@ -52,6 +52,8 @@ class BackupService: ObservableObject {
         case preparingBackup
         case uploadingToiCloud
         case cleaningOldBackups
+        case downloadingBackup
+        case restoringData
         case completed
         case failed(Error)
         
@@ -65,10 +67,14 @@ class BackupService: ObservableObject {
                 return "Uploading to iCloud..."
             case .cleaningOldBackups:
                 return "Cleaning old backups..."
+            case .downloadingBackup:
+                return "Downloading backup..."
+            case .restoringData:
+                return "Restoring data..."
             case .completed:
-                return "Backup completed"
+                return "Operation completed"
             case .failed(let error):
-                return "Backup failed: \(error.localizedDescription)"
+                return "Operation failed: \(error.localizedDescription)"
             }
         }
     }
@@ -281,7 +287,6 @@ class BackupService: ObservableObject {
             // Upload to iCloud
             try await uploadBackupToiCloud(backupData, type: type, isManual: isManual)
             backupSucceeded = true
-            print("✅ BackupService: Successfully uploaded \(type.rawValue) backup to iCloud")
             
             backupStatus = .cleaningOldBackups
             
@@ -292,7 +297,6 @@ class BackupService: ObservableObject {
             
         } catch {
             backupStatus = .failed(error)
-            print("❌ BackupService: Backup failed: \(error)")
         }
         
         // Update last backup dates only if upload succeeded
@@ -301,7 +305,6 @@ class BackupService: ObservableObject {
             UserDefaults.standard.set(now, forKey: keyForBackupType(type))
             UserDefaults.standard.set(now, forKey: "lastBackupDate")
             lastBackupDate = now
-            print("✅ BackupService: Updated last backup date to \(now)")
         }
         
         isBackingUp = false
@@ -451,6 +454,7 @@ class BackupService: ObservableObject {
         // Create a unique record ID for this backup
         let recordID = CKRecord.ID(recordName: "\(type.rawValue)_\(UUID().uuidString)")
         let record = CKRecord(recordType: type.recordType, recordID: recordID)
+        
         record["backupData"] = jsonData
         record["createdAt"] = backupData.createdAt
         record["version"] = backupData.version
@@ -463,7 +467,16 @@ class BackupService: ObservableObject {
         
         let database = cloudKitContainer.privateCloudDatabase
         let savedRecord = try await database.save(record)
-        print("✅ BackupService: Saved backup record with ID: \(savedRecord.recordID.recordName)")
+        
+        // Store the record ID so we can fetch it directly later
+        let recordIDsKey = "backup_record_ids_\(type.rawValue)"
+        var existingRecordIDs = UserDefaults.standard.stringArray(forKey: recordIDsKey) ?? []
+        existingRecordIDs.append(savedRecord.recordID.recordName)
+        // Keep only the last 20 record IDs to avoid bloat
+        if existingRecordIDs.count > 20 {
+            existingRecordIDs = Array(existingRecordIDs.suffix(20))
+        }
+        UserDefaults.standard.set(existingRecordIDs, forKey: recordIDsKey)
     }
     
     private func cleanOldBackups(type: BackupType) async throws {
@@ -501,7 +514,6 @@ class BackupService: ObservableObject {
         } catch let error as CKError where error.code == .invalidArguments {
             // CloudKit schema doesn't exist yet or fields aren't queryable
             // This is expected on first run - we'll skip cleanup for now
-            print("⚠️ BackupService: CloudKit schema not ready for cleanup, skipping: \(error.localizedDescription)")
         }
     }
     
@@ -516,30 +528,69 @@ class BackupService: ObservableObject {
                 // Check if we can query for records of this type
                 let query = CKQuery(recordType: type.recordType, predicate: NSPredicate(format: "TRUEPREDICATE"))
                 _ = try await database.records(matching: query)
-                print("✅ BackupService: Schema exists for \(type.recordType)")
             } catch let error as CKError {
                 if error.code == .invalidArguments || error.code == .unknownItem {
-                    print("🔧 BackupService: Schema doesn't exist for \(type.recordType), will be created on next backup")
                 }
             } catch {
-                print("⚠️ BackupService: Unexpected error checking schema for \(type.recordType): \(error)")
             }
         }
     }
     
     func getAvailableBackups() async throws -> [BackupInfo] {
+        
         let database = cloudKitContainer.privateCloudDatabase
         var allBackups: [BackupInfo] = []
+        
+        // Check iCloud account status first
+        do {
+            _ = try await cloudKitContainer.accountStatus()
+        } catch {
+            // Continue with backup discovery even if account status check fails
+        }
+        
+        // Try to fetch records using stored record IDs first
+        for type in BackupType.allCases {
+            let recordIDsKey = "backup_record_ids_\(type.rawValue)"
+            if let storedRecordIDs = UserDefaults.standard.stringArray(forKey: recordIDsKey), !storedRecordIDs.isEmpty {
+                
+                // Try to fetch each stored record directly
+                for recordIDString in storedRecordIDs {
+                    do {
+                        let recordID = CKRecord.ID(recordName: recordIDString)
+                        let record = try await database.record(for: recordID)
+                        
+                        let backup = BackupInfo(
+                            id: record.recordID.recordName,
+                            type: type,
+                            createdAt: record["createdAt"] as? Date ?? Date(),
+                            version: record["version"] as? String ?? "1.0",
+                            isManual: record["isManual"] as? Bool ?? false,
+                            deviceIdentifier: record["deviceIdentifier"] as? String
+                        )
+                        allBackups.append(backup)
+                    } catch {
+                        // Continue to next record if this one fails
+                    }
+                }
+            } else {
+                // No stored record IDs for this type
+            }
+        }
+        
+        if !allBackups.isEmpty {
+            let sortedBackups = allBackups.sorted { $0.createdAt > $1.createdAt }
+            return sortedBackups
+        }
         
         // Instead of querying with predicates that require queryable fields,
         // let's try to fetch records directly if we know the pattern
         for type in BackupType.allCases {
             do {
-                print("🔍 BackupService: Fetching \(type.recordType) backups...")
                 
                 // Try the query approach first, but with better error handling
                 do {
-                    let query = CKQuery(recordType: type.recordType, predicate: NSPredicate(format: "TRUEPREDICATE"))
+                    // Use a simpler predicate that doesn't rely on indexes
+                    let query = CKQuery(recordType: type.recordType, predicate: NSPredicate(value: true))
                     let (matchResults, queryCursor) = try await database.records(matching: query)
                     
                     var allRecords = matchResults.compactMap { try? $0.1.get() }
@@ -552,7 +603,6 @@ class BackupService: ObservableObject {
                         cursor = nextCursor
                     }
                     
-                    print("✅ BackupService: Found \(allRecords.count) \(type.recordType) backup records")
                     
                     // Sort records manually since CloudKit sorting might not work yet
                     let sortedRecords = allRecords.sorted { record1, record2 in
@@ -575,10 +625,51 @@ class BackupService: ObservableObject {
                     allBackups.append(contentsOf: backups)
                     
                 } catch let ckError as CKError where ckError.code == .invalidArguments {
-                    // Query failed due to schema not ready, but records might still exist
-                    print("⚠️ BackupService: CloudKit schema not ready for querying \(type.recordType), this is normal for new setups")
-                    print("   Reason: \(ckError.localizedDescription)")
-                    print("   📝 Backups have been created but fields aren't queryable yet. This will resolve automatically.")
+                    // Query failed - this shouldn't happen after 24+ hours but let's try a workaround
+                    
+                    // Try fetching all records from the private database (last resort)
+                    // Use the new iOS 15+ approach to fetch all records of a type
+                    let allRecordsQuery = CKQuery(recordType: type.recordType, predicate: NSPredicate(value: true))
+                    let operation = CKQueryOperation(query: allRecordsQuery)
+                    operation.database = database
+                    operation.resultsLimit = CKQueryOperation.maximumResults
+                    
+                    var foundRecords: [CKRecord] = []
+                    operation.recordMatchedBlock = { recordID, result in
+                        switch result {
+                        case .success(let record):
+                            foundRecords.append(record)
+                        case .failure(_):
+                            // Skip failed records
+                            break
+                        }
+                    }
+                    
+                    let operationResult = await withCheckedContinuation { continuation in
+                        operation.queryResultBlock = { result in
+                            continuation.resume(returning: result)
+                        }
+                        database.add(operation)
+                    }
+                    
+                    switch operationResult {
+                    case .success:
+                        let backups = foundRecords.map { record in
+                            BackupInfo(
+                                id: record.recordID.recordName,
+                                type: type,
+                                createdAt: record["createdAt"] as? Date ?? Date(),
+                                version: record["version"] as? String ?? "1.0",
+                                isManual: record["isManual"] as? Bool ?? false,
+                                deviceIdentifier: record["deviceIdentifier"] as? String
+                            )
+                        }
+                        allBackups.append(contentsOf: backups)
+                    case .failure(_):
+                        // Query failed, continue to next type
+                        break
+                    }
+                    
                     continue
                 }
                 
@@ -586,44 +677,216 @@ class BackupService: ObservableObject {
                 switch error.code {
                 case .unknownItem:
                     // Record type doesn't exist yet
-                    print("⚠️ BackupService: Record type \(type.recordType) doesn't exist yet")
+                    break
                 case .networkFailure, .networkUnavailable:
                     // Network issues - this should be retried
-                    print("🌐 BackupService: Network error querying \(type.recordType): \(error.localizedDescription)")
                     throw error
                 case .notAuthenticated:
                     // User not signed into iCloud
-                    print("🔐 BackupService: Not authenticated with iCloud: \(error.localizedDescription)")
                     throw error
                 default:
-                    print("❌ BackupService: Unexpected CloudKit error for \(type.recordType): \(error.localizedDescription)")
                     // Don't throw - continue with other types
+                    break
                 }
                 continue
             } catch {
-                print("❌ BackupService: Unexpected error querying \(type.recordType): \(error.localizedDescription)")
                 continue
             }
         }
         
         let sortedBackups = allBackups.sorted { $0.createdAt > $1.createdAt }
-        print("📋 BackupService: Returning \(sortedBackups.count) total backups")
         
-        if sortedBackups.isEmpty {
-            print("💡 BackupService: No backups found. This is expected when:")
-            print("   • This is the first time using backups")
-            print("   • CloudKit schema is still being set up (can take a few minutes)")
-            print("   • Try creating another backup and checking again in a few minutes")
-        }
         
         return sortedBackups
     }
     
+    @MainActor
     func restoreFromBackup(_ backupInfo: BackupInfo) async throws {
-        // Implementation for restore would go here
-        // This would involve downloading the backup data and restoring to Core Data
-        // For safety, this should probably create a full backup before restoring
-        throw NSError(domain: "BackupService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Restore functionality not yet implemented"])
+        guard !isBackingUp else {
+            throw NSError(domain: "BackupService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Cannot restore while backup is in progress"])
+        }
+        
+        isBackingUp = true
+        backupStatus = .preparingBackup
+        
+        do {
+            // Step 1: Create a safety backup before restore
+            let safetyBackupData = try await prepareBackupData()
+            try await uploadBackupToiCloud(safetyBackupData, type: .daily, isManual: true)
+            
+            // Step 2: Download and parse the backup data
+            backupStatus = .downloadingBackup
+            let backupData = try await downloadBackupData(backupInfo)
+            
+            // Step 3: Restore the data
+            backupStatus = .restoringData
+            try await restoreData(backupData)
+            
+            backupStatus = .completed
+            
+        } catch {
+            backupStatus = .failed(error)
+            throw error
+        }
+        
+        isBackingUp = false
+        
+        // Reset status after 3 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            self.backupStatus = .idle
+        }
+    }
+    
+    private func downloadBackupData(_ backupInfo: BackupInfo) async throws -> BackupData {
+        let database = cloudKitContainer.privateCloudDatabase
+        let recordID = CKRecord.ID(recordName: backupInfo.id)
+        
+        let record = try await database.record(for: recordID)
+        
+        guard let backupDataRaw = record["backupData"] as? Data else {
+            throw NSError(domain: "BackupService", code: 3, userInfo: [NSLocalizedDescriptionKey: "Backup data not found in record"])
+        }
+        
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        
+        return try decoder.decode(BackupData.self, from: backupDataRaw)
+    }
+    
+    private func restoreData(_ backupData: BackupData) async throws {
+        return try await withCheckedThrowingContinuation { continuation in
+            context.perform {
+                do {
+                    // Clear existing data
+                    try self.clearAllData()
+                    
+                    // Create lookup dictionaries for relationships
+                    var groupLookup: [UUID: Group] = [:]
+                    var sheetLookup: [UUID: Sheet] = [:]
+                    
+                    // Step 1: Restore groups (in dependency order)
+                    // First, create all groups without parent relationships
+                    for groupBackup in backupData.groups {
+                        let group = Group(context: self.context)
+                        group.id = groupBackup.id
+                        group.name = groupBackup.name
+                        group.sortOrder = groupBackup.sortOrder
+                        group.isFavorite = groupBackup.isFavorite
+                        group.createdAt = groupBackup.createdAt
+                        group.modifiedAt = groupBackup.modifiedAt
+                        groupLookup[groupBackup.id] = group
+                    }
+                    
+                    // Second, establish parent-child relationships
+                    for groupBackup in backupData.groups {
+                        if let parentId = groupBackup.parentId,
+                           let group = groupLookup[groupBackup.id],
+                           let parent = groupLookup[parentId] {
+                            group.parent = parent
+                        }
+                    }
+                    
+                    // Step 2: Restore templates
+                    for templateBackup in backupData.templates {
+                        let template = Template(context: self.context)
+                        template.id = templateBackup.id
+                        template.name = templateBackup.name
+                        template.content = templateBackup.content
+                        template.category = templateBackup.category
+                        template.titleTemplate = templateBackup.titleTemplate
+                        template.targetGroupName = templateBackup.targetGroupName
+                        template.keyboardShortcut = templateBackup.keyboardShortcut
+                        template.usesDateInTitle = templateBackup.usesDateInTitle
+                        template.isBuiltIn = templateBackup.isBuiltIn
+                        template.sortOrder = templateBackup.sortOrder
+                        template.createdAt = templateBackup.createdAt
+                        template.modifiedAt = templateBackup.modifiedAt
+                    }
+                    
+                    // Step 3: Restore sheets
+                    for sheetBackup in backupData.sheets {
+                        let sheet = Sheet(context: self.context)
+                        sheet.id = sheetBackup.id
+                        sheet.title = sheetBackup.title
+                        sheet.content = sheetBackup.content
+                        sheet.preview = sheetBackup.preview
+                        sheet.wordCount = sheetBackup.wordCount
+                        sheet.goalCount = sheetBackup.goalCount
+                        sheet.goalType = sheetBackup.goalType
+                        sheet.isFavorite = sheetBackup.isFavorite
+                        sheet.isInTrash = sheetBackup.isInTrash
+                        sheet.sortOrder = sheetBackup.sortOrder
+                        sheet.createdAt = sheetBackup.createdAt
+                        sheet.modifiedAt = sheetBackup.modifiedAt
+                        sheet.deletedAt = sheetBackup.deletedAt
+                        
+                        // Link to group if specified
+                        if let groupId = sheetBackup.groupId,
+                           let group = groupLookup[groupId] {
+                            sheet.group = group
+                        }
+                        
+                        sheetLookup[sheetBackup.id] = sheet
+                    }
+                    
+                    // Step 4: Restore annotations
+                    for annotationBackup in backupData.annotations {
+                        guard let sheet = sheetLookup[annotationBackup.sheetId] else {
+                            continue
+                        }
+                        
+                        let annotation = Annotation(context: self.context)
+                        annotation.id = annotationBackup.id
+                        annotation.annotatedText = annotationBackup.annotatedText
+                        annotation.content = annotationBackup.content
+                        annotation.position = annotationBackup.position
+                        annotation.createdAt = annotationBackup.createdAt
+                        annotation.modifiedAt = annotationBackup.modifiedAt
+                        annotation.sheet = sheet
+                    }
+                    
+                    // Step 5: Restore notes
+                    for noteBackup in backupData.notes {
+                        guard let sheet = sheetLookup[noteBackup.sheetId] else {
+                            continue
+                        }
+                        
+                        let note = Note(context: self.context)
+                        note.id = noteBackup.id
+                        note.content = noteBackup.content
+                        note.sortOrder = noteBackup.sortOrder
+                        note.createdAt = noteBackup.createdAt
+                        note.modifiedAt = noteBackup.modifiedAt
+                        note.sheet = sheet
+                    }
+                    
+                    // Save all changes
+                    try self.context.save()
+                    
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    private func clearAllData() throws {
+        // Clear all entities in dependency order
+        let entityNames = ["Note", "Annotation", "Sheet", "Group", "Template"]
+        
+        for entityName in entityNames {
+            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: entityName)
+            let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+            deleteRequest.resultType = .resultTypeObjectIDs
+            
+            let result = try context.execute(deleteRequest) as? NSBatchDeleteResult
+            if let objectIDs = result?.result as? [NSManagedObjectID] {
+                NSManagedObjectContext.mergeChanges(fromRemoteContextSave: [NSDeletedObjectsKey: objectIDs], into: [context])
+            }
+        }
+        
+        try context.save()
     }
 }
 

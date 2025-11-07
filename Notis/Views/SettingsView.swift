@@ -15,12 +15,15 @@ struct SettingsView: View {
     @Binding var isPresented: Bool
     @AppStorage("fontSize") private var fontSize: Double = 16
     @AppStorage("lineSpacing") private var lineSpacing: Double = 1.4
+    @AppStorage("paragraphSpacing") private var paragraphSpacing: Double = 8
+    @AppStorage("fontFamily") private var fontFamily: String = "system"
     @AppStorage("editorMargins") private var editorMargins: Double = 40
     @AppStorage("defaultGoalType") private var defaultGoalType: String = "words"
     @AppStorage("showWordCount") private var showWordCount: Bool = true
     @AppStorage("showCharacterCount") private var showCharacterCount: Bool = true
     @AppStorage("showReadingTime") private var showReadingTime: Bool = true
     @AppStorage("enableHapticFeedback") private var enableHapticFeedback: Bool = true
+    @AppStorage("showTagsPane") private var showTagsPane: Bool = true
     
     @State private var showingExportFilePicker = false
     @State private var showingImportFilePicker = false
@@ -29,6 +32,14 @@ struct SettingsView: View {
     @State private var exportFileName: String = ""
     @State private var showingAlert = false
     @State private var alertMessage = ""
+    @StateObject private var backupService = BackupService.shared
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }
     
     var body: some View {
         NavigationView {
@@ -49,38 +60,73 @@ struct SettingsView: View {
                 Section("Typography") {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
+                            Text("Font Family")
+                            Spacer()
+                            Picker("Font", selection: $fontFamily) {
+                                Text("System").tag("system")
+                                Text("Serif").tag("serif")
+                                Text("Monospace").tag("monospace")
+                                Text("Times").tag("times")
+                                Text("Helvetica").tag("helvetica")
+                                Text("Courier").tag("courier")
+                                Text("Avenir").tag("avenir")
+                                Text("Georgia").tag("georgia")
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                        }
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
                             Text("Font Size")
                             Spacer()
                             Text("\(Int(fontSize))pt")
                                 .foregroundColor(.secondary)
                         }
-                        Slider(value: $fontSize, in: 12...24, step: 1)
+                        Slider(value: $fontSize, in: 10...32, step: 1)
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Line Spacing")
+                            Text("Line Height")
                             Spacer()
                             Text(String(format: "%.1f", lineSpacing))
                                 .foregroundColor(.secondary)
                         }
-                        Slider(value: $lineSpacing, in: 1.0...2.0, step: 0.1)
+                        Slider(value: $lineSpacing, in: 1.0...3.0, step: 0.1)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Paragraph Spacing")
+                            Spacer()
+                            Text("\(Int(paragraphSpacing))pt")
+                                .foregroundColor(.secondary)
+                        }
+                        Slider(value: $paragraphSpacing, in: 0...24, step: 2)
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Editor Margins")
                             Spacer()
-                            Text("\(Int(editorMargins))pt")
-                                .foregroundColor(.secondary)
+                            if editorMargins == 0 {
+                                Text("No margin")
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text("\(Int(editorMargins))pt")
+                                    .foregroundColor(.secondary)
+                            }
                         }
-                        Slider(value: $editorMargins, in: 20...80, step: 5)
+                        Slider(value: $editorMargins, in: 0...400, step: 5)
                     }
                 }
                 
                 Section("Editor Behavior") {
                     Toggle("Typewriter Mode", isOn: $appState.isTypewriterMode)
                     Toggle("Focus Mode", isOn: $appState.isFocusMode)
+                    Toggle("Show Markdown Header Symbols", isOn: $appState.showMarkdownHeaderSymbols)
+                    Toggle("Hide Shortcut Bar", isOn: $appState.hideShortcutBar)
                     
                     HStack {
                         Text("Default Goal Type")
@@ -102,7 +148,64 @@ struct SettingsView: View {
                 Section("Interface") {
                     Toggle("Library Sidebar", isOn: $appState.showLibrary)
                     Toggle("Sheet List", isOn: $appState.showSheetList)
+                    Toggle("Tags Pane", isOn: $showTagsPane)
                     Toggle("Haptic Feedback", isOn: $enableHapticFeedback)
+                }
+                
+                Section("Tag Management") {
+                    HStack {
+                        Text("Default Tag Sort")
+                        Spacer()
+                        Menu {
+                            ForEach(TagSortOrder.allCases, id: \.self) { sortOrder in
+                                Button(action: {
+                                    TagService.shared.setSortOrder(sortOrder, ascending: true)
+                                }) {
+                                    HStack {
+                                        Image(systemName: sortOrder.systemImage)
+                                        Text(sortOrder.rawValue)
+                                        if TagService.shared.currentSortOrder == sortOrder {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: TagService.shared.currentSortOrder.systemImage)
+                                    .foregroundColor(.secondary)
+                                Text(TagService.shared.currentSortOrder.rawValue)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+                
+                
+                Section("Obsidian Integration") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Vault Path")
+                            Spacer()
+                        }
+                        
+                        if ExportService.shared.obsidianVaultPath.isEmpty {
+                            Text("No vault selected")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                        } else {
+                            Text(ExportService.shared.obsidianVaultPath)
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                                .lineLimit(2)
+                        }
+                        
+                        Button("Change Obsidian Vault Path") {
+                            selectObsidianVault()
+                        }
+                        .foregroundColor(.accentColor)
+                    }
                 }
                 
                 Section("Data Management") {
@@ -127,7 +230,67 @@ struct SettingsView: View {
                         showingImportFilePicker = true
                     }
                     .foregroundColor(.accentColor)
+                    
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Automatic Backups")
+                                .font(.body)
+                            
+                            if backupService.isBackupEnabled {
+                                if let lastBackup = backupService.lastBackupDate {
+                                    Text("Last backup: \(lastBackup, formatter: dateFormatter)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Text("No backups yet")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            } else {
+                                Text("Disabled")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        if backupService.isBackingUp {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else {
+                            Toggle("", isOn: $backupService.isBackupEnabled)
+                        }
+                    }
+                    
+                    NavigationLink(destination: BackupSettingsView()) {
+                        HStack {
+                            Image(systemName: "icloud.and.arrow.up.fill")
+                                .foregroundColor(.accentColor)
+                            Text("Backup & Restore")
+                            Spacer()
+                        }
+                    }
+                    
+                    NavigationLink(destination: DatabaseMaintenanceView(context: viewContext)) {
+                        HStack {
+                            Image(systemName: "wrench.and.screwdriver")
+                                .foregroundColor(.accentColor)
+                            Text("Database Maintenance")
+                            Spacer()
+                        }
+                    }
+                    
+                    NavigationLink(destination: DatabaseHealthDashboard(context: viewContext)) {
+                        HStack {
+                            Image(systemName: "heart.text.square")
+                                .foregroundColor(.green)
+                            Text("Database Health Monitor")
+                            Spacer()
+                        }
+                    }
                 }
+                
                 
                 Section("About") {
                     HStack {
@@ -344,6 +507,14 @@ struct SettingsView: View {
         let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
         return filename.components(separatedBy: invalidChars).joined(separator: "-")
     }
+    
+    private func selectObsidianVault() {
+        // Trigger the vault selection from ExportService
+        ExportService.shared.selectObsidianVaultPath {
+            // Vault path has been updated
+        }
+    }
+    
 }
 
 enum SettingsExportFormat: CaseIterable {

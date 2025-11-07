@@ -15,7 +15,8 @@ struct BackupSettingsView: View {
     @State private var isLoadingBackups = false
     
     var body: some View {
-        VStack(spacing: 20) {
+        ScrollView {
+            VStack(spacing: 20) {
             // Backup Status Section
             VStack(alignment: .leading, spacing: 12) {
                 Text("Backup Status")
@@ -136,6 +137,8 @@ struct BackupSettingsView: View {
                     Text("• Monthly backups run every 30 days")
                     Text("• Old backups are automatically cleaned up")
                     Text("• All your notes, sheets, groups, and settings are included")
+                    Text("• Storage location: CloudKit private database")
+                    Text("• Record types: NotisBackup_daily, NotisBackup_weekly, NotisBackup_monthly")
                 }
                 .font(.caption)
                 .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
@@ -144,10 +147,16 @@ struct BackupSettingsView: View {
             .background(UlyssesDesign.Colors.hover.opacity(0.2))
             .cornerRadius(8)
             
-            Spacer()
+            }
         }
         .padding()
         .navigationTitle("Backup & Restore")
+        .navigationBarTitleDisplayMode(.large)
+        .onAppear {
+            if availableBackups.isEmpty {
+                loadAvailableBackups()
+            }
+        }
         .sheet(isPresented: $showingBackupList) {
             BackupListView(backups: availableBackups, isLoading: isLoadingBackups)
         }
@@ -166,7 +175,6 @@ struct BackupSettingsView: View {
                 await MainActor.run {
                     self.isLoadingBackups = false
                 }
-                print("Failed to load backups: \(error)")
             }
         }
     }
@@ -241,6 +249,10 @@ struct BackupListView: View {
     @StateObject private var backupService = BackupService.shared
     @State private var availableBackups: [BackupInfo] = []
     @State private var isLoadingBackups = false
+    @State private var showingRestoreConfirmation = false
+    @State private var backupToRestore: BackupInfo?
+    @State private var restoreError: Error?
+    @State private var showingRestoreError = false
     
     var body: some View {
         NavigationView {
@@ -284,7 +296,11 @@ struct BackupListView: View {
                     .padding()
                 } else {
                     List(availableBackups) { backup in
-                        BackupRow(backup: backup)
+                        BackupRow(backup: backup, onRestore: { backupInfo in
+                            Task {
+                                await restoreBackup(backupInfo)
+                            }
+                        })
                     }
                 }
             }
@@ -309,6 +325,47 @@ struct BackupListView: View {
                     }
                 }
             }
+            .alert("Restore Backup?", isPresented: $showingRestoreConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Restore", role: .destructive) {
+                    guard let backup = backupToRestore else { return }
+                    Task {
+                        await performRestore(backup)
+                    }
+                }
+            } message: {
+                if let backup = backupToRestore {
+                    Text("This will replace all current data with the backup from \(backup.createdAt.formatted(date: .abbreviated, time: .shortened)). A safety backup will be created first. This action cannot be undone.")
+                }
+            }
+            .alert("Restore Error", isPresented: $showingRestoreError) {
+                Button("OK") { }
+            } message: {
+                if let error = restoreError {
+                    Text(error.localizedDescription)
+                }
+            }
+        }
+    }
+    
+    private func restoreBackup(_ backupInfo: BackupInfo) async {
+        await MainActor.run {
+            backupToRestore = backupInfo
+            showingRestoreConfirmation = true
+        }
+    }
+    
+    private func performRestore(_ backupInfo: BackupInfo) async {
+        do {
+            try await backupService.restoreFromBackup(backupInfo)
+            await MainActor.run {
+                dismiss() // Close the backup list after successful restore
+            }
+        } catch {
+            await MainActor.run {
+                restoreError = error
+                showingRestoreError = true
+            }
         }
     }
     
@@ -325,7 +382,6 @@ struct BackupListView: View {
                 await MainActor.run {
                     self.isLoadingBackups = false
                 }
-                print("Failed to load backups: \(error)")
             }
         }
     }
@@ -333,6 +389,7 @@ struct BackupListView: View {
 
 struct BackupRow: View {
     let backup: BackupInfo
+    let onRestore: (BackupInfo) -> Void
     @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
@@ -370,6 +427,23 @@ struct BackupRow: View {
                 Text("Device: \(deviceId.prefix(8))...")
                     .font(.caption)
                     .foregroundColor(UlyssesDesign.Colors.tertiary(for: colorScheme))
+            }
+            
+            HStack {
+                Spacer()
+                Button(action: {
+                    onRestore(backup)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.counterclockwise")
+                        Text("Restore")
+                    }
+                    .font(.caption)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
             }
         }
         .padding(.vertical, 4)

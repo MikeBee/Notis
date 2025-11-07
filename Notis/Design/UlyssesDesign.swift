@@ -45,22 +45,44 @@ struct UlyssesDesign {
     
     // MARK: - Typography
     struct Typography {
+        // Scale (based on 1.125 type scale)
+        private static let baseSize: CGFloat = 16
+        
         // Library
-        static let libraryTitle = Font.system(size: 13, weight: .semibold)
-        static let groupName = Font.system(size: 13, weight: .medium)
-        static let groupCount = Font.system(size: 11, weight: .regular)
+        static let libraryTitle = Font.system(size: 13, weight: .semibold, design: .default)
+        static let groupName = Font.system(size: 13, weight: .medium, design: .default)
+        static let groupCount = Font.system(size: 11, weight: .regular, design: .monospaced)
         
         // Sheet List
-        static let sheetTitle = Font.system(size: 15, weight: .semibold)
-        static let sheetPreview = Font.system(size: 13, weight: .regular)
-        static let sheetMeta = Font.system(size: 11, weight: .regular)
+        static let sheetTitle = Font.system(size: 15, weight: .semibold, design: .default)
+        static let sheetPreview = Font.system(size: 13, weight: .regular, design: .default)
+        static let sheetMeta = Font.system(size: 11, weight: .regular, design: .default)
         
         // Editor
-        static let editorTitle = Font.system(size: 24, weight: .semibold)
-        static let editorBody = Font.system(size: 17, weight: .regular)
-        static let editorH1 = Font.system(size: 28, weight: .bold)
-        static let editorH2 = Font.system(size: 24, weight: .bold)
-        static let editorH3 = Font.system(size: 20, weight: .semibold)
+        static let editorTitle = Font.system(size: 24, weight: .semibold, design: .serif)
+        static let editorBody = Font.system(size: 17, weight: .regular, design: .serif)
+        static let editorH1 = Font.system(size: 32, weight: .bold, design: .serif)
+        static let editorH2 = Font.system(size: 28, weight: .bold, design: .serif)
+        static let editorH3 = Font.system(size: 24, weight: .semibold, design: .serif)
+        static let editorH4 = Font.system(size: 20, weight: .semibold, design: .serif)
+        static let editorH5 = Font.system(size: 18, weight: .medium, design: .serif)
+        static let editorH6 = Font.system(size: 16, weight: .medium, design: .serif)
+        
+        // UI Elements
+        static let buttonLabel = Font.system(size: 14, weight: .medium, design: .default)
+        static let caption = Font.system(size: 12, weight: .regular, design: .default)
+        static let footnote = Font.system(size: 10, weight: .regular, design: .default)
+        static let code = Font.system(size: 14, weight: .regular, design: .monospaced)
+        
+        // Status and indicators
+        static let statusLabel = Font.system(size: 11, weight: .semibold, design: .default)
+        static let counterText = Font.system(size: 11, weight: .medium, design: .monospaced)
+        
+        // Line height multipliers for better readability
+        static let tightLineHeight: CGFloat = 1.2
+        static let normalLineHeight: CGFloat = 1.4
+        static let relaxedLineHeight: CGFloat = 1.6
+        static let looseLineHeight: CGFloat = 1.8
     }
     
     // MARK: - Spacing
@@ -92,6 +114,38 @@ struct UlyssesDesign {
         static let subtle = Color.black.opacity(0.05)
         static let medium = Color.black.opacity(0.10)
         static let strong = Color.black.opacity(0.15)
+    }
+    
+    // MARK: - Animations
+    struct Animations {
+        // Timing curves
+        static let quick = Animation.easeInOut(duration: 0.15)
+        static let standard = Animation.easeInOut(duration: 0.25)
+        static let smooth = Animation.easeInOut(duration: 0.35)
+        static let gentle = Animation.easeInOut(duration: 0.5)
+        
+        // Spring animations
+        static let springy = Animation.spring(response: 0.3, dampingFraction: 0.7)
+        static let bouncy = Animation.spring(response: 0.4, dampingFraction: 0.6)
+        static let elastic = Animation.spring(response: 0.5, dampingFraction: 0.5)
+        
+        // Specialized animations
+        static let buttonPress = Animation.spring(response: 0.2, dampingFraction: 0.8)
+        static let modalPresent = Animation.spring(response: 0.4, dampingFraction: 0.8)
+        static let slideTransition = Animation.easeInOut(duration: 0.3)
+    }
+    
+    // MARK: - Effects
+    struct Effects {
+        // Blur effects
+        static let subtle = 2.0
+        static let medium = 8.0
+        static let strong = 16.0
+        
+        // Opacity levels
+        static let faint = 0.3
+        static let visible = 0.6
+        static let prominent = 0.8
     }
 }
 

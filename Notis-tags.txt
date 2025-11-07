@@ -1,0 +1,204 @@
+## 🧭 Overview
+
+**Feature Name:** Tag-First / Nested-Tag Library Mode
+**Goal:** Enable users to organize and browse their Notis library primarily by flexible tags, supporting **nested hierarchies**, **tag search**, and **tag-based filtering** rather than rigid folders.
+**Why:**
+
+* Faster capture and retrieval for short-form research and idea capture.
+* Better support for non-linear, associative thinking and exploratory browsing.
+* Tagging replaces or enhances folders and groups, offering multiple cross-cutting organizational dimensions.
+
+---
+
+## 🔩 Functional Requirements
+
+### 1. Tag System
+
+* **Create / Edit / Delete Tags:**
+  Users can add tags anywhere (note, paragraph, block).
+* **Nested Tags:**
+  Tags can have hierarchy using `/` syntax (e.g. `#art/modern` or `#project/ai/ethics`).
+* **Auto-Creation:**
+  Typing a new nested tag automatically creates its parent path.
+* **Renaming & Merging:**
+  Renaming a tag updates all linked notes. Merging two tags combines their assigned notes.
+* **Tag Colors or Icons:**
+  Support for custom tag color or icon for quick visual identification.
+
+### 2. Tag Browsing Mode
+
+* **In Library Sidebar / add the Tag Tree View:**
+  Collapsible tree of all tags with note counts.
+  Example:
+
+  ```
+  research/
+      ai/
+         ethics (12)
+         history (4)
+      psychology/
+         cognition (8)
+  ```
+* **Clicking a Tag:**
+  Displays all notes (and optionally subtag notes) associated with it.
+* **Breadcrumb Navigation:**
+  e.g. `research > ai > ethics`
+  Clicking any level navigates upward in hierarchy.
+
+### 3. Tag Search & Filtering
+
+* **Search-as-you-type:**
+  Instantly filters tags or notes.
+* **Tag Intersection Filtering:**
+  Combine tags via `AND`, `OR`, and `NOT`. Example: `#ai AND #ethics` or `#philosophy -#ancient`.
+* **Smart Suggestions:**
+  Suggest related or co-occurring tags based on usage frequency.
+
+### 4. Note Association
+
+* **Inline Tagging:**
+  Type `#tag` anywhere in text; automatically indexes the note under that tag.
+
+* **Backlink Preview:**
+  Hovering over a tag shows a tooltip with a few of its linked notes.
+
+### 5. Capture and Organization
+
+* **Quick Add:**
+  When creating a new note from anywhere, user can instantly tag it.
+  Example: `⌘+Opt+N → “idea: faster note linking” #research/productivity`
+* **Tag Inbox:**
+  Temporary untagged note pool for sorting later.
+
+### 6. Integration & Display
+
+* **View Modes:**
+
+  * “Tag View” (default for tag-first users): shows tag tree and tag-based browsing.
+  * “Note View” (like folders): shows notes directly.
+  * Toggle easily between them.
+* **Tag List:**
+  List of most-used tags for discovery.
+* **Cross-App Linking:**
+  Tags can be linked to internal search URLs (e.g. `notis://tag/research/ai`).
+
+---
+
+## ⚙️ Technical / Developer-Oriented Specs
+
+| Aspect            | Requirement                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------- |
+| **Storage Model** | Tags stored as normalized objects; support many-to-many relationship between tags and notes. |
+| **Data Schema**   | `tags (id, name, parent_id, color, created_at)` and `note_tags (note_id, tag_id)`.           |
+| **Search Engine** | Indexed search for tags and tag hierarchies (SQLite FTS or local index).                     |
+| **Sync Handling** | Merge tag trees gracefully during sync (resolve conflicts by path name).                     |
+|                       |
+| **Performance**   | Must handle 5,000+ tags and 20,000+ notes without lag in filtering.                          |
+| **Offline Mode**  | Tag operations fully functional offline, syncing later.                                      |
+---
+
+## 🧠 UX & Interaction Notes
+
+* **Tag Autocomplete:** appears as user types `#`, similar to Bear or Obsidian.
+* **Keyboard Shortcuts:**
+
+  * `⌘T` → Add/remove tags to selected note.
+  * `⌘⇧F` → Filter by tag.
+* **Hover Interaction:** hovering a tag in sidebar shows note previews or hierarchy path.
+
+---
+=============
+GOALS
+
+
+
+## 🧭 Purpose of the Goals Section
+
+The **Goals** system should:
+
+* Help track **writing progress** across notes, tags, or projects
+* Visualize both **quantitative** (word count, time, sessions) and **qualitative** (focus, completion, revision) progress
+* Tie seamlessly into your **tag-first, nested-tag organization** so you can filter and roll up progress dynamically (e.g. `#book/novel1/chapter2` → totals for `#book/novel1`)
+
+---
+
+## ⚙️ WHAT TO TRACK
+
+A good Goals section has three layers: **metrics**, **milestones**, and **context**.
+
+### 1. 🔢 Metrics (Quantitative)
+
+You want clear numbers and visible progress:
+
+* **Word count** (per note, tag group, or session)
+* **Character count** (useful for social posts or micro-writing)
+* **Session duration** (minutes/hours writing per day)
+* **Daily / Weekly writing streak**
+* **Completion %** (manual or automatic, based on milestone progress)
+* **Revision count or date of last edit**
+* **Average words per session** (for pacing awareness)
+* **Deadline tracking** (optional target date with progress bar)
+
+---
+
+### 2. 🎯 Milestones (Qualitative)
+
+Goal “types” for structure and focus:
+
+* **Word goals** (like Ulysses: “Write 1,000 words for #blog/post3”)
+* **Project goals** (like Scrivener: “Complete 5 scenes for #novel/ch1”)
+* **Time goals** (“Write for 30 minutes daily for 14 days”)
+* **Completion goals** (“Mark all notes under #draft complete by Dec 1”)
+
+Each goal can be:
+
+* Linked to a **tag or note**
+* Tracked via **progress bar or ring**
+* Optionally **nested** (child goals roll up to parent tag)
+
+---
+
+### 3. 🧩 Context (Organization & Tags)
+
+Since Notis is *tag-first*, tie goals to tags:
+
+* Every tag can have **attached goals** (e.g., `#book/novel1` → “100k words total”)
+* Nested tags **inherit or roll up** goal progress
+* You can filter by `#goal:active`, `#goal:complete`, or `#goal:type/wordcount`
+
+---
+
+
+### 🗂 1. **Goals Dashboard (like Ulysses + Bear)**
+
+A clean overview that shows:
+
+* Daily goal ring (words/time)
+* Current streak
+* Active goals list grouped by tag
+
+### 🗃 2. **Goal Tracker Sidebar Pane**
+
+* Progress ring + current count + target
+* Editable inline (click ring to set goal)
+* Optional “Set goal for tag” toggle
+
+---
+
+### 💡 Design Aesthetic
+
+Use **Bear/iA Writer**’s clean minimalism with **Scrivener’s granularity**:
+
+* Color progress rings and bars
+* Soft highlight colors for nearing completion
+* Optional compact “focus card” for today’s goal pinned at top
+
+---
+
+Your tag system already acts like a dynamic project browser. Integrate Goals:
+
+* Add `goal:` metadata to tags or notes
+* Filter: `tag:#novel1 AND goal:active`
+* Show total progress aggregated across all notes under a tag
+
+

@@ -83,6 +83,13 @@ struct CommandPalette: View {
                 description: "Open app settings",
                 icon: "gear",
                 action: { openSettings() }
+            ),
+            Command(
+                id: "advanced-search",
+                title: "Advanced Search",
+                description: "Search with filters and options",
+                icon: "magnifyingglass.circle",
+                action: { openAdvancedSearch() }
             )
         ]
         
@@ -261,6 +268,10 @@ struct CommandPalette: View {
     private func openSettings() {
         NotificationCenter.default.post(name: .showSettings, object: nil)
     }
+    
+    private func openAdvancedSearch() {
+        NotificationCenter.default.post(name: .showAdvancedSearch, object: nil)
+    }
 }
 
 struct CommandRow: View {
@@ -322,6 +333,7 @@ struct Command {
 enum ExportFormat {
     case markdown
     case plainText
+    case obsidian
 }
 
 #Preview {
