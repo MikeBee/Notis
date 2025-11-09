@@ -7,6 +7,7 @@
 
 import SwiftUI
 import CoreData
+import Combine
 
 struct DashboardSidePanel: View {
     @ObservedObject var sheet: Sheet
@@ -277,15 +278,15 @@ struct ProgressContent: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var goalsService = GoalsService.shared
     @State private var showingGoalEditor = false
-    @State private var showingHistory = false
+    @State private var showingFullHistory = false
     @State private var editingGoal: Goal?
     
     private var statistics: SheetStatistics {
         SheetStatistics(content: sheet.content ?? "")
     }
     
-    private var sheetGoals: [Goal] {
-        goalsService.getGoals(for: sheet)
+    private var allGoals: [Goal] {
+        goalsService.getTodaysGoals()
     }
     
     var body: some View {
@@ -293,7 +294,7 @@ struct ProgressContent: View {
             // Goals Section
             VStack(spacing: UlyssesDesign.Spacing.md) {
                 HStack {
-                    Text("🎯 Goals")
+                    Text("🎯 Daily Goals")
                         .font(UlyssesDesign.Typography.editorTitle)
                         .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
 
@@ -301,7 +302,7 @@ struct ProgressContent: View {
 
                     // History button
                     Button(action: {
-                        showingHistory = true
+                        showingFullHistory = true
                     }) {
                         Image(systemName: "calendar")
                             .font(.system(size: 12, weight: .medium))
@@ -327,7 +328,7 @@ struct ProgressContent: View {
                     .cornerRadius(4)
                 }
                 
-                if sheetGoals.isEmpty {
+                if allGoals.isEmpty {
                     VStack(spacing: UlyssesDesign.Spacing.sm) {
                         Image(systemName: "target")
                             .font(.system(size: 24))
@@ -346,7 +347,7 @@ struct ProgressContent: View {
                     .padding(.vertical, UlyssesDesign.Spacing.md)
                 } else {
                     LazyVStack(spacing: UlyssesDesign.Spacing.sm) {
-                        ForEach(sheetGoals, id: \.id) { goal in
+                        ForEach(allGoals, id: \.id) { goal in
                             GoalProgressCard(goal: goal) {
                                 editingGoal = goal
                                 showingGoalEditor = true
@@ -405,17 +406,30 @@ struct ProgressContent: View {
         }
         .sheet(isPresented: $showingGoalEditor) {
             GoalEditorView(
-                sheet: sheet,
+                sheet: nil, // Goals are now global
                 existingGoal: editingGoal,
                 onSave: { title, description, targetCount, type, deadline, visualType in
                     if let goal = editingGoal {
-                        goalsService.updateGoal(goal, title: title, description: description, targetCount: targetCount, deadline: deadline)
-                        // Update visual type separately since updateGoal doesn't handle it
                         let context = PersistenceController.shared.container.viewContext
+                        
+                        // Update all properties at once
+                        goal.title = title
+                        goal.goalDescription = description
+                        goal.targetCount = targetCount
+                        goal.goalType = type.rawValue
                         goal.visualType = visualType.rawValue
                         goal.modifiedAt = Date()
-                        try? context.save()
-                        goalsService.objectWillChange.send()
+                        
+                        do {
+                            try context.save()
+                            goalsService.updateCurrentCount(for: goal)
+                            // Force UI refresh
+                            DispatchQueue.main.async {
+                                goalsService.objectWillChange.send()
+                            }
+                        } catch {
+                            print("Failed to update goal: \(error)")
+                        }
                     } else {
                         _ = goalsService.createGoal(
                             title: title,
@@ -423,7 +437,7 @@ struct ProgressContent: View {
                             targetCount: targetCount,
                             type: type,
                             deadline: deadline,
-                            sheet: sheet,
+                            sheet: nil, // Goals are now global
                             visualType: visualType
                         )
                     }
@@ -438,7 +452,7 @@ struct ProgressContent: View {
             )
         }
         
-        .sheet(isPresented: $showingHistory) {
+        .sheet(isPresented: $showingFullHistory) {
             GoalHistoryView()
         }
         
@@ -450,7 +464,7 @@ struct ProgressContent: View {
         }
         .onAppear {
             // Update goal progress when view appears
-            for goal in sheetGoals {
+            for goal in allGoals {
                 goalsService.updateCurrentCount(for: goal)
             }
         }
@@ -463,32 +477,16 @@ struct GoalsContent: View {
     @StateObject private var goalsService = GoalsService.shared
     @State private var showingGoalEditor = false
     @State private var editingGoal: Goal?
-    @State private var selectedGoalScope: GoalScope = .currentSheet
-    
-    private var currentSheetGoals: [Goal] {
-        goalsService.getGoals(for: sheet)
-    }
-    
-    private var activeGoals: [Goal] {
-        goalsService.getActiveGoals()
-    }
-    
-    private var completedGoals: [Goal] {
-        let context = PersistenceController.shared.container.viewContext
-        let request: NSFetchRequest<Goal> = Goal.fetchRequest()
-        request.predicate = NSPredicate(format: "isCompleted == YES")
-        request.sortDescriptors = [NSSortDescriptor(key: "modifiedAt", ascending: false)]
-        request.fetchLimit = 10
-        
-        do {
-            return try context.fetch(request)
-        } catch {
-            return []
-        }
-    }
+    @State private var selectedGoalScope: GoalScope = .today
     
     private var todaysGoals: [Goal] {
         goalsService.getTodaysGoals()
+    }
+    
+    private var allGoalHistoryForToday: [(goal: Goal, history: GoalHistory)] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return goalsService.getAllGoalHistoryForDate(today)
     }
     
     var body: some View {
@@ -531,14 +529,10 @@ struct GoalsContent: View {
             ScrollView {
                 VStack(spacing: UlyssesDesign.Spacing.lg) {
                     switch selectedGoalScope {
-                    case .currentSheet:
-                        goalsSection(title: "Sheet Goals", goals: currentSheetGoals, emptyMessage: "No goals for this sheet")
-                    case .active:
-                        goalsSection(title: "Active Goals", goals: activeGoals, emptyMessage: "No active goals")
                     case .today:
-                        goalsSection(title: "Today's Goals", goals: todaysGoals, emptyMessage: "No goals due today")
-                    case .completed:
-                        goalsSection(title: "Recently Completed", goals: completedGoals, emptyMessage: "No completed goals")
+                        goalsSection(title: "Today's Goals", goals: todaysGoals, emptyMessage: "No daily goals set")
+                    case .history:
+                        historySection()
                     }
                 }
                 .padding(.horizontal, UlyssesDesign.Spacing.lg)
@@ -546,26 +540,38 @@ struct GoalsContent: View {
         }
         .sheet(isPresented: $showingGoalEditor) {
             GoalEditorView(
-                sheet: selectedGoalScope == .currentSheet ? sheet : nil,
+                sheet: nil, // All goals are now global
                 existingGoal: editingGoal,
                 onSave: { title, description, targetCount, type, deadline, visualType in
                     if let goal = editingGoal {
-                        goalsService.updateGoal(goal, title: title, description: description, targetCount: targetCount, deadline: deadline)
-                        // Update visual type separately since updateGoal doesn't handle it
                         let context = PersistenceController.shared.container.viewContext
+                        
+                        // Update all properties at once
+                        goal.title = title
+                        goal.goalDescription = description
+                        goal.targetCount = targetCount
+                        goal.goalType = type.rawValue
                         goal.visualType = visualType.rawValue
                         goal.modifiedAt = Date()
-                        try? context.save()
-                        goalsService.objectWillChange.send()
+                        
+                        do {
+                            try context.save()
+                            goalsService.updateCurrentCount(for: goal)
+                            // Force UI refresh
+                            DispatchQueue.main.async {
+                                goalsService.objectWillChange.send()
+                            }
+                        } catch {
+                            print("Failed to update goal: \(error)")
+                        }
                     } else {
-                        let targetSheet = selectedGoalScope == .currentSheet ? sheet : nil
                         _ = goalsService.createGoal(
                             title: title,
                             description: description,
                             targetCount: targetCount,
                             type: type,
                             deadline: deadline,
-                            sheet: targetSheet,
+                            sheet: nil, // Global goals
                             visualType: visualType
                         )
                     }
@@ -633,24 +639,62 @@ struct GoalsContent: View {
             }
         }
     }
+    
+    @ViewBuilder
+    private func historySection() -> some View {
+        VStack(spacing: UlyssesDesign.Spacing.md) {
+            HStack {
+                Text("Today's Progress")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
+                
+                Spacer()
+                
+                Button("View All") {
+                    // Show full history view
+                }
+                .font(.caption)
+                .foregroundColor(UlyssesDesign.Colors.accent)
+            }
+            
+            if allGoalHistoryForToday.isEmpty {
+                VStack(spacing: UlyssesDesign.Spacing.sm) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 32))
+                        .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                    
+                    Text("No progress today")
+                        .font(UlyssesDesign.Typography.sheetMeta)
+                        .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                    
+                    Text("Complete your goals to see today's progress")
+                        .font(.caption)
+                        .foregroundColor(UlyssesDesign.Colors.tertiary(for: colorScheme))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, UlyssesDesign.Spacing.xl)
+            } else {
+                LazyVStack(spacing: UlyssesDesign.Spacing.xs) {
+                    ForEach(allGoalHistoryForToday, id: \.history.id) { item in
+                        DailyGoalListRow(goal: item.goal, history: item.history, date: Date())
+                    }
+                }
+            }
+        }
+    }
 }
 
 enum GoalScope: String, CaseIterable {
-    case currentSheet = "current"
-    case active = "active"
     case today = "today"
-    case completed = "completed"
+    case history = "history"
     
     var displayName: String {
         switch self {
-        case .currentSheet:
-            return "This Sheet"
-        case .active:
-            return "Active"
         case .today:
             return "Today"
-        case .completed:
-            return "Completed"
+        case .history:
+            return "History"
         }
     }
 }
@@ -1135,7 +1179,7 @@ struct AnnotationRow: View {
 }
 
 struct GoalProgressCard: View {
-    let goal: Goal
+    @ObservedObject var goal: Goal
     let onTap: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var goalsService = GoalsService.shared
@@ -1231,28 +1275,22 @@ struct GoalProgressCard: View {
                     }
                 }
                 
-                // Deadline info
-                if !goal.formattedDeadline.isEmpty && goal.formattedDeadline != "No deadline" {
-                    HStack {
-                        Image(systemName: "clock")
-                            .font(.system(size: 10))
-                            .foregroundColor(goal.isOverdue ? .red : UlyssesDesign.Colors.tertiary(for: colorScheme))
-                        
-                        Text(goal.formattedDeadline)
-                            .font(.system(size: 10))
-                            .foregroundColor(goal.isOverdue ? .red : UlyssesDesign.Colors.tertiary(for: colorScheme))
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            goalsService.toggleGoalCompletion(goal)
-                        }) {
-                            Image(systemName: goal.isCompleted ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(goal.isCompleted ? .green : UlyssesDesign.Colors.secondary(for: colorScheme))
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                // Daily goal completion toggle
+                HStack {
+                    Text("Daily Goal")
+                        .font(.system(size: 10))
+                        .foregroundColor(UlyssesDesign.Colors.tertiary(for: colorScheme))
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        goalsService.toggleGoalCompletion(goal)
+                    }) {
+                        Image(systemName: goal.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(goal.isCompleted ? .green : UlyssesDesign.Colors.secondary(for: colorScheme))
                     }
+                    .buttonStyle(PlainButtonStyle())
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1329,12 +1367,20 @@ struct GoalEditorView: View {
     @State private var targetCount: String = ""
     @State private var goalType: GoalType = .words
     @State private var visualType: GoalVisualType = .progressBar
-    @State private var hasDeadline: Bool = false
-    @State private var deadline: Date = Date().addingTimeInterval(86400 * 7) // 1 week from now
     @State private var showingDeleteAlert = false
     
     var isEditing: Bool {
         existingGoal != nil
+    }
+    
+    private var saveButtonDisabled: Bool {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let targetNumber = Int32(targetCount)
+        
+        return trimmedTitle.isEmpty || 
+               targetCount.isEmpty || 
+               targetNumber == nil || 
+               targetNumber! <= 0
     }
     
     var body: some View {
@@ -1346,11 +1392,9 @@ struct GoalEditorView: View {
                         .font(UlyssesDesign.Typography.editorTitle)
                         .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
                     
-                    if let sheet = sheet {
-                        Text("for \(sheet.title ?? "Untitled")")
-                            .font(UlyssesDesign.Typography.sheetMeta)
-                            .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
-                    }
+                    Text("Global Daily Goal - resets every day")
+                        .font(UlyssesDesign.Typography.sheetMeta)
+                        .foregroundColor(UlyssesDesign.Colors.accent.opacity(0.8))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
@@ -1362,8 +1406,15 @@ struct GoalEditorView: View {
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
                             
-                            TextField("e.g., Complete first draft", text: $title)
+                            TextField("e.g., Write 1000 words daily", text: $title)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .disableAutocorrection(true)
+                            
+                            if !title.isEmpty && title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text("Title cannot be empty")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
                         }
                         
                         // Description
@@ -1372,7 +1423,7 @@ struct GoalEditorView: View {
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
                             
-                            TextField("Add more details about this goal...", text: $description, axis: .vertical)
+                            TextField("Add more details about this daily goal...", text: $description, axis: .vertical)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 .lineLimit(3, reservesSpace: true)
                         }
@@ -1404,6 +1455,19 @@ struct GoalEditorView: View {
                             TextField("e.g., 1000", text: $targetCount)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 .keyboardType(.numberPad)
+                                .disableAutocorrection(true)
+                                .onReceive(targetCount.publisher.collect()) {
+                                    let filtered = String($0.filter { "0123456789".contains($0) })
+                                    if filtered != targetCount {
+                                        targetCount = filtered
+                                    }
+                                }
+                            
+                            if !targetCount.isEmpty, let target = Int32(targetCount), target <= 0 {
+                                Text("Target must be greater than 0")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
                         }
                         
                         // Visual Type
@@ -1424,16 +1488,21 @@ struct GoalEditorView: View {
                             .pickerStyle(MenuPickerStyle())
                         }
                         
-                        // Deadline
+                        // Daily recurring info
                         VStack(alignment: .leading, spacing: UlyssesDesign.Spacing.sm) {
-                            Toggle("Set Deadline", isOn: $hasDeadline)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
-                            
-                            if hasDeadline {
-                                DatePicker("Deadline", selection: $deadline, displayedComponents: [.date])
-                                    .datePickerStyle(CompactDatePickerStyle())
+                            HStack {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(UlyssesDesign.Colors.accent)
+                                
+                                Text("Daily Recurring Goal")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
                             }
+                            
+                            Text("This goal will reset every day and track your daily progress.")
+                                .font(.caption)
+                                .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
                         }
                         
                         Spacer()
@@ -1457,13 +1526,14 @@ struct GoalEditorView: View {
                     })
                     
                     Button("Save", action: {
-                        let target = Int32(targetCount) ?? 0
-                        let finalDeadline = hasDeadline ? deadline : nil
-                        onSave(title, description.isEmpty ? nil : description, target, goalType, finalDeadline, visualType)
+                        guard let target = Int32(targetCount), target > 0, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                            return
+                        }
+                        onSave(title.trimmingCharacters(in: .whitespacesAndNewlines), description.isEmpty ? nil : description.trimmingCharacters(in: .whitespacesAndNewlines), target, goalType, nil, visualType)
                         dismiss()
                     })
-                    .disabled(title.isEmpty || targetCount.isEmpty || Int32(targetCount) == nil || Int32(targetCount)! <= 0)
-                    .foregroundColor(UlyssesDesign.Colors.accent)
+                    .disabled(saveButtonDisabled)
+                    .foregroundColor(saveButtonDisabled ? UlyssesDesign.Colors.tertiary(for: colorScheme) : UlyssesDesign.Colors.accent)
                 }
                 .padding(UlyssesDesign.Spacing.lg)
             }
@@ -1471,6 +1541,8 @@ struct GoalEditorView: View {
             .navigationBarHidden(true)
         }
         .frame(width: 400, height: 600)
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .id(existingGoal?.objectID.description ?? "new")
         .onAppear {
             if let goal = existingGoal {
                 title = goal.displayTitle
@@ -1478,10 +1550,16 @@ struct GoalEditorView: View {
                 targetCount = String(goal.targetCount)
                 goalType = goal.typeEnum
                 visualType = goal.visualTypeEnum
-                hasDeadline = goal.deadline != nil
-                if let deadline = goal.deadline {
-                    self.deadline = deadline
-                }
+            }
+        }
+        .onDisappear {
+            // Reset form state when view disappears
+            if existingGoal == nil {
+                title = ""
+                description = ""
+                targetCount = ""
+                goalType = .words
+                visualType = .progressBar
             }
         }
         .alert("Delete Goal", isPresented: $showingDeleteAlert) {
@@ -1618,4 +1696,48 @@ Another paragraph here.
         isPresented: .constant(true)
     )
     .frame(width: 320, height: 500)
+}
+
+// MARK: - Shared Components
+
+struct DailyGoalListRow: View {
+    let goal: Goal
+    let history: GoalHistory
+    let date: Date
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yy-MM-dd"
+        return formatter
+    }
+
+    var body: some View {
+        HStack(spacing: UlyssesDesign.Spacing.md) {
+            // Date
+            Text(dateFormatter.string(from: date))
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                .frame(width: 60, alignment: .leading)
+            
+            // Success/failure icon
+            Image(systemName: history.wasCompleted ? "checkmark" : "xmark")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(history.wasCompleted ? .green : .red)
+                .frame(width: 16)
+            
+            // Goal progress text
+            Text("\(history.completedCount) of \(history.targetCount) \(goal.typeEnum.unit)")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
+            
+            Spacer()
+        }
+        .padding(.horizontal, UlyssesDesign.Spacing.md)
+        .padding(.vertical, UlyssesDesign.Spacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: UlyssesDesign.CornerRadius.small)
+                .fill(UlyssesDesign.Colors.hover.opacity(0.2))
+        )
+    }
 }

@@ -149,6 +149,7 @@ struct SettingsView: View {
                     Toggle("Library Sidebar", isOn: $appState.showLibrary)
                     Toggle("Sheet List", isOn: $appState.showSheetList)
                     Toggle("Tags Pane", isOn: $showTagsPane)
+                    Toggle("Sheet Navigation Bar", isOn: $appState.showSheetNavigation)
                     Toggle("Haptic Feedback", isOn: $enableHapticFeedback)
                 }
                 

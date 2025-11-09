@@ -127,9 +127,13 @@ class WritingSessionService: ObservableObject {
             self?.checkInactivity()
         }
 
-        // Update duration every second
+        // Update duration and goals every second
         updateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.updateDuration()
+            // Update goals every 5 seconds for real-time progress
+            if let currentDuration = self?.currentSessionDuration, Int(currentDuration) % 5 == 0 {
+                self?.updateGoalsWithCurrentTime()
+            }
         }
     }
 
@@ -148,9 +152,20 @@ class WritingSessionService: ObservableObject {
     }
 
     // MARK: - Goal Integration
+    
+    // Public method to update time goals from external calls
+    func updateTimeGoals() {
+        updateGoalsWithCurrentTime()
+    }
 
-    private func updateGoalsWithCurrentTime() {
-        let totalMinutes = Int32((accumulatedTime + currentSessionDuration) / 60)
+    private func updateGoalsWithCurrentTime(retryCount: Int = 0) {
+        guard retryCount < 3 else { 
+            print("Max retry attempts reached for time goal update")
+            return 
+        }
+        
+        let sessionMinutes = Int32((accumulatedTime + currentSessionDuration) / 60)
+        let totalMinutesToday = Int32((totalTimeToday + accumulatedTime + currentSessionDuration) / 60)
 
         // Update all active time-based goals
         let context = PersistenceController.shared.container.viewContext
@@ -159,28 +174,48 @@ class WritingSessionService: ObservableObject {
 
         do {
             let timeGoals = try context.fetch(request)
+            var goalUpdated = false
 
             for goal in timeGoals {
-                // If goal is for a specific sheet, only update if we're writing in that sheet
+                // All goals are now global (goal.sheet should be nil)
+                // If goal has a sheet assigned (legacy), only update if we're writing in that sheet
                 if let goalSheet = goal.sheet {
                     guard goalSheet == currentSheet else { continue }
                 }
 
-                // Update the goal's current count
-                goal.currentCount = totalMinutes
-                goal.modifiedAt = Date()
+                // Refresh the goal object to get the latest state
+                context.refresh(goal, mergeChanges: true)
 
-                // Check if goal is completed
-                if !goal.isCompleted && goal.currentCount >= goal.targetCount {
-                    goal.isCompleted = true
-                    NotificationCenter.default.post(name: .goalCompleted, object: goal)
+                let previousCount = goal.currentCount
+                // Only update if the value has changed to avoid unnecessary saves
+                if previousCount != totalMinutesToday {
+                    goal.currentCount = totalMinutesToday
+                    goal.modifiedAt = Date()
+                    goalUpdated = true
+                    
+                    // Check if goal is newly completed
+                    if !goal.isCompleted && goal.currentCount >= goal.targetCount {
+                        goal.isCompleted = true
+                        print("⏱️ Time goal completed: \(goal.displayTitle)")
+                        NotificationCenter.default.post(name: .goalCompleted, object: goal)
+                    }
                 }
             }
 
-            try context.save()
-            GoalsService.shared.objectWillChange.send()
-        } catch {
-            print("Failed to update time goals: \(error)")
+            if goalUpdated {
+                try context.save()
+                GoalsService.shared.objectWillChange.send()
+            }
+        } catch let error as NSError {
+            if error.code == NSManagedObjectMergeError {
+                // Handle merge conflicts by retrying after a short delay
+                print("Core Data merge conflict in time goals, retrying... (attempt \(retryCount + 1))")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.updateGoalsWithCurrentTime(retryCount: retryCount + 1)
+                }
+            } else {
+                print("Failed to update time goals: \(error)")
+            }
         }
     }
 
@@ -188,7 +223,27 @@ class WritingSessionService: ObservableObject {
 
     private func loadTodaysTime() {
         let key = "totalTimeToday_\(todayKey())"
-        totalTimeToday = UserDefaults.standard.double(forKey: key)
+        let lastUpdateKey = "lastTimeUpdate"
+        
+        // Check if this is a new day
+        let lastUpdate = UserDefaults.standard.object(forKey: lastUpdateKey) as? Date
+        let today = Calendar.current.startOfDay(for: Date())
+        
+        if let lastUpdate = lastUpdate {
+            let lastUpdateDay = Calendar.current.startOfDay(for: lastUpdate)
+            
+            // If it's a new day, reset the total time
+            if lastUpdateDay < today {
+                totalTimeToday = 0
+                UserDefaults.standard.set(0, forKey: key)
+            } else {
+                totalTimeToday = UserDefaults.standard.double(forKey: key)
+            }
+        } else {
+            totalTimeToday = UserDefaults.standard.double(forKey: key)
+        }
+        
+        UserDefaults.standard.set(Date(), forKey: lastUpdateKey)
     }
 
     private func saveTodaysTime() {

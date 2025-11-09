@@ -333,7 +333,7 @@ struct SheetListView: View {
             do {
                 try viewContext.save()
                 // Select the new sheet and clear any essential selection
-                appState.selectedSheet = newSheet
+                appState.selectSheet(newSheet)
                 appState.selectedEssential = nil
                 // Also select the target group so user can see the new sheet
                 appState.selectedGroup = targetGroup
@@ -739,7 +739,7 @@ struct SheetRowView: View {
             )
             .onTapGesture {
                 if !isEditingOrder {
-                    appState.selectedSheet = sheet
+                    appState.selectSheet(sheet)
                 }
             }
             .onLongPressGesture(minimumDuration: 0.5) {
@@ -872,7 +872,7 @@ struct SheetRowView: View {
                 HapticService.shared.actionCompleted()
                 
                 // Select the new duplicate
-                appState.selectedSheet = newSheet
+                appState.selectSheet(newSheet)
             } catch {
                 print("Failed to duplicate sheet: \(error)")
                 HapticService.shared.actionFailed()
@@ -914,6 +914,7 @@ struct SheetRowView: View {
             if appState.selectedSheet == sheet {
                 appState.selectedSheet = nil
             }
+            appState.clearLastOpenedSheetIfNeeded(sheet)
             
             do {
                 try viewContext.save()
@@ -942,6 +943,7 @@ struct SheetRowView: View {
             if appState.selectedSheet == sheet {
                 appState.selectedSheet = nil
             }
+            appState.clearLastOpenedSheetIfNeeded(sheet)
             viewContext.delete(sheet)
             
             do {
@@ -1278,7 +1280,7 @@ struct TagFilteredSheetsContent: View {
                     )
                     .contextMenu {
                         Button("Open") {
-                            appState.selectedSheet = sheet
+                            appState.selectSheet(sheet)
                         }
                         
                         Button("Copy Title") {

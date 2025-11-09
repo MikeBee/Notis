@@ -179,4 +179,12 @@ extension UlyssesDesign.Colors {
     static func dividerColor(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark ? dividerDark : divider
     }
+    
+    static func surface(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? sheetListBackgroundDark : sheetListBackground
+    }
+    
+    static func border(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? dividerDark : divider
+    }
 }

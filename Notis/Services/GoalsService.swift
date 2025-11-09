@@ -14,6 +14,12 @@ class GoalsService: ObservableObject {
             name: .NSManagedObjectContextDidSave,
             object: PersistenceController.shared.container.viewContext
         )
+        
+        // Check for daily resets on startup
+        DispatchQueue.main.async {
+            self.checkAndResetDailyGoals()
+            WritingSessionService.shared.updateTimeGoals()
+        }
     }
     
     deinit {
@@ -32,14 +38,24 @@ class GoalsService: ObservableObject {
                 }
             }
         }
+        
+        // Also check for newly inserted sheets
+        if let insertedObjects = userInfo[NSInsertedObjectsKey] as? Set<NSManagedObject> {
+            let insertedSheets = insertedObjects.compactMap { $0 as? Sheet }
+            if !insertedSheets.isEmpty {
+                DispatchQueue.main.async {
+                    self.updateGoalsForSheets(insertedSheets)
+                }
+            }
+        }
     }
     
     private func updateGoalsForSheets(_ sheets: [Sheet]) {
-        for sheet in sheets {
-            let sheetGoals = getGoals(for: sheet)
-            for goal in sheetGoals {
-                updateCurrentCount(for: goal)
-            }
+        // Since all goals are now global, update all active goals when any sheet changes
+        let allGoals = getAllGoals()
+        
+        for goal in allGoals {
+            updateCurrentCount(for: goal)
         }
     }
     
@@ -64,14 +80,14 @@ class GoalsService: ObservableObject {
         goal.targetCount = targetCount
         goal.currentCount = 0
         goal.goalType = type.rawValue
-        goal.deadline = deadline
+        goal.deadline = nil // All goals are now daily recurring (no deadlines)
         goal.isActive = true
         goal.isCompleted = false
         goal.createdAt = Date()
         goal.modifiedAt = Date()
         goal.lastResetDate = Date()
         goal.visualType = visualType.rawValue
-        goal.sheet = sheet
+        goal.sheet = nil // Goals are now global, not tied to specific sheets
         goal.tag = tag
 
         do {
@@ -85,13 +101,16 @@ class GoalsService: ObservableObject {
         return goal
     }
     
-    func updateGoal(_ goal: Goal, title: String, description: String?, targetCount: Int32, deadline: Date?) {
+    func updateGoal(_ goal: Goal, title: String, description: String?, targetCount: Int32, type: GoalType? = nil, deadline: Date?) {
         let context = PersistenceController.shared.container.viewContext
         
         goal.title = title
         goal.goalDescription = description
         goal.targetCount = targetCount
-        goal.deadline = deadline
+        if let type = type {
+            goal.goalType = type.rawValue
+        }
+        goal.deadline = nil // All goals are daily recurring
         goal.modifiedAt = Date()
         
         do {
@@ -149,28 +168,38 @@ class GoalsService: ObservableObject {
     
     // MARK: - Goal Progress Tracking
     
-    func updateCurrentCount(for goal: Goal) {
+    func updateCurrentCount(for goal: Goal, retryCount: Int = 0) {
         guard let goalType = GoalType(rawValue: goal.goalType ?? "words") else { return }
+        guard retryCount < 3 else { 
+            print("Max retry attempts reached for goal update")
+            return 
+        }
         
         let context = PersistenceController.shared.container.viewContext
+        
+        // Refresh the goal object to get the latest state
+        context.refresh(goal, mergeChanges: true)
+        
         var newCount: Int32 = 0
         
         switch goalType {
         case .words:
-            if let sheet = goal.sheet {
-                newCount = sheet.wordCount
-            } else if let tag = goal.tag {
+            if let tag = goal.tag {
                 newCount = getWordCountForTag(tag)
+            } else {
+                // Global goal - count across all sheets
+                newCount = getTotalWordCount()
             }
         case .characters:
-            if let sheet = goal.sheet {
-                newCount = Int32(sheet.content?.count ?? 0)
-            } else if let tag = goal.tag {
+            if let tag = goal.tag {
                 newCount = getCharacterCountForTag(tag)
+            } else {
+                // Global goal - count across all sheets
+                newCount = getTotalCharacterCount()
             }
         case .time:
             // Writing time is tracked separately via WritingSessionService
-            // Just keep the current count that's updated by the session tracker
+            WritingSessionService.shared.updateTimeGoals()
             return
         }
         
@@ -191,8 +220,16 @@ class GoalsService: ObservableObject {
             if newCount != previousCount {
                 objectWillChange.send()
             }
-        } catch {
-            print("Failed to update goal progress: \(error)")
+        } catch let error as NSError {
+            if error.code == NSManagedObjectMergeError {
+                // Handle merge conflicts by retrying with fresh data
+                print("Core Data merge conflict detected, retrying goal update... (attempt \(retryCount + 1))")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.updateCurrentCount(for: goal, retryCount: retryCount + 1)
+                }
+            } else {
+                print("Failed to update goal progress: \(error)")
+            }
         }
     }
     
@@ -226,33 +263,30 @@ class GoalsService: ObservableObject {
         }
     }
     
-    func getActiveGoals() -> [Goal] {
+    func getAllGoals() -> [Goal] {
         let context = PersistenceController.shared.container.viewContext
         let request: NSFetchRequest<Goal> = Goal.fetchRequest()
-        request.predicate = NSPredicate(format: "isActive == YES AND isCompleted == NO")
+        request.predicate = NSPredicate(format: "isActive == YES")
         request.sortDescriptors = [
-            NSSortDescriptor(key: "deadline", ascending: true),
             NSSortDescriptor(key: "createdAt", ascending: false)
         ]
         
         do {
             return try context.fetch(request)
         } catch {
-            print("Failed to fetch active goals: \(error)")
+            print("Failed to fetch all goals: \(error)")
             return []
         }
     }
     
     func getTodaysGoals() -> [Goal] {
-        let calendar = Calendar.current
-        let today = Date()
-        let startOfDay = calendar.startOfDay(for: today)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
-        
         let context = PersistenceController.shared.container.viewContext
         let request: NSFetchRequest<Goal> = Goal.fetchRequest()
-        request.predicate = NSPredicate(format: "isActive == YES AND deadline >= %@ AND deadline < %@", startOfDay as NSDate, endOfDay as NSDate)
-        request.sortDescriptors = [NSSortDescriptor(key: "deadline", ascending: true)]
+        // Get all active goals (which are now all daily recurring goals)
+        request.predicate = NSPredicate(format: "isActive == YES")
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "createdAt", ascending: false)
+        ]
         
         do {
             return try context.fetch(request)
@@ -272,6 +306,34 @@ class GoalsService: ObservableObject {
     private func getCharacterCountForTag(_ tag: Tag) -> Int32 {
         guard let sheetTags = tag.sheetTags as? Set<SheetTag> else { return 0 }
         return sheetTags.compactMap { Int32($0.sheet?.content?.count ?? 0) }.reduce(0, +)
+    }
+    
+    private func getTotalWordCount() -> Int32 {
+        let context = PersistenceController.shared.container.viewContext
+        let request: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+        request.predicate = NSPredicate(format: "isInTrash == NO")
+        
+        do {
+            let sheets = try context.fetch(request)
+            return sheets.reduce(0) { $0 + $1.wordCount }
+        } catch {
+            print("Failed to fetch sheets for total word count: \(error)")
+            return 0
+        }
+    }
+    
+    private func getTotalCharacterCount() -> Int32 {
+        let context = PersistenceController.shared.container.viewContext
+        let request: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+        request.predicate = NSPredicate(format: "isInTrash == NO")
+        
+        do {
+            let sheets = try context.fetch(request)
+            return sheets.reduce(0) { $0 + Int32($1.content?.count ?? 0) }
+        } catch {
+            print("Failed to fetch sheets for total character count: \(error)")
+            return 0
+        }
     }
 
     func updateAllGoals() {
@@ -302,8 +364,7 @@ class GoalsService: ObservableObject {
             let today = calendar.startOfDay(for: Date())
 
             for goal in goals {
-                // Only reset goals without a specific deadline (daily goals)
-                guard goal.deadline == nil else { continue }
+                // All goals are now daily recurring goals (no deadlines)
 
                 // Check if goal needs to be reset
                 if let lastReset = goal.lastResetDate {
@@ -377,7 +438,10 @@ class GoalsService: ObservableObject {
 
         let request: NSFetchRequest<GoalHistory> = GoalHistory.fetchRequest()
         request.predicate = NSPredicate(format: "date >= %@ AND date < %@", startOfDay as NSDate, endOfDay as NSDate)
-        request.sortDescriptors = [NSSortDescriptor(key: "date", ascending: false)]
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "goal.title", ascending: true),
+            NSSortDescriptor(key: "date", ascending: false)
+        ]
 
         do {
             let histories = try context.fetch(request)
@@ -387,6 +451,27 @@ class GoalsService: ObservableObject {
             }
         } catch {
             print("Failed to fetch goal history for date: \(error)")
+            return []
+        }
+    }
+    
+    func getAllGoalHistoryRecent(limit: Int = 30) -> [(goal: Goal, history: GoalHistory, date: Date)] {
+        let context = PersistenceController.shared.container.viewContext
+        let request: NSFetchRequest<GoalHistory> = GoalHistory.fetchRequest()
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "date", ascending: false),
+            NSSortDescriptor(key: "goal.title", ascending: true)
+        ]
+        request.fetchLimit = limit
+
+        do {
+            let histories = try context.fetch(request)
+            return histories.compactMap { history in
+                guard let goal = history.goal, let date = history.date else { return nil }
+                return (goal: goal, history: history, date: date)
+            }
+        } catch {
+            print("Failed to fetch recent goal history: \(error)")
             return []
         }
     }

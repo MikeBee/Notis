@@ -36,28 +36,28 @@ struct EditorView: View {
                         // Navigation Buttons
                         HStack(spacing: 8) {
                             Button(action: {
-                                appState.navigateToPreviousSheet()
+                                appState.navigateBackInHistory()
                             }) {
                                 Image(systemName: "chevron.left")
                                     .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(appState.canNavigatePrevious() ? .secondary : .secondary.opacity(0.3))
+                                    .foregroundColor(appState.canNavigateBackInHistory() ? .secondary : .secondary.opacity(0.3))
                             }
                             .buttonStyle(PlainButtonStyle())
-                            .disabled(!appState.canNavigatePrevious())
+                            .disabled(!appState.canNavigateBackInHistory())
                             .keyboardShortcut(.leftArrow, modifiers: [.command])
-                            .help("Previous Sheet (⌘←)")
+                            .help("Back in History (⌘←)")
                             
                             Button(action: {
-                                appState.navigateToNextSheet()
+                                appState.navigateForwardInHistory()
                             }) {
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(appState.canNavigateNext() ? .secondary : .secondary.opacity(0.3))
+                                    .foregroundColor(appState.canNavigateForwardInHistory() ? .secondary : .secondary.opacity(0.3))
                             }
                             .buttonStyle(PlainButtonStyle())
-                            .disabled(!appState.canNavigateNext())
+                            .disabled(!appState.canNavigateForwardInHistory())
                             .keyboardShortcut(.rightArrow, modifiers: [.command])
-                            .help("Next Sheet (⌘→)")
+                            .help("Forward in History (⌘→)")
                         }
                         
                         Spacer()
@@ -169,8 +169,18 @@ struct EditorView: View {
                             ),
                             fontFamily: fontFamily,
                             editorMargins: Binding(
-                                get: { CGFloat(editorMargins) },
-                                set: { editorMargins = Double($0) }
+                                get: { 
+                                    // Only override margins in 3-pane view AND not in full screen
+                                    if appState.viewMode == .threePane && !isFullScreen {
+                                        return 20
+                                    } else {
+                                        return CGFloat(editorMargins)
+                                    }
+                                },
+                                set: { newValue in
+                                    // Always allow setting changes - they'll take effect in non-3-pane modes
+                                    editorMargins = Double(newValue)
+                                }
                             ),
                             hideShortcutBar: appState.hideShortcutBar,
                             disableQuickType: disableQuickType,
@@ -181,7 +191,7 @@ struct EditorView: View {
                         // Word Counter at bottom if enabled
                         if showWordCounter {
                             WordCounterView(sheet: selectedSheet)
-                                .padding(.horizontal, CGFloat(editorMargins))
+                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : CGFloat(editorMargins))
                                 .padding(.bottom, 8)
                                 .background(Color(.systemBackground))
                         }
@@ -189,7 +199,7 @@ struct EditorView: View {
                         // Tag Editor
                         if showTagsPane {
                             TagEditorView(sheet: selectedSheet)
-                                .padding(.horizontal, CGFloat(editorMargins))
+                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : CGFloat(editorMargins))
                                 .padding(.vertical, 12)
                                 .background(Color(.systemBackground))
                                 .overlay(
@@ -198,6 +208,11 @@ struct EditorView: View {
                                         .frame(height: 0.5),
                                     alignment: .top
                                 )
+                        }
+                        
+                        // Bottom Sheet Navigation
+                        if appState.showSheetNavigation {
+                            SheetNavigationView(selectedSheet: selectedSheet, appState: appState)
                         }
                     }
                 }
@@ -662,6 +677,8 @@ struct MarkdownEditor: View {
 
 struct StatsOverlay: View {
     @ObservedObject var sheet: Sheet
+    @StateObject private var goalsService = GoalsService.shared
+    @Environment(\.colorScheme) private var colorScheme
     
     var characterCount: Int {
         sheet.content?.count ?? 0
@@ -672,10 +689,8 @@ struct StatsOverlay: View {
         max(1, Int(sheet.wordCount) / 200)
     }
     
-    var goalProgress: Double {
-        guard sheet.goalCount > 0 else { return 0 }
-        let current = sheet.goalType == "words" ? Double(sheet.wordCount) : Double(characterCount)
-        return min(1.0, current / Double(sheet.goalCount))
+    private var activeGoals: [Goal] {
+        goalsService.getAllGoals()
     }
     
     var body: some View {
@@ -686,31 +701,11 @@ struct StatsOverlay: View {
                 StatItem(title: "Reading Time", value: "\(readingTime) min")
             }
             
-            if sheet.goalCount > 0 {
-                VStack(spacing: 8) {
-                    HStack {
-                        Text("Goal Progress")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        Text("\(Int(goalProgress * 100))%")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    ProgressView(value: goalProgress)
-                        .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
-                        .frame(height: 4)
-                    
-                    HStack {
-                        let current = sheet.goalType == "words" ? Int(sheet.wordCount) : characterCount
-                        Text("\(current) / \(sheet.goalCount) \(sheet.goalType ?? "words")")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
+            // Display global goals
+            if !activeGoals.isEmpty {
+                VStack(spacing: 12) {
+                    ForEach(activeGoals.prefix(3), id: \.id) { goal in
+                        GlobalGoalDisplayView(goal: goal)
                     }
                 }
             }
@@ -721,6 +716,70 @@ struct StatsOverlay: View {
         .cornerRadius(12)
         .padding(.horizontal, 40)
         .padding(.top, 20)
+    }
+}
+
+struct GlobalGoalDisplayView: View {
+    let goal: Goal
+    @Environment(\.colorScheme) private var colorScheme
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text(goal.displayTitle)
+                    .font(.caption)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text("\(Int(goal.progressPercentage * 100))%")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            // Choose visualization based on goal's visual type
+            if goal.visualTypeEnum == .pieChart {
+                HStack {
+                    GoalPieChartView(goal: goal, size: 40)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(goal.currentCount) / \(goal.targetCount) \(goal.typeEnum.unit)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        
+                        if let deadline = goal.deadline {
+                            Text(goal.formattedDeadline)
+                                .font(.caption2)
+                                .foregroundColor(goal.isOverdue ? .red : .secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+            } else {
+                // Default progress bar view
+                ProgressView(value: goal.progressPercentage)
+                    .progressViewStyle(LinearProgressViewStyle(tint: goal.isCompleted ? .green : (goal.isOverdue ? .red : .accentColor)))
+                    .frame(height: 4)
+                
+                HStack {
+                    Text("\(goal.currentCount) / \(goal.targetCount) \(goal.typeEnum.unit)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    if let deadline = goal.deadline {
+                        Text(goal.formattedDeadline)
+                            .font(.caption2)
+                            .foregroundColor(goal.isOverdue ? .red : .secondary)
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(UlyssesDesign.Colors.surface(for: colorScheme).opacity(0.5))
+        .cornerRadius(6)
     }
 }
 
@@ -739,6 +798,183 @@ struct StatItem: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
+    }
+}
+
+struct PreviousSheetButtonContent: View {
+    let previousSheet: Sheet?
+    let colorScheme: ColorScheme
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 14, weight: .medium))
+            
+            VStack(alignment: .leading, spacing: 2) {
+                if let previous = previousSheet {
+                    Text(previous.title ?? "Untitled")
+                        .font(.caption)
+                        .lineLimit(1)
+                    
+                    Text("Previous Sheet")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("No Previous Sheet")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(buttonBackground)
+        .overlay(buttonBorder)
+    }
+    
+    private var buttonBackground: some View {
+        RoundedRectangle(cornerRadius: 6)
+            .fill(previousSheet != nil ? UlyssesDesign.Colors.surface(for: colorScheme) : Color.clear)
+    }
+    
+    private var buttonBorder: some View {
+        RoundedRectangle(cornerRadius: 6)
+            .stroke(UlyssesDesign.Colors.border(for: colorScheme), lineWidth: 0.5)
+    }
+}
+
+struct NextSheetButtonContent: View {
+    let nextSheet: Sheet?
+    let colorScheme: ColorScheme
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 2) {
+                if let next = nextSheet {
+                    Text(next.title ?? "Untitled")
+                        .font(.caption)
+                        .lineLimit(1)
+                    
+                    Text("Next Sheet")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("No Next Sheet")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .medium))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(buttonBackground)
+        .overlay(buttonBorder)
+    }
+    
+    private var buttonBackground: some View {
+        RoundedRectangle(cornerRadius: 6)
+            .fill(nextSheet != nil ? UlyssesDesign.Colors.surface(for: colorScheme) : Color.clear)
+    }
+    
+    private var buttonBorder: some View {
+        RoundedRectangle(cornerRadius: 6)
+            .stroke(UlyssesDesign.Colors.border(for: colorScheme), lineWidth: 0.5)
+    }
+}
+
+struct SheetNavigationView: View {
+    let selectedSheet: Sheet
+    @ObservedObject var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var sortedSheets: [Sheet] {
+        appState.getSortedSheets()
+    }
+    
+    private var currentIndex: Int {
+        guard let index = sortedSheets.firstIndex(of: selectedSheet) else { return 0 }
+        return index
+    }
+    
+    private var previousSheet: Sheet? {
+        guard currentIndex > 0 else { return nil }
+        return sortedSheets[currentIndex - 1]
+    }
+    
+    private var nextSheet: Sheet? {
+        guard currentIndex < sortedSheets.count - 1 else { return nil }
+        return sortedSheets[currentIndex + 1]
+    }
+    
+    var body: some View {
+        HStack {
+            // Previous Sheet Button
+            Button(action: {
+                if let previous = previousSheet {
+                    appState.selectSheet(previous)
+                }
+            }) {
+                PreviousSheetButtonContent(
+                    previousSheet: previousSheet,
+                    colorScheme: colorScheme
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .disabled(previousSheet == nil)
+            .help(previousSheet?.title ?? "No previous sheet")
+            
+            Spacer()
+            
+            // Current Sheet Info
+            VStack(spacing: 2) {
+                Text("\(currentIndex + 1) of \(sortedSheets.count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Text(selectedSheet.title ?? "Untitled")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            // Next Sheet Button
+            Button(action: {
+                if let next = nextSheet {
+                    appState.selectSheet(next)
+                }
+            }) {
+                NextSheetButtonContent(
+                    nextSheet: nextSheet,
+                    colorScheme: colorScheme
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .disabled(nextSheet == nil)
+            .help(nextSheet?.title ?? "No next sheet")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(navigationBackground)
+    }
+    
+    private var navigationBackground: some View {
+        Rectangle()
+            .fill(UlyssesDesign.Colors.surface(for: colorScheme))
+            .overlay(
+                Rectangle()
+                    .fill(UlyssesDesign.Colors.border(for: colorScheme))
+                    .frame(height: 0.5),
+                alignment: .top
+            )
     }
 }
 

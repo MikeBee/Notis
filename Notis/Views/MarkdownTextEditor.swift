@@ -454,7 +454,16 @@ struct MarkdownTextEditor: View {
                         .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.75 : 0)
                         .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidChangeNotification)) { notification in
                             if let textView = notification.object as? UITextView, textView.isFirstResponder {
-                                updateCursorPosition(textView.selectedRange)
+                                // Reduce jumping by batching cursor updates
+                                DispatchQueue.main.async {
+                                    updateCursorPosition(textView.selectedRange)
+                                }
+                            }
+                        }
+                        .onAppear {
+                            // Configure TextEditor for stability
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                configureTextViewForStability()
                             }
                         }
                 }
@@ -511,6 +520,8 @@ struct MarkdownTextEditor: View {
                 }
             }
         }
+        .frame(minHeight: 200) // Minimum height to prevent jumping
+        .clipped() // Prevent content from overflowing
         .toolbar {
             if !hideShortcutBar {
                 ToolbarItemGroup(placement: .keyboard) {
@@ -531,8 +542,10 @@ struct MarkdownTextEditor: View {
             onTextChange(newValue)
             // Don't update cursor position here - let the UIKit notifications handle it
             lastTextLength = newValue.count
-            // Track writing activity for time-based goals
-            WritingSessionService.shared.recordActivity()
+            // Track writing activity for time-based goals (debounce this)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                WritingSessionService.shared.recordActivity()
+            }
         }
         .onChange(of: isTextEditorFocused) { _, focused in
             if focused {
@@ -570,11 +583,17 @@ struct MarkdownTextEditor: View {
     }
     
     private func updateCursorPosition(_ range: NSRange) {
+        // Debounce cursor updates to reduce jumping
+        let newPosition = range.location
+        guard newPosition != cursorPosition else { return }
+        
         DispatchQueue.main.async {
-            cursorPosition = range.location
-            let newLineIndex = getCurrentLineIndex(from: range.location)
-            if newLineIndex != currentLineIndex {
-                currentLineIndex = newLineIndex
+            self.cursorPosition = newPosition
+            let newLineIndex = self.getCurrentLineIndex(from: newPosition)
+            if newLineIndex != self.currentLineIndex {
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    self.currentLineIndex = newLineIndex
+                }
             }
         }
     }
@@ -605,6 +624,34 @@ struct MarkdownTextEditor: View {
     
     private func insertTab() {
         text = text + "\t"
+    }
+    
+    private func configureTextViewForStability() {
+        // Find the UITextView and configure it for better stability
+        DispatchQueue.main.async {
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first {
+                self.findAndConfigureTextView(in: window)
+            }
+        }
+    }
+    
+    private func findAndConfigureTextView(in view: UIView) {
+        for subview in view.subviews {
+            if let textView = subview as? UITextView {
+                // Configure for reduced jumping
+                textView.isScrollEnabled = true
+                textView.showsVerticalScrollIndicator = false
+                textView.showsHorizontalScrollIndicator = false
+                textView.contentInsetAdjustmentBehavior = .never
+                textView.textContainer.widthTracksTextView = true
+                textView.textContainer.heightTracksTextView = false
+                textView.layoutManager.allowsNonContiguousLayout = false
+                return
+            } else {
+                findAndConfigureTextView(in: subview)
+            }
+        }
     }
 }
 

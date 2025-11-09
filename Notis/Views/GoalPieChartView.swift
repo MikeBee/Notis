@@ -8,7 +8,7 @@
 import SwiftUI
  
 struct GoalPieChartView: View {
-    let goal: Goal
+    @ObservedObject var goal: Goal
     let size: CGFloat
     @Environment(\.colorScheme) private var colorScheme
  
@@ -33,12 +33,12 @@ struct GoalPieChartView: View {
  
             // Progress arc
             Circle()
-                .trim(from: 0, to: goal.progressPercentage)
+                .trim(from: 0, to: min(1.0, goal.progressPercentage))
                 .stroke(
                     progressColor,
                     style: StrokeStyle(
                         lineWidth: size * 0.12,
-                        lineCap: .round
+                        lineCap: goal.progressPercentage >= 1.0 ? .butt : .round
                     )
                 )
                 .rotationEffect(.degrees(-90))
@@ -61,30 +61,8 @@ struct GoalPieChartView: View {
                     .foregroundColor(UlyssesDesign.Colors.tertiary(for: colorScheme))
             }
  
-            // Completion/overdue indicator
-            if goal.isCompleted {
-                VStack {
-                    HStack {
-                        Spacer()
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: size * 0.2))
-                            .foregroundColor(.green)
-                            .padding(size * 0.08)
-                    }
-                    Spacer()
-                }
-            } else if goal.isOverdue {
-                VStack {
-                    HStack {
-                        Spacer()
-                        Image(systemName: "exclamationmark.circle.fill")
-                            .font(.system(size: size * 0.2))
-                            .foregroundColor(.red)
-                            .padding(size * 0.08)
-                    }
-                    Spacer()
-                }
-            }
+            // Note: Completion/overdue indicators are shown elsewhere in the UI
+            // No need for redundant indicators inside the pie chart
         }
         .frame(width: size, height: size)
     }

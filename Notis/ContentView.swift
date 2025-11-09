@@ -221,7 +221,8 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            // Keyboard shortcuts are now implemented via SwiftUI modifiers
+            // Initialize app with 3-pane view and last opened sheet
+            appState.initializeApp(context: viewContext)
         }
         // Hidden keyboard shortcut buttons
         .background(
@@ -358,7 +359,7 @@ struct ContentView: View {
             do {
                 try viewContext.save()
                 // Select the new sheet and clear any essential selection
-                appState.selectedSheet = newSheet
+                appState.selectSheet(newSheet)
                 appState.selectedEssential = nil
                 // Also select the target group so user can see the new sheet
                 appState.selectedGroup = targetGroup
@@ -373,7 +374,7 @@ struct ContentView: View {
             let newSheet = templateService.createSheetFromTemplate(template, selectedGroup: appState.selectedGroup)
             
             // Select the new sheet and clear any essential selection
-            appState.selectedSheet = newSheet
+            appState.selectSheet(newSheet)
             appState.selectedEssential = nil
             
             // Select the group that contains the new sheet
@@ -419,6 +420,15 @@ class AppState: ObservableObject {
     @AppStorage("isFocusMode") var isFocusMode: Bool = false
     @AppStorage("showMarkdownHeaderSymbols") var showMarkdownHeaderSymbols: Bool = true
     @AppStorage("hideShortcutBar") var hideShortcutBar: Bool = false
+    @AppStorage("showSheetNavigation") var showSheetNavigation: Bool = true
+    
+    // Last opened sheet for restoration
+    @AppStorage("lastOpenedSheetID") private var lastOpenedSheetID: String = ""
+    
+    // Navigation history for browser-style back/forward
+    @Published var navigationHistory: [Sheet] = []
+    @Published var currentHistoryIndex: Int = -1
+    private let maxHistorySize = 10
     
     @AppStorage("appTheme") private var storedTheme: String = AppTheme.system.rawValue
     @AppStorage("viewMode") private var storedViewMode: String = ViewMode.threePane.rawValue
@@ -455,6 +465,76 @@ class AppState: ObservableObject {
                 showSheetList = true
             }
             objectWillChange.send()
+        }
+    }
+    
+    func initializeApp(context: NSManagedObjectContext) {
+        // Ensure 3-pane view mode
+        if viewMode != .threePane {
+            viewMode = .threePane
+        }
+        
+        // Restore last opened sheet
+        restoreLastOpenedSheet(context: context)
+    }
+    
+    private func restoreLastOpenedSheet(context: NSManagedObjectContext) {
+        guard !lastOpenedSheetID.isEmpty,
+              let uuid = UUID(uuidString: lastOpenedSheetID) else {
+            // No valid last sheet ID, try to open the most recently modified sheet
+            openMostRecentSheet(context: context)
+            return
+        }
+        
+        let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@ AND isInTrash == NO", uuid as CVarArg)
+        fetchRequest.fetchLimit = 1
+        
+        do {
+            let sheets = try context.fetch(fetchRequest)
+            if let lastSheet = sheets.first {
+                selectedSheet = lastSheet
+                addToNavigationHistory(lastSheet)
+                
+                // Also select the group that contains this sheet
+                if let group = lastSheet.group {
+                    selectedGroup = group
+                } else {
+                    // Clear group selection if sheet is not in a group
+                    selectedGroup = nil
+                }
+            } else {
+                // Sheet no longer exists, try to open the most recent sheet
+                openMostRecentSheet(context: context)
+            }
+        } catch {
+            print("Failed to restore last opened sheet: \(error)")
+            openMostRecentSheet(context: context)
+        }
+    }
+    
+    private func openMostRecentSheet(context: NSManagedObjectContext) {
+        let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "isInTrash == NO")
+        fetchRequest.sortDescriptors = [NSSortDescriptor(key: "modifiedAt", ascending: false)]
+        fetchRequest.fetchLimit = 1
+        
+        do {
+            let sheets = try context.fetch(fetchRequest)
+            if let mostRecentSheet = sheets.first {
+                selectedSheet = mostRecentSheet
+                addToNavigationHistory(mostRecentSheet)
+                lastOpenedSheetID = mostRecentSheet.id?.uuidString ?? ""
+                
+                // Also select the group that contains this sheet
+                if let group = mostRecentSheet.group {
+                    selectedGroup = group
+                } else {
+                    selectedGroup = nil
+                }
+            }
+        } catch {
+            print("Failed to open most recent sheet: \(error)")
         }
     }
     
@@ -516,7 +596,7 @@ class AppState: ObservableObject {
         guard let currentIndex = sheets.firstIndex(of: currentSheet),
               currentIndex < sheets.count - 1 else { return false }
         
-        selectedSheet = sheets[currentIndex + 1]
+        selectSheet(sheets[currentIndex + 1])
         return true
     }
     
@@ -527,7 +607,7 @@ class AppState: ObservableObject {
         guard let currentIndex = sheets.firstIndex(of: currentSheet),
               currentIndex > 0 else { return false }
         
-        selectedSheet = sheets[currentIndex - 1]
+        selectSheet(sheets[currentIndex - 1])
         return true
     }
     
@@ -549,7 +629,94 @@ class AppState: ObservableObject {
         return currentIndex > 0
     }
     
-    private func getSortedSheets() -> [Sheet] {
+    // MARK: - Browser-style Navigation History
+    
+    func addToNavigationHistory(_ sheet: Sheet) {
+        // Don't add if it's the same as the current sheet
+        if currentHistoryIndex >= 0 && currentHistoryIndex < navigationHistory.count,
+           navigationHistory[currentHistoryIndex] == sheet {
+            return
+        }
+        
+        // Remove any forward history when navigating to a new sheet
+        if currentHistoryIndex >= 0 && currentHistoryIndex < navigationHistory.count - 1 {
+            navigationHistory.removeSubrange((currentHistoryIndex + 1)...)
+        }
+        
+        // Add the new sheet
+        navigationHistory.append(sheet)
+        currentHistoryIndex = navigationHistory.count - 1
+        
+        // Keep history within maxHistorySize
+        if navigationHistory.count > maxHistorySize {
+            navigationHistory.removeFirst()
+            currentHistoryIndex = navigationHistory.count - 1
+        }
+    }
+    
+    func navigateBackInHistory() -> Bool {
+        guard currentHistoryIndex > 0 else { return false }
+        
+        currentHistoryIndex -= 1
+        let targetSheet = navigationHistory[currentHistoryIndex]
+        
+        // Check if the sheet still exists and is not in trash
+        if !targetSheet.isInTrash {
+            // Set directly without adding to history
+            selectedSheet = targetSheet
+            return true
+        } else {
+            // Remove invalid sheet and try again
+            navigationHistory.remove(at: currentHistoryIndex)
+            if currentHistoryIndex >= navigationHistory.count {
+                currentHistoryIndex = navigationHistory.count - 1
+            }
+            return navigateBackInHistory()
+        }
+    }
+    
+    func navigateForwardInHistory() -> Bool {
+        guard currentHistoryIndex < navigationHistory.count - 1 else { return false }
+        
+        currentHistoryIndex += 1
+        let targetSheet = navigationHistory[currentHistoryIndex]
+        
+        // Check if the sheet still exists and is not in trash
+        if !targetSheet.isInTrash {
+            // Set directly without adding to history
+            selectedSheet = targetSheet
+            return true
+        } else {
+            // Remove invalid sheet and try again
+            navigationHistory.remove(at: currentHistoryIndex)
+            currentHistoryIndex = min(currentHistoryIndex, navigationHistory.count - 1)
+            return navigateForwardInHistory()
+        }
+    }
+    
+    func canNavigateBackInHistory() -> Bool {
+        return currentHistoryIndex > 0
+    }
+    
+    func canNavigateForwardInHistory() -> Bool {
+        return currentHistoryIndex < navigationHistory.count - 1
+    }
+    
+    func selectSheet(_ sheet: Sheet) {
+        selectedSheet = sheet
+        addToNavigationHistory(sheet)
+        // Save as last opened sheet
+        lastOpenedSheetID = sheet.id?.uuidString ?? ""
+    }
+    
+    func clearLastOpenedSheetIfNeeded(_ sheet: Sheet) {
+        // Clear the stored last opened sheet ID if this sheet is being deleted
+        if lastOpenedSheetID == sheet.id?.uuidString {
+            lastOpenedSheetID = ""
+        }
+    }
+    
+    func getSortedSheets() -> [Sheet] {
         guard let context = selectedSheet?.managedObjectContext else { return [] }
         
         let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
