@@ -68,7 +68,7 @@ struct TagsBrowserView: View {
                 ScrollView {
                     LazyVStack(spacing: 2) {
                         ForEach(filteredTags, id: \.tag) { item in
-                            TagRowView(
+                            TagBrowserRowView(
                                 tag: item.tag,
                                 count: item.count,
                                 isSelected: selectedTag == item.tag,
@@ -208,9 +208,9 @@ struct TagsBrowserView: View {
     }
 }
 
-// MARK: - Tag Row View
+// MARK: - Tag Browser Row View
 
-struct TagRowView: View {
+struct TagBrowserRowView: View {
     let tag: String
     let count: Int
     let isSelected: Bool
