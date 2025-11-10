@@ -538,6 +538,29 @@ class NotesIndexService {
         return results
     }
 
+    /// Get all notes from the index
+    func getAllNotes() -> [NoteMetadata] {
+        guard let db = db else { return [] }
+
+        let sql = "SELECT uuid, path, title, tags, created, modified, progress, status, word_count, char_count, content_hash, excerpt FROM notes ORDER BY modified DESC;"
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            return []
+        }
+
+        defer { sqlite3_finalize(statement) }
+
+        var results: [NoteMetadata] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let note = extractMetadata(from: statement) {
+                results.append(note)
+            }
+        }
+
+        return results
+    }
+
     // MARK: - Helper Methods
 
     /// Extract NoteMetadata from a prepared statement result row
