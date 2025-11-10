@@ -127,7 +127,8 @@ extension Sheet {
         updatedMetadata.modified = Date()
 
         // Update from current sheet state
-        updatedMetadata.title = title ?? "Untitled"
+        let newTitle = title ?? "Untitled"
+        updatedMetadata.title = newTitle
         updatedMetadata.tags = extractTags()
 
         // Calculate progress from goals
@@ -140,6 +141,28 @@ extension Sheet {
 
         // Update status
         updatedMetadata.status = isFavorite ? "favorite" : "draft"
+
+        // Check if title changed and file needs to be renamed
+        let titleChanged = existingMetadata.title != newTitle
+        if titleChanged, let oldPath = existingMetadata.path {
+            // Generate new file path with new title
+            let oldURL = MarkdownFileService.shared.getNotesDirectory().appendingPathComponent(oldPath)
+            let folder = (oldPath as NSString).deletingLastPathComponent
+            let folderPath = folder.isEmpty ? nil : folder
+
+            // Generate unique filename for new title
+            let newURL = MarkdownFileService.shared.uniqueFileURL(title: newTitle, folderPath: folderPath)
+
+            // Move the file to new name
+            if MarkdownFileService.shared.moveFile(from: oldURL, to: newURL),
+               let newRelativePath = MarkdownFileService.shared.relativePath(for: newURL) {
+                // Update path in metadata
+                updatedMetadata.path = newRelativePath
+                print("✓ Renamed file from \(oldURL.lastPathComponent) to \(newURL.lastPathComponent)")
+            } else {
+                print("❌ Failed to rename file, keeping original path")
+            }
+        }
 
         // Write to markdown file
         if MarkdownFileService.shared.updateFile(metadata: updatedMetadata, content: newContent) {
