@@ -12,9 +12,10 @@ import CoreData
 /// Add this to Settings or as a toolbar item for testing
 struct StorageDebugView: View {
     @Environment(\.managedObjectContext) private var viewContext
-    @State private var stats: (total: Int, fileStorage: Int, coreData: Int, hybrid: Int) = (0, 0, 0, 0)
+    @State private var stats: (total: Int, fileStorage: Int, coreData: Int, hybrid: Int, noStorage: Int) = (0, 0, 0, 0, 0)
     @State private var baseDirectory: String = ""
     @State private var integrity: (valid: Int, missing: Int) = (0, 0)
+    @State private var orphanedFiles: [String] = []
     @State private var isMigrating: Bool = false
     @State private var migrationResult: String? = nil
 
@@ -61,6 +62,14 @@ struct StorageDebugView: View {
                         .foregroundColor(.orange)
                         .fontWeight(.semibold)
                 }
+
+                HStack {
+                    Text("No Storage:")
+                    Spacer()
+                    Text("\(stats.noStorage)")
+                        .foregroundColor(.red)
+                        .fontWeight(.semibold)
+                }
             }
             .padding()
             .background(Color(.systemGray6))
@@ -84,6 +93,14 @@ struct StorageDebugView: View {
                     Spacer()
                     Text("\(integrity.missing)")
                         .foregroundColor(integrity.missing > 0 ? .red : .secondary)
+                        .fontWeight(.semibold)
+                }
+
+                HStack {
+                    Text("Orphaned Files:")
+                    Spacer()
+                    Text("\(orphanedFiles.count)")
+                        .foregroundColor(orphanedFiles.count > 0 ? .orange : .secondary)
                         .fontWeight(.semibold)
                 }
             }
@@ -194,6 +211,20 @@ struct StorageDebugView: View {
                     .disabled(isMigrating)
                 }
 
+                if orphanedFiles.count > 0 {
+                    Button(action: cleanupOrphanedFiles) {
+                        HStack {
+                            Image(systemName: "trash")
+                            Text("Delete \(orphanedFiles.count) Orphaned File\(orphanedFiles.count == 1 ? "" : "s")")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.red)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+                }
+
                 Button(action: printDetailedStats) {
                     HStack {
                         Image(systemName: "doc.text")
@@ -238,6 +269,63 @@ struct StorageDebugView: View {
         stats = FileStorageService.shared.getStorageStats(context: viewContext)
         baseDirectory = FileStorageService.shared.getSheetsDirectory().path
         integrity = FileStorageService.shared.verifyFileIntegrity(context: viewContext)
+        orphanedFiles = findOrphanedFiles()
+    }
+
+    private func findOrphanedFiles() -> [String] {
+        let sheetsDir = FileStorageService.shared.getSheetsDirectory()
+        let fileManager = FileManager.default
+
+        guard fileManager.fileExists(atPath: sheetsDir.path) else {
+            return []
+        }
+
+        // Get all .md files recursively
+        guard let enumerator = fileManager.enumerator(at: sheetsDir, includingPropertiesForKeys: [.isRegularFileKey]) else {
+            return []
+        }
+
+        var allFiles: [String] = []
+        for case let fileURL as URL in enumerator {
+            if fileURL.pathExtension == "md" {
+                allFiles.append(fileURL.path)
+            }
+        }
+
+        // Get all valid file paths from sheets
+        let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+        guard let sheets = try? viewContext.fetch(fetchRequest) else {
+            return []
+        }
+
+        var validPaths = Set<String>()
+        for sheet in sheets {
+            if let fileURL = sheet.fileURL, !fileURL.isEmpty {
+                validPaths.insert(fileURL)
+            }
+            // Also check generated path
+            if let generatedURL = FileStorageService.shared.fileURL(for: sheet) {
+                validPaths.insert(generatedURL.path)
+            }
+        }
+
+        // Find orphaned files
+        return allFiles.filter { !validPaths.contains($0) }
+    }
+
+    private func cleanupOrphanedFiles() {
+        let fileManager = FileManager.default
+
+        for filePath in orphanedFiles {
+            do {
+                try fileManager.removeItem(atPath: filePath)
+                print("✓ Deleted orphaned file: \(URL(fileURLWithPath: filePath).lastPathComponent)")
+            } catch {
+                print("❌ Failed to delete orphaned file \(filePath): \(error)")
+            }
+        }
+
+        refreshStats()
     }
 
     private func migrateFiles() {
