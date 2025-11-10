@@ -40,7 +40,7 @@ struct TagsBrowserView: View {
                         .cornerRadius(4)
                 }
                 .padding()
-                .background(Color(nsColor: .controlBackgroundColor))
+                .background(Color(.systemGray6))
 
                 Divider()
 
@@ -59,7 +59,7 @@ struct TagsBrowserView: View {
                     }
                 }
                 .padding(8)
-                .background(Color(nsColor: .textBackgroundColor))
+                .background(Color(.systemBackground))
                 .cornerRadius(6)
                 .padding(.horizontal)
                 .padding(.top, 8)
@@ -80,7 +80,7 @@ struct TagsBrowserView: View {
                 }
             }
             .frame(width: 250)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background(Color(.systemGroupedBackground))
 
             Divider()
 
@@ -102,7 +102,7 @@ struct TagsBrowserView: View {
                             .foregroundColor(.secondary)
                     }
                     .padding()
-                    .background(Color(nsColor: .controlBackgroundColor))
+                    .background(Color(.systemGray6))
 
                     Divider()
 
@@ -188,8 +188,13 @@ struct TagsBrowserView: View {
 
     private func selectNote(_ note: NoteMetadata) {
         // Find the corresponding Sheet in CoreData
+        guard let uuid = UUID(uuidString: note.uuid) else {
+            print("❌ Invalid UUID: \(note.uuid)")
+            return
+        }
+
         let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "id == %@", UUID(uuidString: note.uuid) as CVarArg)
+        fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
         fetchRequest.fetchLimit = 1
 
         do {

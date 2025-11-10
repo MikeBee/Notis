@@ -40,7 +40,7 @@ struct FolderBrowserView: View {
                 .help("Refresh folder list")
             }
             .padding()
-            .background(Color(nsColor: .controlBackgroundColor))
+            .background(Color(.systemGray6))
 
             Divider()
 
@@ -59,7 +59,7 @@ struct FolderBrowserView: View {
                 }
             }
             .padding(8)
-            .background(Color(nsColor: .textBackgroundColor))
+            .background(Color(.systemBackground))
             .cornerRadius(6)
             .padding(.horizontal)
             .padding(.top, 8)
@@ -120,7 +120,7 @@ struct FolderBrowserView: View {
                     .foregroundColor(.secondary)
             }
             .padding(8)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .background(Color(.systemGray6))
         }
         .onAppear(perform: refreshFolders)
     }
@@ -184,8 +184,13 @@ struct FolderBrowserView: View {
         selectedNote = note
 
         // Find the corresponding Sheet in CoreData
+        guard let uuid = UUID(uuidString: note.uuid) else {
+            print("❌ Invalid UUID: \(note.uuid)")
+            return
+        }
+
         let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "id == %@", UUID(uuidString: note.uuid) as CVarArg)
+        fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
         fetchRequest.fetchLimit = 1
 
         do {
@@ -249,7 +254,7 @@ struct FolderSectionView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+            .background(Color(.systemGray6).opacity(0.5))
 
             // Notes list
             if isExpanded {

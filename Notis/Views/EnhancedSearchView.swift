@@ -30,7 +30,7 @@ struct EnhancedSearchView: View {
                 .font(.headline)
                 .padding()
                 .frame(maxWidth: .infinity)
-                .background(Color(nsColor: .controlBackgroundColor))
+                .background(Color(.systemGray6))
 
             Divider()
 
@@ -58,7 +58,7 @@ struct EnhancedSearchView: View {
                     .disabled(searchQuery.isEmpty)
                 }
                 .padding(8)
-                .background(Color(nsColor: .textBackgroundColor))
+                .background(Color(.systemBackground))
                 .cornerRadius(6)
 
                 // Filters
@@ -248,8 +248,13 @@ struct EnhancedSearchView: View {
 
     private func selectNote(_ note: NoteMetadata) {
         // Find the corresponding Sheet in CoreData
+        guard let uuid = UUID(uuidString: note.uuid) else {
+            print("❌ Invalid UUID: \(note.uuid)")
+            return
+        }
+
         let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "id == %@", UUID(uuidString: note.uuid) as CVarArg)
+        fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
         fetchRequest.fetchLimit = 1
 
         do {
@@ -337,7 +342,7 @@ struct SearchResultRow: View {
                 }
             }
             .padding()
-            .background(Color(nsColor: .controlBackgroundColor))
+            .background(Color(.systemGray6))
             .cornerRadius(8)
             .contentShape(Rectangle())
         }
