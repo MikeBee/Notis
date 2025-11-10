@@ -21,14 +21,19 @@ class MarkdownCoreDataSync {
     /// Sync metadata from markdown files back to CoreData sheets
     /// Call this after FileSyncService updates the SQLite index
     func syncMarkdownToCoreData(context: NSManagedObjectContext) {
+        print("🔄 Starting CoreData sync from markdown files...")
+
         let allNotes = indexService.getAllNotes()
+        print("📊 Found \(allNotes.count) notes in SQLite index to sync")
 
         var updatedCount = 0
         var errorCount = 0
+        var notFoundCount = 0
 
         for note in allNotes {
             // Find corresponding CoreData Sheet by UUID
             guard let sheetUUID = UUID(uuidString: note.uuid) else {
+                print("⚠️ Invalid UUID in note: \(note.uuid)")
                 continue
             }
 
@@ -40,25 +45,34 @@ class MarkdownCoreDataSync {
                 let results = try context.fetch(fetchRequest)
                 guard let sheet = results.first else {
                     // Sheet doesn't exist in CoreData - this is OK, might be external file
+                    notFoundCount += 1
                     continue
                 }
+
+                var changed = false
 
                 // Check if title needs updating
                 if sheet.title != note.title {
                     print("📝 Syncing title change: '\(sheet.title ?? "")' → '\(note.title)'")
                     sheet.title = note.title
-                    updatedCount += 1
+                    changed = true
                 }
 
                 // Update modified date if newer
                 if note.modified > (sheet.modifiedAt ?? Date.distantPast) {
                     sheet.modifiedAt = note.modified
+                    changed = true
                 }
 
                 // Update favorite status
                 let isFavorite = note.status == "favorite"
                 if sheet.isFavorite != isFavorite {
                     sheet.isFavorite = isFavorite
+                    changed = true
+                }
+
+                if changed {
+                    updatedCount += 1
                 }
 
             } catch {
@@ -71,10 +85,12 @@ class MarkdownCoreDataSync {
         if updatedCount > 0 {
             do {
                 try context.save()
-                print("✓ Synced \(updatedCount) sheet(s) from markdown files to CoreData")
+                print("✅ Synced \(updatedCount) sheet(s) from markdown files to CoreData")
             } catch {
                 print("❌ Failed to save CoreData context: \(error)")
             }
+        } else {
+            print("ℹ️ No CoreData sheets needed updating (\(notFoundCount) notes have no matching sheet)")
         }
 
         if errorCount > 0 {
