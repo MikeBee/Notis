@@ -59,13 +59,28 @@ extension Sheet {
 
     /// Migrate this sheet to the new markdown storage system
     private func migrateToMarkdownStorage(content newContent: String) {
+        // Don't migrate empty or whitespace-only content
+        let trimmedContent = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty else {
+            // Fall back to old storage for empty sheets
+            hybridContent = newContent
+            return
+        }
+
         guard let uuid = id?.uuidString else {
             print("❌ Cannot migrate sheet without UUID")
             return
         }
 
         // Build metadata from CoreData sheet
-        let metadata = buildNoteMetadata()
+        var metadata = buildNoteMetadata()
+
+        // Auto-generate better title if it's "Untitled" or empty
+        if metadata.title.isEmpty || metadata.title == "Untitled" {
+            metadata.title = generateTitleFromContent(trimmedContent)
+            // Update CoreData title too
+            title = metadata.title
+        }
 
         // Determine folder path from group hierarchy
         let folderPath = buildFolderPath()
@@ -210,5 +225,34 @@ extension Sheet {
 
         guard !pathComponents.isEmpty else { return nil }
         return pathComponents.joined(separator: "/")
+    }
+
+    /// Generate a title from content (first heading or first line)
+    private func generateTitleFromContent(_ content: String) -> String {
+        let lines = content.components(separatedBy: .newlines)
+
+        // Look for first markdown heading
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("#") {
+                // Extract heading text (remove # symbols and trim)
+                let title = trimmed.replacingOccurrences(of: "^#+\\s*", with: "", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespaces)
+                if !title.isEmpty {
+                    return String(title.prefix(100)) // Limit to 100 chars
+                }
+            }
+        }
+
+        // Fall back to first non-empty line
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                return String(trimmed.prefix(100)) // Limit to 100 chars
+            }
+        }
+
+        // Last resort
+        return "Untitled"
     }
 }
