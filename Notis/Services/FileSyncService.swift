@@ -81,16 +81,43 @@ class FileSyncService {
         stats.filesScanned = files.count
         print("📁 Found \(files.count) markdown files")
 
-        // Step 2: Build map of files by UUID and path
+        // Step 2: Build map of files by UUID and path, detect filename/title mismatches
         var filesByUUID: [String: URL] = [:]
         var filesByPath: [String: URL] = [:]
 
         for fileURL in files {
-            if let (metadata, _) = markdownService.readFile(at: fileURL) {
-                filesByUUID[metadata.uuid] = fileURL
-                if let path = metadata.path {
-                    filesByPath[path] = fileURL
+            guard let (metadata, content) = markdownService.readFile(at: fileURL) else {
+                continue
+            }
+
+            // Check if filename matches YAML title
+            let filenameTitle = extractTitleFromFilename(fileURL)
+            if filenameTitle != metadata.title && !filenameTitle.isEmpty {
+                // Filename changed externally, update YAML to match
+                print("📝 Detected filename/title mismatch: file='\(filenameTitle)' yaml='\(metadata.title)'")
+                print("   Updating YAML title to match filename: '\(filenameTitle)'")
+
+                var updatedMetadata = metadata
+                updatedMetadata.title = filenameTitle
+                updatedMetadata.modified = Date()
+
+                // Re-write file with updated YAML
+                if markdownService.updateFile(metadata: updatedMetadata, content: content) {
+                    print("   ✓ Updated YAML title in file")
+                    // Use updated metadata for indexing
+                    filesByUUID[updatedMetadata.uuid] = fileURL
+                    if let path = updatedMetadata.path {
+                        filesByPath[path] = fileURL
+                    }
+                    continue
+                } else {
+                    print("   ❌ Failed to update YAML title")
                 }
+            }
+
+            filesByUUID[metadata.uuid] = fileURL
+            if let path = metadata.path {
+                filesByPath[path] = fileURL
             }
         }
 
@@ -366,6 +393,19 @@ class FileSyncService {
     #endif
 
     // MARK: - Helper Methods
+
+    /// Extract title from filename (remove .md extension)
+    private func extractTitleFromFilename(_ fileURL: URL) -> String {
+        let filename = fileURL.lastPathComponent
+
+        // Remove .md extension
+        guard filename.hasSuffix(".md") else {
+            return filename
+        }
+
+        let title = String(filename.dropLast(3)) // Remove ".md"
+        return title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     private func printSyncStats(_ stats: SyncStats) {
         print("""
