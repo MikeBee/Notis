@@ -67,15 +67,100 @@ class FileStorageService {
 
     // MARK: - File Path Management
 
+    /// Sanitize a filename by removing invalid characters
+    private func sanitizeFilename(_ filename: String) -> String {
+        // Remove or replace characters not allowed in filenames
+        let invalidCharacters = CharacterSet(charactersIn: ":/\\?%*|\"<>")
+        let sanitized = filename.components(separatedBy: invalidCharacters).joined(separator: "-")
+
+        // Trim whitespace and dots from ends
+        let trimmed = sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+
+        // Ensure not empty
+        return trimmed.isEmpty ? "Untitled" : trimmed
+    }
+
+    /// Get the folder path for a group (recursive for nested groups)
+    private func folderPath(for group: Group) -> String {
+        var pathComponents: [String] = []
+        var currentGroup: Group? = group
+
+        // Build path from leaf to root
+        while let group = currentGroup {
+            let sanitizedName = sanitizeFilename(group.name ?? "Untitled")
+            pathComponents.insert(sanitizedName, at: 0)
+            currentGroup = group.parent
+        }
+
+        return pathComponents.joined(separator: "/")
+    }
+
+    /// Get the directory URL for a group
+    private func directoryURL(for group: Group?) -> URL {
+        guard let group = group else {
+            return sheetsDirectory
+        }
+
+        let path = folderPath(for: group)
+        return sheetsDirectory.appendingPathComponent(path, isDirectory: true)
+    }
+
+    /// Ensure directory exists for a group
+    private func ensureDirectoryExists(for group: Group?) -> Bool {
+        let dirURL = directoryURL(for: group)
+
+        guard !fileManager.fileExists(atPath: dirURL.path) else {
+            return true
+        }
+
+        do {
+            try fileManager.createDirectory(at: dirURL, withIntermediateDirectories: true)
+            return true
+        } catch {
+            print("❌ Failed to create directory for group: \(error)")
+            return false
+        }
+    }
+
+    /// Generate a unique filename for a sheet (handles duplicates)
+    private func uniqueFilename(for sheet: Sheet, in directory: URL) -> String {
+        let title = sheet.title?.isEmpty == false ? sheet.title! : "Untitled"
+        let baseName = sanitizeFilename(title)
+        var filename = "\(baseName).md"
+        var counter = 1
+
+        // Check for duplicates and add number suffix if needed
+        while fileManager.fileExists(atPath: directory.appendingPathComponent(filename).path) {
+            // Skip if this is the current sheet's file
+            if let currentURL = URL(string: sheet.fileURL ?? ""),
+               currentURL.lastPathComponent == filename {
+                break
+            }
+            filename = "\(baseName) \(counter).md"
+            counter += 1
+        }
+
+        return filename
+    }
+
     /// Generate a file URL for a sheet
-    /// Format: {sheetsDirectory}/{sheetID}.md
+    /// Format: {sheetsDirectory}/{group_path}/{title}.md
     func fileURL(for sheet: Sheet) -> URL? {
-        guard let id = sheet.id else {
+        guard sheet.id != nil else {
             print("❌ Sheet has no ID")
             return nil
         }
 
-        return sheetsDirectory.appendingPathComponent("\(id.uuidString).md")
+        // Ensure directory exists for the group
+        guard ensureDirectoryExists(for: sheet.group) else {
+            return nil
+        }
+
+        let directory = directoryURL(for: sheet.group)
+        let filename = uniqueFilename(for: sheet, in: directory)
+
+        return directory.appendingPathComponent(filename)
     }
 
     /// Get file path string for storage in Core Data
@@ -85,6 +170,11 @@ class FileStorageService {
 
     /// Check if a file exists for a sheet
     func fileExists(for sheet: Sheet) -> Bool {
+        // Check stored fileURL first
+        if let storedPath = sheet.fileURL, !storedPath.isEmpty {
+            return fileManager.fileExists(atPath: storedPath)
+        }
+        // Fall back to generated URL
         guard let url = fileURL(for: sheet) else { return false }
         return fileManager.fileExists(atPath: url.path)
     }
@@ -94,13 +184,27 @@ class FileStorageService {
     /// Read content from file
     /// Returns nil if file doesn't exist or can't be read
     func readContent(from sheet: Sheet) -> String? {
-        guard let url = fileURL(for: sheet) else {
+        // Try stored fileURL first (handles old location)
+        if let storedPath = sheet.fileURL, !storedPath.isEmpty {
+            let storedURL = URL(fileURLWithPath: storedPath)
+            if fileManager.fileExists(atPath: storedPath) {
+                do {
+                    let content = try String(contentsOf: storedURL, encoding: .utf8)
+                    return content
+                } catch {
+                    print("❌ Failed to read file at stored path: \(error)")
+                }
+            }
+        }
+
+        // Fall back to newly generated URL
+        guard let newURL = fileURL(for: sheet) else {
             print("❌ Cannot generate file URL for sheet")
             return nil
         }
 
         do {
-            let content = try String(contentsOf: url, encoding: .utf8)
+            let content = try String(contentsOf: newURL, encoding: .utf8)
             return content
         } catch {
             print("❌ Failed to read file for sheet \(sheet.title ?? "Untitled"): \(error)")
@@ -110,21 +214,47 @@ class FileStorageService {
 
     /// Write content to file
     /// Creates the file if it doesn't exist
+    /// Handles file renames/moves when title or group changes
     /// Updates sheet's fileURL if successful
     @discardableResult
     func writeContent(_ content: String, to sheet: Sheet) -> Bool {
-        guard let url = fileURL(for: sheet) else {
+        guard let newURL = fileURL(for: sheet) else {
             print("❌ Cannot generate file URL for sheet")
             return false
         }
 
-        do {
-            try content.write(to: url, atomically: true, encoding: .utf8)
+        // Check if file needs to be renamed/moved
+        if let oldPath = sheet.fileURL, !oldPath.isEmpty {
+            let oldURL = URL(fileURLWithPath: oldPath)
 
-            // Update sheet's fileURL if not set
-            if sheet.fileURL == nil || sheet.fileURL!.isEmpty {
-                sheet.fileURL = url.path
+            // If path changed (title or group changed), move the file
+            if oldURL.path != newURL.path && fileManager.fileExists(atPath: oldURL.path) {
+                do {
+                    // Ensure new directory exists
+                    let newDir = newURL.deletingLastPathComponent()
+                    if !fileManager.fileExists(atPath: newDir.path) {
+                        try fileManager.createDirectory(at: newDir, withIntermediateDirectories: true)
+                    }
+
+                    // Move file to new location
+                    try fileManager.moveItem(at: oldURL, to: newURL)
+                    print("✓ Moved file from \(oldURL.lastPathComponent) to \(newURL.lastPathComponent)")
+
+                    // Update stored path
+                    sheet.fileURL = newURL.path
+                } catch {
+                    print("❌ Failed to move file: \(error)")
+                    // Fall through to write content anyway
+                }
             }
+        }
+
+        // Write content to file
+        do {
+            try content.write(to: newURL, atomically: true, encoding: .utf8)
+
+            // Update sheet's fileURL
+            sheet.fileURL = newURL.path
 
             return true
         } catch {
@@ -136,23 +266,56 @@ class FileStorageService {
     /// Delete file for a sheet
     @discardableResult
     func deleteFile(for sheet: Sheet) -> Bool {
-        guard let url = fileURL(for: sheet) else {
-            print("❌ Cannot generate file URL for sheet")
-            return false
+        // Try stored path first
+        var pathToDelete: String? = nil
+        if let storedPath = sheet.fileURL, !storedPath.isEmpty, fileManager.fileExists(atPath: storedPath) {
+            pathToDelete = storedPath
+        } else if let url = fileURL(for: sheet) {
+            pathToDelete = url.path
         }
 
-        guard fileManager.fileExists(atPath: url.path) else {
+        guard let path = pathToDelete, fileManager.fileExists(atPath: path) else {
             print("⚠️ File doesn't exist, nothing to delete")
             return true
         }
 
         do {
+            let url = URL(fileURLWithPath: path)
+            let parentDir = url.deletingLastPathComponent()
+
             try fileManager.removeItem(at: url)
             print("✓ Deleted file for sheet: \(sheet.title ?? "Untitled")")
+
+            // Clean up empty parent directories
+            cleanupEmptyDirectories(startingAt: parentDir)
+
             return true
         } catch {
             print("❌ Failed to delete file: \(error)")
             return false
+        }
+    }
+
+    /// Clean up empty directories (recursive up to sheetsDirectory)
+    private func cleanupEmptyDirectories(startingAt directory: URL) {
+        var currentDir = directory
+
+        // Don't delete the base sheets directory
+        while currentDir.path != sheetsDirectory.path {
+            do {
+                let contents = try fileManager.contentsOfDirectory(atPath: currentDir.path)
+                if contents.isEmpty {
+                    try fileManager.removeItem(at: currentDir)
+                    print("✓ Removed empty directory: \(currentDir.lastPathComponent)")
+                    currentDir = currentDir.deletingLastPathComponent()
+                } else {
+                    // Directory not empty, stop cleanup
+                    break
+                }
+            } catch {
+                // Error or can't delete, stop cleanup
+                break
+            }
         }
     }
 
