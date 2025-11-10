@@ -15,6 +15,8 @@ struct StorageDebugView: View {
     @State private var stats: (total: Int, fileStorage: Int, coreData: Int, hybrid: Int) = (0, 0, 0, 0)
     @State private var baseDirectory: String = ""
     @State private var integrity: (valid: Int, missing: Int) = (0, 0)
+    @State private var isMigrating: Bool = false
+    @State private var migrationResult: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -142,6 +144,21 @@ struct StorageDebugView: View {
             .background(Color(.systemGray6))
             .cornerRadius(12)
 
+            // Migration Result
+            if let result = migrationResult {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Migration Result")
+                        .font(.headline)
+
+                    Text(result)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+            }
+
             // Actions
             VStack(spacing: 12) {
                 Button(action: refreshStats) {
@@ -154,6 +171,27 @@ struct StorageDebugView: View {
                     .background(Color.accentColor)
                     .foregroundColor(.white)
                     .cornerRadius(10)
+                }
+
+                if integrity.missing > 0 {
+                    Button(action: migrateFiles) {
+                        HStack {
+                            if isMigrating {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "folder.badge.gearshape")
+                                Text("Migrate Old Files to New Structure")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.orange)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+                    .disabled(isMigrating)
                 }
 
                 Button(action: printDetailedStats) {
@@ -200,6 +238,29 @@ struct StorageDebugView: View {
         stats = FileStorageService.shared.getStorageStats(context: viewContext)
         baseDirectory = FileStorageService.shared.getSheetsDirectory().path
         integrity = FileStorageService.shared.verifyFileIntegrity(context: viewContext)
+    }
+
+    private func migrateFiles() {
+        isMigrating = true
+        migrationResult = nil
+
+        // Run migration in background
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = FileStorageService.shared.migrateToNewFileStructure(context: viewContext)
+
+            // Update UI on main thread
+            DispatchQueue.main.async {
+                isMigrating = false
+                migrationResult = """
+                Migrated: \(result.success)
+                Failed: \(result.failed)
+                Skipped: \(result.skipped)
+                """
+
+                // Refresh stats
+                refreshStats()
+            }
+        }
     }
 
     private func printDetailedStats() {
