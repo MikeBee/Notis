@@ -658,7 +658,8 @@ class FileStorageService {
         ├─ Total sheets: \(stats.total)
         ├─ File storage: \(stats.fileStorage)
         ├─ Core Data: \(stats.coreData)
-        └─ Hybrid: \(stats.hybrid)
+        ├─ Hybrid: \(stats.hybrid)
+        └─ No Storage: \(stats.noStorage)
 
         """)
     }
