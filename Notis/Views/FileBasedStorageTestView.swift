@@ -6,9 +6,12 @@
 //
 
 import SwiftUI
+import CoreData
 
-/// Test view for Phase 1-2: YAML frontmatter + SQLite indexing + File Sync
+/// Test view for Phase 1-3: YAML + SQLite + File Sync + Migration
 struct FileBasedStorageTestView: View {
+    @Environment(\.managedObjectContext) private var viewContext
+
     @State private var notes: [NoteMetadata] = []
     @State private var searchQuery: String = ""
     @State private var searchResults: [NoteMetadata] = []
@@ -22,9 +25,16 @@ struct FileBasedStorageTestView: View {
     @State private var lastSyncDate: Date?
     @State private var syncStats: FileSyncService.SyncStats?
 
+    // Migration state
+    @State private var isMigrating: Bool = false
+    @State private var migrationStats: CoreDataMigrationService.MigrationStats?
+    @State private var dryRunStats: CoreDataMigrationService.MigrationStats?
+    @State private var showMigrationConfirmation: Bool = false
+
     private let markdownService = MarkdownFileService.shared
     private let indexService = NotesIndexService.shared
     private let syncService = FileSyncService.shared
+    private let migrationService = CoreDataMigrationService.shared
 
     var body: some View {
         ScrollView {
@@ -33,7 +43,7 @@ struct FileBasedStorageTestView: View {
                     .font(.title2)
                     .fontWeight(.bold)
 
-                Text("Phase 2: File Sync & Monitoring")
+                Text("Phase 3: CoreData Migration")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -156,6 +166,115 @@ struct FileBasedStorageTestView: View {
                         .cornerRadius(10)
                     }
                 }
+
+                // CoreData Migration
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("CoreData Migration")
+                        .font(.headline)
+
+                    if let stats = migrationStats {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Total Sheets:")
+                                Spacer()
+                                Text("\(stats.totalSheets)")
+                                    .fontWeight(.semibold)
+                            }
+
+                            HStack {
+                                Text("Migrated:")
+                                Spacer()
+                                Text("\(stats.migratedSheets)")
+                                    .foregroundColor(.green)
+                                    .fontWeight(.semibold)
+                            }
+
+                            HStack {
+                                Text("Skipped:")
+                                Spacer()
+                                Text("\(stats.skippedSheets)")
+                                    .foregroundColor(.orange)
+                                    .fontWeight(.semibold)
+                            }
+
+                            HStack {
+                                Text("Failed:")
+                                Spacer()
+                                Text("\(stats.failedSheets)")
+                                    .foregroundColor(.red)
+                                    .fontWeight(.semibold)
+                            }
+
+                            if stats.totalSheets > 0 {
+                                ProgressView(value: stats.progress)
+                                    .progressViewStyle(LinearProgressViewStyle())
+                            }
+                        }
+                        .padding(8)
+                        .background(Color(.systemGray5))
+                        .cornerRadius(8)
+                    } else if let dryRun = dryRunStats {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Dry Run Preview:")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            Text("  • \(dryRun.migratedSheets) sheets will be migrated")
+                                .font(.caption)
+                                .foregroundColor(.green)
+
+                            Text("  • \(dryRun.skippedSheets) sheets will be skipped")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                        .padding(8)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+
+                    VStack(spacing: 12) {
+                        Button(action: performDryRun) {
+                            HStack {
+                                if isMigrating {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "eye.circle.fill")
+                                    Text("Preview Migration (Dry Run)")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                        .disabled(isMigrating)
+
+                        Button(action: { showMigrationConfirmation = true }) {
+                            HStack {
+                                if isMigrating {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "arrow.right.circle.fill")
+                                    Text("Migrate All Sheets")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.orange)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                        .disabled(isMigrating)
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
 
                 // Index Statistics
                 VStack(alignment: .leading, spacing: 12) {
@@ -378,6 +497,14 @@ struct FileBasedStorageTestView: View {
             loadAllNotes()
             updateSyncStatus()
         }
+        .alert("Migrate All Sheets?", isPresented: $showMigrationConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Migrate", role: .destructive) {
+                performMigration()
+            }
+        } message: {
+            Text("This will convert all CoreData sheets to markdown files. A backup will be created automatically. This action cannot be undone.")
+        }
     }
 
     // MARK: - Sync Actions
@@ -494,8 +621,62 @@ struct FileBasedStorageTestView: View {
         searchResults = indexService.search(query: searchQuery, limit: 20)
         statusMessage = "Found \(searchResults.count) results for '\(searchQuery)'"
     }
+
+    // MARK: - Migration Actions
+
+    private func performDryRun() {
+        isMigrating = true
+        dryRunStats = nil
+        statusMessage = "Running migration preview..."
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let stats = migrationService.performDryRun(context: viewContext)
+
+            DispatchQueue.main.async {
+                self.isMigrating = false
+                self.dryRunStats = stats
+                self.statusMessage = "✓ Dry run complete: \(stats.migratedSheets) sheets ready to migrate"
+            }
+        }
+    }
+
+    private func performMigration() {
+        isMigrating = true
+        migrationStats = nil
+        statusMessage = "Migrating CoreData sheets to markdown..."
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = migrationService.performMigration(
+                context: viewContext,
+                createBackup: true
+            ) { stats in
+                DispatchQueue.main.async {
+                    self.migrationStats = stats
+                }
+            }
+
+            DispatchQueue.main.async {
+                self.isMigrating = false
+                self.migrationStats = result.stats
+
+                if result.success {
+                    self.statusMessage = "✅ Migration complete! \(result.stats.migratedSheets) sheets migrated successfully"
+                    if let backupPath = result.backupPath {
+                        self.statusMessage += "\nBackup saved: \(backupPath)"
+                    }
+                } else {
+                    self.statusMessage = "⚠️ Migration completed with \(result.stats.failedSheets) failures"
+                }
+
+                // Refresh everything
+                self.loadStats()
+                self.loadAllNotes()
+            }
+        }
+    }
 }
 
 #Preview {
     FileBasedStorageTestView()
+        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
 }
