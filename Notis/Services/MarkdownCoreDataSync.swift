@@ -71,6 +71,16 @@ class MarkdownCoreDataSync {
                     changed = true
                 }
 
+                // Update group based on folder path
+                if let notePath = note.path {
+                    let newGroup = findOrCreateGroup(fromPath: notePath, context: context)
+                    if sheet.group != newGroup {
+                        print("📁 Syncing folder change: '\(sheet.group?.name ?? "root")' → '\(newGroup?.name ?? "root")'")
+                        sheet.group = newGroup
+                        changed = true
+                    }
+                }
+
                 if changed {
                     updatedCount += 1
                 }
@@ -96,5 +106,61 @@ class MarkdownCoreDataSync {
         if errorCount > 0 {
             print("⚠️ Encountered \(errorCount) error(s) during sync")
         }
+    }
+
+    // MARK: - Helper Methods
+
+    /// Find or create a Group hierarchy from a file path
+    /// Example: "Folder A/Subfolder/file.md" → Creates/finds "Folder A" and its child "Subfolder"
+    /// Returns nil if file is at root (no folders in path)
+    private func findOrCreateGroup(fromPath filePath: String, context: NSManagedObjectContext) -> Group? {
+        // Extract folder path from file path
+        let pathComponents = (filePath as NSString).pathComponents
+        guard pathComponents.count > 1 else {
+            // File is at root, no group
+            return nil
+        }
+
+        // Remove the filename, leaving just the folder path components
+        let folderComponents = Array(pathComponents.dropLast())
+
+        var currentParent: Group? = nil
+
+        // Traverse/create the group hierarchy
+        for folderName in folderComponents {
+            // Try to find existing group with this name and parent
+            let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
+            if let parent = currentParent {
+                fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == %@", folderName, parent)
+            } else {
+                fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == nil", folderName)
+            }
+            fetchRequest.fetchLimit = 1
+
+            do {
+                let results = try context.fetch(fetchRequest)
+                if let existingGroup = results.first {
+                    // Group exists, move to next level
+                    currentParent = existingGroup
+                } else {
+                    // Group doesn't exist, create it
+                    let newGroup = Group(context: context)
+                    newGroup.id = UUID()
+                    newGroup.name = folderName
+                    newGroup.parent = currentParent
+                    newGroup.createdAt = Date()
+                    newGroup.modifiedAt = Date()
+                    newGroup.sortOrder = Int32(currentParent?.subgroups?.count ?? 0)
+
+                    print("📁 Created group from file path: \(folderName)")
+                    currentParent = newGroup
+                }
+            } catch {
+                print("❌ Failed to find/create group '\(folderName)': \(error)")
+                return nil
+            }
+        }
+
+        return currentParent
     }
 }
