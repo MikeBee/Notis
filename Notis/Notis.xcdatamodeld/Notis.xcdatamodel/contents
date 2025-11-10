@@ -15,6 +15,7 @@
         <attribute name="content" optional="YES" attributeType="String"/>
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="deletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="fileURL" optional="YES" attributeType="String"/>
         <attribute name="goalCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
         <attribute name="goalType" optional="YES" attributeType="String" defaultValue="words"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>

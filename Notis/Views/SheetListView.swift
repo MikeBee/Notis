@@ -319,7 +319,7 @@ struct SheetListView: View {
             let newSheet = Sheet(context: viewContext)
             newSheet.id = UUID()
             newSheet.title = "Untitled"
-            newSheet.content = ""
+            // Don't set content - will use file storage
             newSheet.preview = ""
             newSheet.group = targetGroup
             newSheet.createdAt = Date()
@@ -329,7 +329,10 @@ struct SheetListView: View {
             newSheet.goalCount = 0
             newSheet.goalType = "words"
             newSheet.sortOrder = Int32(targetGroup.sheets?.count ?? 0)
-            
+
+            // Initialize file storage for new sheet
+            newSheet.initializeFileStorage()
+
             do {
                 try viewContext.save()
                 // Select the new sheet and clear any essential selection
@@ -839,12 +842,16 @@ struct SheetRowView: View {
         withAnimation {
             let newSheet = Sheet(context: viewContext)
             newSheet.id = UUID()
-            
+
             // Generate a unique copy name
             let baseName = sheet.title ?? "Untitled"
             newSheet.title = generateCopyName(baseName)
-            
-            newSheet.content = sheet.content
+
+            // Copy content using hybrid accessor and initialize file storage
+            let contentToCopy = sheet.hybridContent
+            newSheet.initializeFileStorage()
+            newSheet.hybridContent = contentToCopy
+
             newSheet.preview = sheet.preview
             newSheet.group = sheet.group // Ensures duplicate is in same folder
             newSheet.createdAt = Date()
@@ -854,7 +861,7 @@ struct SheetRowView: View {
             newSheet.wordCount = sheet.wordCount
             newSheet.goalCount = sheet.goalCount
             newSheet.goalType = sheet.goalType
-            
+
             // Set sort order to appear after the original sheet
             newSheet.sortOrder = sheet.sortOrder + 1
             
