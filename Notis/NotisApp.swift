@@ -12,6 +12,9 @@ struct NotisApp: App {
     let persistenceController = PersistenceController.shared
 
     init() {
+        // Initialize file storage service and create directories
+        _ = FileStorageService.shared
+
         // Check and reset daily goals on app launch
         GoalsService.shared.checkAndResetDailyGoals()
     }

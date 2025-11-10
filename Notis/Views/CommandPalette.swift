@@ -208,12 +208,15 @@ struct CommandPalette: View {
             let newSheet = Sheet(context: viewContext)
             newSheet.id = UUID()
             newSheet.title = "Untitled"
-            newSheet.content = ""
+            // Don't set content - will use file storage
             newSheet.group = selectedGroup
             newSheet.createdAt = Date()
             newSheet.modifiedAt = Date()
             newSheet.sortOrder = Int32(selectedGroup.sheets?.count ?? 0)
-            
+
+            // Initialize file storage for new sheet
+            newSheet.initializeFileStorage()
+
             do {
                 try viewContext.save()
                 appState.selectedSheet = newSheet
@@ -236,7 +239,12 @@ struct CommandPalette: View {
             let newSheet = Sheet(context: viewContext)
             newSheet.id = UUID()
             newSheet.title = (sheet.title ?? "Untitled") + " Copy"
-            newSheet.content = sheet.content
+
+            // Copy content using hybrid accessor and initialize file storage
+            let contentToCopy = sheet.hybridContent
+            newSheet.initializeFileStorage()
+            newSheet.hybridContent = contentToCopy
+
             newSheet.group = sheet.group
             newSheet.createdAt = Date()
             newSheet.modifiedAt = Date()
@@ -244,7 +252,7 @@ struct CommandPalette: View {
             newSheet.goalCount = sheet.goalCount
             newSheet.goalType = sheet.goalType
             newSheet.sortOrder = sheet.sortOrder + 1
-            
+
             do {
                 try viewContext.save()
                 appState.selectedSheet = newSheet

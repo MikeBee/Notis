@@ -79,7 +79,7 @@ struct EditorView: View {
                         .help(appState.showOutlinePane ? "Hide Outline (⌘O)" : "Show Outline (⌘O)")
                         
                         // Read-Only Mode Toggle (only show if content exists)
-                        if !(selectedSheet.content?.isEmpty ?? true) {
+                        if !selectedSheet.hybridContent.isEmpty {
                             Button(action: {
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     isReadOnlyMode.toggle()
@@ -254,9 +254,9 @@ struct EditorView: View {
         .sheet(isPresented: $showFindReplace) {
             if let selectedSheet = appState.selectedSheet {
                 FindReplaceView(text: Binding(
-                    get: { selectedSheet.content ?? "" },
+                    get: { selectedSheet.hybridContent },
                     set: { newValue in
-                        selectedSheet.content = newValue
+                        selectedSheet.hybridContent = newValue
                         try? viewContext.save()
                     }
                 ))
@@ -300,7 +300,7 @@ struct WordCounterView: View {
     @ObservedObject private var sessionService = WritingSessionService.shared
     
     private var characterCount: Int {
-        sheet.content?.count ?? 0
+        sheet.hybridContent.count
     }
     
     private var readingTime: Int {
@@ -550,17 +550,17 @@ struct MarkdownEditor: View {
             sheet.id = UUID()
             try? viewContext.save()
         }
-        
+
         // Force Core Data refresh to ensure we have the latest data
         viewContext.refresh(sheet, mergeChanges: true)
-        
-        // Load content from the sheet
-        content = sheet.content ?? ""
-        
+
+        // Load content from the sheet using hybrid content accessor
+        content = sheet.hybridContent
+
         // Set default view mode based on visible panes
         let isEditorOnlyMode = !appState.showLibrary && !appState.showSheetList
-        let isNewSheet = (sheet.title?.isEmpty == true || sheet.title == "Untitled") && (sheet.content?.isEmpty == true)
-        
+        let isNewSheet = (sheet.title?.isEmpty == true || sheet.title == "Untitled") && sheet.hybridContent.isEmpty
+
         if isNewSheet {
             // New sheets always start in edit mode
             isReadOnlyMode = false
@@ -607,14 +607,15 @@ struct MarkdownEditor: View {
     
     private func saveContentToSheet(_ targetSheet: Sheet) {
         // Only update modifiedAt if content has actually changed
-        let hasContentChanged = targetSheet.content != content
-        
-        targetSheet.content = content
-        
+        let hasContentChanged = targetSheet.hybridContent != content
+
+        // Use hybrid content accessor for saving
+        targetSheet.hybridContent = content
+
         if hasContentChanged {
             targetSheet.modifiedAt = Date()
         }
-        
+
         do {
             try viewContext.save()
         } catch {
@@ -624,8 +625,8 @@ struct MarkdownEditor: View {
     
     private func updateViewModeForPaneVisibility() {
         let isEditorOnlyMode = !appState.showLibrary && !appState.showSheetList
-        let isNewSheet = (sheet.title?.isEmpty == true || sheet.title == "Untitled") && (sheet.content?.isEmpty == true)
-        
+        let isNewSheet = (sheet.title?.isEmpty == true || sheet.title == "Untitled") && sheet.hybridContent.isEmpty
+
         // Don't change mode for new sheets (they should stay in edit mode)
         if !isNewSheet {
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -681,7 +682,7 @@ struct StatsOverlay: View {
     @Environment(\.colorScheme) private var colorScheme
     
     var characterCount: Int {
-        sheet.content?.count ?? 0
+        sheet.hybridContent.count
     }
     
     var readingTime: Int {

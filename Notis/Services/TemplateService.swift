@@ -86,12 +86,13 @@ class TemplateService: ObservableObject {
         sheet.id = UUID()
         sheet.createdAt = Date()
         sheet.modifiedAt = Date()
-        
+
         // Generate title from template
         sheet.title = generateTitleFromTemplate(template)
-        
-        // Set content from template
-        sheet.content = processTemplateContent(template.content ?? "")
+
+        // Initialize file storage and set content from template
+        sheet.initializeFileStorage()
+        sheet.hybridContent = processTemplateContent(template.content ?? "")
         
         // Set group (target group or selected group or fallback to Inbox)
         if let targetGroupName = template.targetGroupName, !targetGroupName.isEmpty {

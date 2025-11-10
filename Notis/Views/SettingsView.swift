@@ -290,6 +290,15 @@ struct SettingsView: View {
                             Spacer()
                         }
                     }
+
+                    NavigationLink(destination: StorageDebugView()) {
+                        HStack {
+                            Image(systemName: "doc.badge.gearshape")
+                                .foregroundColor(.purple)
+                            Text("File Storage Debug")
+                            Spacer()
+                        }
+                    }
                 }
                 
                 

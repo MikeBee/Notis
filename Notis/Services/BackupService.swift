@@ -371,7 +371,7 @@ class BackupService: ObservableObject {
             BackupData.SheetBackup(
                 id: sheet.id ?? UUID(),
                 title: sheet.title,
-                content: sheet.content,
+                content: sheet.hybridContent,
                 preview: sheet.preview,
                 groupId: sheet.group?.id,
                 wordCount: sheet.wordCount,
@@ -808,7 +808,9 @@ class BackupService: ObservableObject {
                         let sheet = Sheet(context: self.context)
                         sheet.id = sheetBackup.id
                         sheet.title = sheetBackup.title
-                        sheet.content = sheetBackup.content
+                        // Initialize file storage and restore content
+                        sheet.initializeFileStorage()
+                        sheet.hybridContent = sheetBackup.content ?? ""
                         sheet.preview = sheetBackup.preview
                         sheet.wordCount = sheetBackup.wordCount
                         sheet.goalCount = sheetBackup.goalCount
