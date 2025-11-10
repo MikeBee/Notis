@@ -548,10 +548,18 @@ class FileStorageService {
                 } else {
                     // File doesn't exist at old location - check for Core Data content
                     print("⚠️ File not found at old location: \(oldURL.lastPathComponent)")
+                    print("   Sheet title: \(sheet.title ?? "Untitled")")
+
+                    // Debug: Check Core Data content
+                    let hasContent = sheet.content != nil
+                    let isEmpty = sheet.content?.isEmpty ?? true
+                    print("   Core Data content exists: \(hasContent)")
+                    print("   Core Data content is empty: \(isEmpty)")
+                    print("   Content length: \(sheet.content?.count ?? 0)")
 
                     if let content = sheet.content, !content.isEmpty {
                         // Recreate file from Core Data content
-                        print("   → Attempting to recreate from Core Data content...")
+                        print("   → Attempting to recreate from Core Data content (\(content.count) chars)...")
 
                         if writeContent(content, to: sheet) {
                             // Clear Core Data content after successful file creation
@@ -571,15 +579,15 @@ class FileStorageService {
                         }
                     } else {
                         // No file and no Core Data content - truly missing
-                        print("❌ No Core Data content available to recreate file")
-                        print("   Clearing fileURL to mark as not using file storage")
+                        print("   ❌ No Core Data content available to recreate file")
+                        print("   → Clearing fileURL to mark as not using file storage")
 
                         // Clear the fileURL since file doesn't exist
                         sheet.fileURL = nil
 
                         do {
                             try context.save()
-                            print("✓ Cleared invalid fileURL for sheet: \(sheet.title ?? "Untitled")")
+                            print("   ✓ Cleared invalid fileURL for sheet: \(sheet.title ?? "Untitled")")
                             skippedCount += 1
                         } catch {
                             print("❌ Failed to save after clearing fileURL: \(error)")
