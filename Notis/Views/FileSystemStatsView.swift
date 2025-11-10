@@ -222,7 +222,7 @@ struct FileSystemStatsView: View {
                 lastSyncTime = Date()
                 refreshStats()
 
-                print("✓ Full sync completed: \(stats.filesIndexed) indexed, \(stats.filesUpdated) updated, \(stats.filesRemoved) removed")
+                print("✓ Full sync completed: \(stats.filesAdded) added, \(stats.filesUpdated) updated, \(stats.filesDeleted) deleted")
             }
         }
     }
@@ -238,14 +238,20 @@ struct FileSystemStatsView: View {
                 lastSyncTime = Date()
                 refreshStats()
 
-                print("✓ Quick sync completed: \(stats.filesIndexed) indexed, \(stats.filesUpdated) updated")
+                print("✓ Quick sync completed: \(stats.filesAdded) added, \(stats.filesUpdated) updated")
             }
         }
     }
 
     private func openNotesFolder() {
         let notesDirectory = fileService.getNotesDirectory()
+        #if os(macOS)
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: notesDirectory.path)
+        #else
+        // On iOS, we can't directly open Files app to a specific folder
+        // But the files are in Documents/Notis/Notes which is accessible via Files app
+        print("📁 Notes folder location: \(notesDirectory.path)")
+        #endif
     }
 
     // MARK: - Helpers
@@ -292,89 +298,6 @@ struct StatRow: View {
 }
 
 // MARK: - Extensions
-
-extension NotesIndexService {
-    func getAllNotes() -> [NoteMetadata] {
-        var notes: [NoteMetadata] = []
-
-        let query = "SELECT * FROM notes ORDER BY modified DESC"
-
-        var statement: OpaquePointer?
-        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            while sqlite3_step(statement) == SQLITE_ROW {
-                if let note = parseNoteFromStatement(statement) {
-                    notes.append(note)
-                }
-            }
-        }
-        sqlite3_finalize(statement)
-
-        return notes
-    }
-
-    private func parseNoteFromStatement(_ statement: OpaquePointer?) -> NoteMetadata? {
-        guard let statement = statement else { return nil }
-
-        guard let uuidCStr = sqlite3_column_text(statement, 0),
-              let titleCStr = sqlite3_column_text(statement, 1) else {
-            return nil
-        }
-
-        let uuid = String(cString: uuidCStr)
-        let title = String(cString: titleCStr)
-
-        // Parse tags
-        var tags: [String] = []
-        if let tagsCStr = sqlite3_column_text(statement, 2) {
-            let tagsString = String(cString: tagsCStr)
-            tags = tagsString.split(separator: ",").map { String($0) }
-        }
-
-        // Parse dates
-        let createdTimestamp = sqlite3_column_double(statement, 3)
-        let modifiedTimestamp = sqlite3_column_double(statement, 4)
-        let created = Date(timeIntervalSince1970: createdTimestamp)
-        let modified = Date(timeIntervalSince1970: modifiedTimestamp)
-
-        // Other fields
-        let progress = sqlite3_column_double(statement, 5)
-
-        var status = "draft"
-        if let statusCStr = sqlite3_column_text(statement, 6) {
-            status = String(cString: statusCStr)
-        }
-
-        var path: String?
-        if let pathCStr = sqlite3_column_text(statement, 7) {
-            path = String(cString: pathCStr)
-        }
-
-        var wordCount: Int?
-        let wc = sqlite3_column_int(statement, 8)
-        if wc > 0 {
-            wordCount = Int(wc)
-        }
-
-        var charCount: Int?
-        let cc = sqlite3_column_int(statement, 9)
-        if cc > 0 {
-            charCount = Int(cc)
-        }
-
-        return NoteMetadata(
-            uuid: uuid,
-            title: title,
-            tags: tags,
-            created: created,
-            modified: modified,
-            progress: progress,
-            status: status,
-            path: path,
-            wordCount: wordCount,
-            charCount: charCount
-        )
-    }
-}
 
 extension FileSyncService {
     var lastSyncTime: Date? {
