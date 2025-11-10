@@ -215,6 +215,7 @@ class FileStorageService {
     /// Write content to file
     /// Creates the file if it doesn't exist
     /// Handles file renames/moves when title or group changes
+    /// Includes annotations and notes in markdown format
     /// Updates sheet's fileURL if successful
     @discardableResult
     func writeContent(_ content: String, to sheet: Sheet) -> Bool {
@@ -249,9 +250,12 @@ class FileStorageService {
             }
         }
 
+        // Build full markdown content including annotations and notes
+        let fullContent = buildFullMarkdownContent(content, for: sheet)
+
         // Write content to file
         do {
-            try content.write(to: newURL, atomically: true, encoding: .utf8)
+            try fullContent.write(to: newURL, atomically: true, encoding: .utf8)
 
             // Update sheet's fileURL
             sheet.fileURL = newURL.path
@@ -261,6 +265,40 @@ class FileStorageService {
             print("❌ Failed to write file for sheet \(sheet.title ?? "Untitled"): \(error)")
             return false
         }
+    }
+
+    /// Build full markdown content including annotations and notes
+    private func buildFullMarkdownContent(_ baseContent: String, for sheet: Sheet) -> String {
+        var markdown = baseContent
+
+        // Add annotations if any exist
+        if let annotations = sheet.annotations?.allObjects as? [Annotation], !annotations.isEmpty {
+            markdown += "\n\n---\n\n"
+            markdown += "## Annotations\n\n"
+
+            for annotation in annotations.sorted(by: { ($0.position) < ($1.position) }) {
+                if let annotatedText = annotation.annotatedText, !annotatedText.isEmpty {
+                    markdown += "### \(annotatedText)\n\n"
+                }
+                if let content = annotation.content, !content.isEmpty {
+                    markdown += "\(content)\n\n"
+                }
+            }
+        }
+
+        // Add notes if any exist
+        if let notes = sheet.notes?.allObjects as? [Note], !notes.isEmpty {
+            markdown += "\n\n---\n\n"
+            markdown += "## Notes\n\n"
+
+            for note in notes.sorted(by: { ($0.sortOrder) < ($1.sortOrder) }) {
+                if let content = note.content, !content.isEmpty {
+                    markdown += "- \(content)\n"
+                }
+            }
+        }
+
+        return markdown
     }
 
     /// Delete file for a sheet
