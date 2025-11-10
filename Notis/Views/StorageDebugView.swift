@@ -97,8 +97,46 @@ struct StorageDebugView: View {
                 Text(baseDirectory)
                     .font(.caption)
                     .foregroundColor(.secondary)
-                    .lineLimit(3)
+                    .lineLimit(5)
                     .truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+
+            // File Listing
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Files in Directory")
+                    .font(.headline)
+
+                if let files = listFiles() {
+                    if files.isEmpty {
+                        Text("No files found")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(files.prefix(10), id: \.self) { file in
+                                    Text(file)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                if files.count > 10 {
+                                    Text("... and \(files.count - 10) more")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 150)
+                    }
+                } else {
+                    Text("Directory doesn't exist")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
             }
             .padding()
             .background(Color(.systemGray6))
@@ -136,6 +174,25 @@ struct StorageDebugView: View {
         .padding()
         .onAppear {
             refreshStats()
+        }
+    }
+
+    private func listFiles() -> [String]? {
+        let sheetsDir = FileStorageService.shared.getSheetsDirectory()
+        let fileManager = FileManager.default
+
+        // Check if directory exists
+        guard fileManager.fileExists(atPath: sheetsDir.path) else {
+            return nil
+        }
+
+        // List files
+        do {
+            let contents = try fileManager.contentsOfDirectory(at: sheetsDir, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])
+            return contents.map { $0.lastPathComponent }.sorted()
+        } catch {
+            print("❌ Failed to list files: \(error)")
+            return []
         }
     }
 
