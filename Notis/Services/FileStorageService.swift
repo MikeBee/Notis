@@ -613,7 +613,7 @@ class FileStorageService {
     // MARK: - Diagnostics
 
     /// Get storage statistics
-    func getStorageStats(context: NSManagedObjectContext) -> (total: Int, fileStorage: Int, coreData: Int, hybrid: Int) {
+    func getStorageStats(context: NSManagedObjectContext) -> (total: Int, fileStorage: Int, coreData: Int, hybrid: Int, noStorage: Int) {
         let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
 
         do {
@@ -623,6 +623,7 @@ class FileStorageService {
             var fileStorage = 0
             var coreData = 0
             var hybrid = 0
+            var noStorage = 0
 
             for sheet in sheets {
                 let hasFileURL = sheet.fileURL != nil && !sheet.fileURL!.isEmpty
@@ -634,14 +635,17 @@ class FileStorageService {
                     fileStorage += 1
                 } else if hasContent {
                     coreData += 1
+                } else {
+                    // Sheet has neither fileURL nor Core Data content
+                    noStorage += 1
                 }
             }
 
-            return (total, fileStorage, coreData, hybrid)
+            return (total, fileStorage, coreData, hybrid, noStorage)
 
         } catch {
             print("❌ Failed to fetch sheets for stats: \(error)")
-            return (0, 0, 0, 0)
+            return (0, 0, 0, 0, 0)
         }
     }
 
