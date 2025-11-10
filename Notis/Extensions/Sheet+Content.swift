@@ -29,6 +29,9 @@ extension Sheet {
             return content ?? ""
         }
         set {
+            // Don't create files for empty content
+            let trimmedContent = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
             // If sheet already has a fileURL, write to file
             if let fileURLString = fileURL, !fileURLString.isEmpty {
                 FileStorageService.shared.writeContent(newValue, to: self)
@@ -39,9 +42,14 @@ extension Sheet {
                 content = newValue
                 updateMetadata(with: newValue)
             }
-            // New sheet - use file storage
+            // New sheet with actual content - use Core Data (let unifiedContent handle migration)
+            else if !trimmedContent.isEmpty {
+                content = newValue
+                updateMetadata(with: newValue)
+            }
+            // New sheet with no content - just store in Core Data
             else {
-                FileStorageService.shared.writeContent(newValue, to: self)
+                content = newValue
                 updateMetadata(with: newValue)
             }
         }
