@@ -330,9 +330,6 @@ struct SheetListView: View {
             newSheet.goalType = "words"
             newSheet.sortOrder = Int32(targetGroup.sheets?.count ?? 0)
 
-            // Initialize file storage for new sheet
-            newSheet.initializeFileStorage()
-
             do {
                 try viewContext.save()
                 // Select the new sheet and clear any essential selection
@@ -847,10 +844,9 @@ struct SheetRowView: View {
             let baseName = sheet.title ?? "Untitled"
             newSheet.title = generateCopyName(baseName)
 
-            // Copy content using hybrid accessor and initialize file storage
-            let contentToCopy = sheet.hybridContent
-            newSheet.initializeFileStorage()
-            newSheet.hybridContent = contentToCopy
+            // Copy content using unified accessor for new markdown storage
+            let contentToCopy = sheet.unifiedContent
+            newSheet.unifiedContent = contentToCopy
 
             newSheet.preview = sheet.preview
             newSheet.group = sheet.group // Ensures duplicate is in same folder

@@ -90,9 +90,8 @@ class TemplateService: ObservableObject {
         // Generate title from template
         sheet.title = generateTitleFromTemplate(template)
 
-        // Initialize file storage and set content from template
-        sheet.initializeFileStorage()
-        sheet.hybridContent = processTemplateContent(template.content ?? "")
+        // Set content from template using unified storage for new markdown system
+        sheet.unifiedContent = processTemplateContent(template.content ?? "")
         
         // Set group (target group or selected group or fallback to Inbox)
         if let targetGroupName = template.targetGroupName, !targetGroupName.isEmpty {

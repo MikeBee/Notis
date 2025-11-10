@@ -214,9 +214,6 @@ struct CommandPalette: View {
             newSheet.modifiedAt = Date()
             newSheet.sortOrder = Int32(selectedGroup.sheets?.count ?? 0)
 
-            // Initialize file storage for new sheet
-            newSheet.initializeFileStorage()
-
             do {
                 try viewContext.save()
                 appState.selectedSheet = newSheet
@@ -240,10 +237,9 @@ struct CommandPalette: View {
             newSheet.id = UUID()
             newSheet.title = (sheet.title ?? "Untitled") + " Copy"
 
-            // Copy content using hybrid accessor and initialize file storage
-            let contentToCopy = sheet.hybridContent
-            newSheet.initializeFileStorage()
-            newSheet.hybridContent = contentToCopy
+            // Copy content using unified accessor for new markdown storage
+            let contentToCopy = sheet.unifiedContent
+            newSheet.unifiedContent = contentToCopy
 
             newSheet.group = sheet.group
             newSheet.createdAt = Date()
