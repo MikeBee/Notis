@@ -398,6 +398,7 @@ class FileStorageService {
     }
 
     /// Migrate all sheets to file storage
+    /// Forces ALL sheets to use file storage, regardless of current state
     func migrateAllSheets(context: NSManagedObjectContext, progressHandler: ((Int, Int) -> Void)? = nil) -> (success: Int, failed: Int) {
         let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
 
@@ -406,25 +407,63 @@ class FileStorageService {
             var successCount = 0
             var failedCount = 0
 
+            print("\n🔄 Starting migration of all sheets to file storage...")
+
             for (index, sheet) in sheets.enumerated() {
-                // Skip if already migrated
-                if sheet.fileURL != nil && !sheet.fileURL!.isEmpty {
+                let title = sheet.title ?? "Untitled"
+
+                // Check current state
+                let hasFileURL = sheet.fileURL != nil && !sheet.fileURL!.isEmpty
+                let hasContent = sheet.content != nil && !sheet.content!.isEmpty
+                let contentLength = sheet.content?.count ?? 0
+
+                print("\n[\(index + 1)/\(sheets.count)] \(title)")
+                print("   FileURL: \(hasFileURL ? "YES" : "NO")")
+                print("   Core Data content: \(contentLength) chars")
+
+                // If already has fileURL and file exists, verify and skip
+                if hasFileURL, fileExists(for: sheet) {
+                    print("   ✓ Already using file storage")
                     successCount += 1
                     progressHandler?(index + 1, sheets.count)
                     continue
                 }
 
-                // Migrate sheet
-                if migrateSheet(sheet, context: context) {
-                    successCount += 1
+                // Generate or regenerate fileURL
+                guard let newFileURL = fileURL(for: sheet) else {
+                    print("   ❌ Cannot generate file URL")
+                    failedCount += 1
+                    progressHandler?(index + 1, sheets.count)
+                    continue
+                }
+
+                // Get content from Core Data or use empty string
+                let contentToWrite = sheet.content ?? ""
+
+                print("   → Migrating to: \(newFileURL.lastPathComponent)")
+
+                // Write content to file
+                if writeContent(contentToWrite, to: sheet) {
+                    // Clear Core Data content to save space
+                    sheet.content = nil
+
+                    do {
+                        try context.save()
+                        print("   ✓ Successfully migrated")
+                        successCount += 1
+                    } catch {
+                        print("   ❌ Failed to save: \(error)")
+                        failedCount += 1
+                    }
                 } else {
+                    print("   ❌ Failed to write file")
                     failedCount += 1
                 }
 
                 progressHandler?(index + 1, sheets.count)
             }
 
-            print("✓ Migration complete: \(successCount) success, \(failedCount) failed")
+            print("\n✓ Migration complete: \(successCount) success, \(failedCount) failed")
             return (successCount, failedCount)
 
         } catch {

@@ -190,6 +190,27 @@ struct StorageDebugView: View {
                     .cornerRadius(10)
                 }
 
+                if stats.coreData > 0 || stats.noStorage > 0 {
+                    Button(action: migrateAllToFiles) {
+                        HStack {
+                            if isMigrating {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "arrow.down.doc")
+                                Text("Migrate ALL Sheets to File Storage")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.green)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+                    .disabled(isMigrating)
+                }
+
                 if integrity.missing > 0 {
                     Button(action: migrateFiles) {
                         HStack {
@@ -199,7 +220,7 @@ struct StorageDebugView: View {
                                     .scaleEffect(0.8)
                             } else {
                                 Image(systemName: "folder.badge.gearshape")
-                                Text("Migrate Old Files to New Structure")
+                                Text("Fix Missing Files")
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -326,6 +347,25 @@ struct StorageDebugView: View {
         }
 
         refreshStats()
+    }
+
+    private func migrateAllToFiles() {
+        isMigrating = true
+        migrationResult = nil
+
+        // Run migration on main thread (Core Data context requirement)
+        DispatchQueue.main.async {
+            let result = FileStorageService.shared.migrateAllSheets(context: self.viewContext)
+
+            self.isMigrating = false
+            self.migrationResult = """
+            Migrated: \(result.success)
+            Failed: \(result.failed)
+            """
+
+            // Refresh stats
+            self.refreshStats()
+        }
     }
 
     private func migrateFiles() {
