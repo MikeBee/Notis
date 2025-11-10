@@ -320,7 +320,7 @@ struct TagNoteRowView: View {
                 }
             }
             .padding()
-            .background(Color(nsColor: .controlBackgroundColor))
+            .background(Color(.systemGray6))
             .cornerRadius(8)
             .contentShape(Rectangle())
         }
