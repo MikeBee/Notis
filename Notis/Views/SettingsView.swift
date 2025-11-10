@@ -309,20 +309,58 @@ struct SettingsView: View {
                         }
                     }
                 }
-                
-                
+
+                Section("Markdown File Browser") {
+                    NavigationLink(destination: FolderBrowserView()) {
+                        HStack {
+                            Image(systemName: "folder.fill")
+                                .foregroundColor(.accentColor)
+                            Text("Browse by Folder")
+                            Spacer()
+                        }
+                    }
+
+                    NavigationLink(destination: TagsBrowserView()) {
+                        HStack {
+                            Image(systemName: "tag.fill")
+                                .foregroundColor(.orange)
+                            Text("Browse by Tag")
+                            Spacer()
+                        }
+                    }
+
+                    NavigationLink(destination: EnhancedSearchView()) {
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.purple)
+                            Text("Full-Text Search")
+                            Spacer()
+                        }
+                    }
+
+                    NavigationLink(destination: FileSystemStatsView()) {
+                        HStack {
+                            Image(systemName: "chart.bar.fill")
+                                .foregroundColor(.green)
+                            Text("Storage Statistics")
+                            Spacer()
+                        }
+                    }
+                }
+
+
                 Section("About") {
                     HStack {
                         Text("Version")
                         Spacer()
-                        Text("0.15")
+                        Text("0.16")
                             .foregroundColor(.secondary)
                     }
 
                     HStack {
                         Text("Build")
                         Spacer()
-                        Text("Phase 4: Fix Empty File Creation")
+                        Text("Phase 5: File Browser & Search UI")
                             .foregroundColor(.secondary)
                             .font(.caption)
                     }
