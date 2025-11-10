@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreData
 #if os(macOS)
 import AppKit
 #else
@@ -160,6 +161,19 @@ class FileSyncService {
 
         print("✓ Sync complete: \(stats.totalChanges) changes")
         printSyncStats(stats)
+
+        return stats
+    }
+
+    /// Perform a full sync and update CoreData sheets with file changes
+    @discardableResult
+    func performFullSyncWithCoreData(context: NSManagedObjectContext) -> SyncStats {
+        // First sync files → SQLite index
+        let stats = performFullSync()
+
+        // Then sync SQLite index → CoreData sheets
+        // This updates CoreData with any external file changes
+        MarkdownCoreDataSync.shared.syncMarkdownToCoreData(context: context)
 
         return stats
     }

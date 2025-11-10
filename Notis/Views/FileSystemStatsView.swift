@@ -215,7 +215,7 @@ struct FileSystemStatsView: View {
         isSyncing = true
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let stats = syncService.performFullSync()
+            let stats = syncService.performFullSyncWithCoreData(context: viewContext)
 
             DispatchQueue.main.async {
                 isSyncing = false
