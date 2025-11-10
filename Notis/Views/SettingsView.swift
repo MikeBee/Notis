@@ -299,6 +299,15 @@ struct SettingsView: View {
                             Spacer()
                         }
                     }
+
+                    NavigationLink(destination: FileBasedStorageTestView()) {
+                        HStack {
+                            Image(systemName: "doc.text.magnifyingglass")
+                                .foregroundColor(.blue)
+                            Text("File-Based Storage Test")
+                            Spacer()
+                        }
+                    }
                 }
                 
                 
@@ -306,15 +315,16 @@ struct SettingsView: View {
                     HStack {
                         Text("Version")
                         Spacer()
-                        Text("1.3")
+                        Text("0.10")
                             .foregroundColor(.secondary)
                     }
-                    
+
                     HStack {
                         Text("Build")
                         Spacer()
-                        Text("1")
+                        Text("Phase 1: YAML + SQLite Index")
                             .foregroundColor(.secondary)
+                            .font(.caption)
                     }
                 }
             }
