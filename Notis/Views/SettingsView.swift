@@ -315,14 +315,14 @@ struct SettingsView: View {
                     HStack {
                         Text("Version")
                         Spacer()
-                        Text("0.12")
+                        Text("0.13")
                             .foregroundColor(.secondary)
                     }
 
                     HStack {
                         Text("Build")
                         Spacer()
-                        Text("Phase 3: CoreData Migration")
+                        Text("Phase 4: Hybrid Storage UI")
                             .foregroundColor(.secondary)
                             .font(.caption)
                     }
