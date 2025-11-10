@@ -195,12 +195,18 @@ class FileSyncService {
     /// Perform a full sync and update CoreData sheets with file changes
     @discardableResult
     func performFullSyncWithCoreData(context: NSManagedObjectContext) -> SyncStats {
+        print("🔄 performFullSyncWithCoreData called - starting full file→SQLite→CoreData sync")
+
         // First sync files → SQLite index
         let stats = performFullSync()
+
+        print("✅ File→SQLite sync complete, now syncing SQLite→CoreData...")
 
         // Then sync SQLite index → CoreData sheets
         // This updates CoreData with any external file changes
         MarkdownCoreDataSync.shared.syncMarkdownToCoreData(context: context)
+
+        print("✅ Full sync with CoreData complete")
 
         return stats
     }
