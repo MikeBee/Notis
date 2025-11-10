@@ -63,6 +63,7 @@ extension Sheet {
         let trimmedContent = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else {
             // Fall back to old storage for empty sheets
+            print("⊘ Sheet has no content, keeping in CoreData: \(title ?? "Untitled")")
             hybridContent = newContent
             return
         }
@@ -75,17 +76,22 @@ extension Sheet {
         // Build metadata from CoreData sheet
         var metadata = buildNoteMetadata()
 
+        print("🔄 Migrating sheet: '\(metadata.title)' with \(trimmedContent.count) chars")
+
         // Auto-generate better title if it's "Untitled" or empty
         if metadata.title.isEmpty || metadata.title == "Untitled" {
-            metadata.title = generateTitleFromContent(trimmedContent)
+            let generatedTitle = generateTitleFromContent(trimmedContent)
+            print("  📝 Auto-generated title: '\(generatedTitle)' from content")
+            metadata.title = generatedTitle
             // Update CoreData title too
-            title = metadata.title
+            title = generatedTitle
         }
 
         // Determine folder path from group hierarchy
         let folderPath = buildFolderPath()
 
         // Create markdown file
+        print("  📄 Creating file: '\(metadata.title).md'")
         let result = MarkdownFileService.shared.createFile(
             title: metadata.title,
             content: newContent,
