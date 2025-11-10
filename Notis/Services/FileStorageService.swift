@@ -25,11 +25,15 @@ class FileStorageService {
     // MARK: - Initialization
 
     private init() {
-        // Get Application Support directory
+        #if os(iOS)
+        // On iOS/iPadOS: Use Documents directory (accessible in Files app)
+        let documentsDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        baseDirectory = documentsDir.appendingPathComponent("Notis", isDirectory: true)
+        #else
+        // On macOS: Use Application Support directory (standard for app data)
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-
-        // Create Notis directory
         baseDirectory = appSupport.appendingPathComponent("Notis", isDirectory: true)
+        #endif
 
         // Create Sheets directory
         sheetsDirectory = baseDirectory.appendingPathComponent("Sheets", isDirectory: true)

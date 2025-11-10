@@ -32,6 +32,7 @@ extension Sheet {
             // If sheet already has a fileURL, write to file
             if let fileURLString = fileURL, !fileURLString.isEmpty {
                 FileStorageService.shared.writeContent(newValue, to: self)
+                updateMetadata(with: newValue)
             }
             // If content exists in Core Data (old sheet), keep using Core Data
             else if content != nil {
@@ -41,6 +42,7 @@ extension Sheet {
             // New sheet - use file storage
             else {
                 FileStorageService.shared.writeContent(newValue, to: self)
+                updateMetadata(with: newValue)
             }
         }
     }

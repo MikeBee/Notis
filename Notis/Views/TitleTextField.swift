@@ -12,10 +12,9 @@ struct TitleTextField: View {
     let font: Font
     let isNewSheet: Bool
     let onReturnOrTab: () -> Void
-    
+
     @State private var internalText: String = ""
-    @State private var hasAppeared = false
-    
+
     var body: some View {
         TextField("Untitled", text: $internalText)
             .font(font)
@@ -28,14 +27,12 @@ struct TitleTextField: View {
                 return .handled
             }
             .onAppear {
-                if !hasAppeared {
-                    hasAppeared = true
-                    // For new sheets, start with empty text so typing replaces "Untitled"
-                    if isNewSheet && text == "Untitled" {
-                        internalText = ""
-                    } else {
-                        internalText = text
-                    }
+                // Initialize internal text from binding
+                // For new sheets, start with empty text so typing replaces "Untitled"
+                if isNewSheet && text == "Untitled" {
+                    internalText = ""
+                } else {
+                    internalText = text
                 }
             }
             .onChange(of: internalText) { _, newValue in
@@ -43,9 +40,14 @@ struct TitleTextField: View {
                 text = newValue.isEmpty && !isNewSheet ? "Untitled" : newValue
             }
             .onChange(of: text) { _, newValue in
-                // Update internal text when binding changes (but not during new sheet setup)
-                if !isNewSheet || newValue != "Untitled" {
-                    internalText = newValue
+                // Update internal text when binding changes from external source
+                // This ensures switching sheets updates the title correctly
+                if newValue != internalText {
+                    if isNewSheet && newValue == "Untitled" {
+                        internalText = ""
+                    } else {
+                        internalText = newValue
+                    }
                 }
             }
     }
