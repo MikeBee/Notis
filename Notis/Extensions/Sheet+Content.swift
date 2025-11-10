@@ -116,10 +116,10 @@ extension Sheet {
         return success
     }
 
-    // MARK: - Private Helpers
+    // MARK: - Internal Helpers
 
     /// Update word count and preview from content
-    private func updateMetadata(with newContent: String) {
+    func updateMetadata(with newContent: String) {
         // Update word count
         let words = newContent.components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
