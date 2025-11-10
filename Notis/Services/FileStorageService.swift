@@ -467,6 +467,7 @@ class FileStorageService {
 
     /// Migrate old UUID-based files to new title-based folder structure
     /// This moves files from {UUID}.md to {GroupPath}/{Title}.md
+    /// Also recreates missing files from Core Data content if available
     func migrateToNewFileStructure(context: NSManagedObjectContext, progressHandler: ((Int, Int) -> Void)? = nil) -> (success: Int, failed: Int, skipped: Int) {
         let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
 
@@ -489,13 +490,6 @@ class FileStorageService {
 
                 let oldURL = URL(fileURLWithPath: oldPath)
 
-                // Check if file exists at old location
-                guard fileManager.fileExists(atPath: oldURL.path) else {
-                    print("⚠️ File not found at old location: \(oldURL.lastPathComponent)")
-                    failedCount += 1
-                    continue
-                }
-
                 // Generate new URL based on current title and group
                 guard let newURL = fileURL(for: sheet) else {
                     print("❌ Cannot generate new URL for sheet: \(sheet.title ?? "Untitled")")
@@ -505,48 +499,98 @@ class FileStorageService {
 
                 // Skip if already in correct location
                 if oldURL.path == newURL.path {
-                    skippedCount += 1
-                    continue
+                    // Verify file exists at correct location
+                    if fileManager.fileExists(atPath: newURL.path) {
+                        skippedCount += 1
+                        continue
+                    }
                 }
 
-                // Move file to new location
-                do {
-                    // Ensure destination directory exists
-                    let newDir = newURL.deletingLastPathComponent()
-                    if !fileManager.fileExists(atPath: newDir.path) {
-                        try fileManager.createDirectory(at: newDir, withIntermediateDirectories: true)
+                // Check if file exists at old location
+                if fileManager.fileExists(atPath: oldURL.path) {
+                    // Move file to new location
+                    do {
+                        // Ensure destination directory exists
+                        let newDir = newURL.deletingLastPathComponent()
+                        if !fileManager.fileExists(atPath: newDir.path) {
+                            try fileManager.createDirectory(at: newDir, withIntermediateDirectories: true)
+                        }
+
+                        // Handle existing file at destination
+                        if fileManager.fileExists(atPath: newURL.path) {
+                            print("⚠️ File already exists at new location: \(newURL.lastPathComponent)")
+                            // Delete old duplicate
+                            try fileManager.removeItem(at: oldURL)
+                            skippedCount += 1
+                            continue
+                        }
+
+                        // Move the file
+                        try fileManager.moveItem(at: oldURL, to: newURL)
+
+                        // Update fileURL in Core Data
+                        sheet.fileURL = newURL.path
+
+                        // Save context
+                        try context.save()
+
+                        print("✓ Migrated: \(oldURL.lastPathComponent) → \(newURL.lastPathComponent)")
+                        successCount += 1
+
+                        // Clean up empty old directory
+                        let oldDir = oldURL.deletingLastPathComponent()
+                        cleanupEmptyDirectories(startingAt: oldDir)
+
+                    } catch {
+                        print("❌ Failed to migrate \(sheet.title ?? "Untitled"): \(error)")
+                        failedCount += 1
                     }
+                } else {
+                    // File doesn't exist at old location - check for Core Data content
+                    print("⚠️ File not found at old location: \(oldURL.lastPathComponent)")
 
-                    // Handle existing file at destination
-                    if fileManager.fileExists(atPath: newURL.path) {
-                        // If destination exists and is different, add a number suffix
-                        print("⚠️ File already exists at new location, will create unique name")
+                    if let content = sheet.content, !content.isEmpty {
+                        // Recreate file from Core Data content
+                        print("   → Attempting to recreate from Core Data content...")
+
+                        if writeContent(content, to: sheet) {
+                            // Clear Core Data content after successful file creation
+                            sheet.content = nil
+
+                            do {
+                                try context.save()
+                                print("✓ Recreated file from Core Data: \(newURL.lastPathComponent)")
+                                successCount += 1
+                            } catch {
+                                print("❌ Failed to save after recreating file: \(error)")
+                                failedCount += 1
+                            }
+                        } else {
+                            print("❌ Failed to recreate file from Core Data")
+                            failedCount += 1
+                        }
+                    } else {
+                        // No file and no Core Data content - truly missing
+                        print("❌ No Core Data content available to recreate file")
+                        print("   Clearing fileURL to mark as not using file storage")
+
+                        // Clear the fileURL since file doesn't exist
+                        sheet.fileURL = nil
+
+                        do {
+                            try context.save()
+                            print("✓ Cleared invalid fileURL for sheet: \(sheet.title ?? "Untitled")")
+                            skippedCount += 1
+                        } catch {
+                            print("❌ Failed to save after clearing fileURL: \(error)")
+                            failedCount += 1
+                        }
                     }
-
-                    // Move the file
-                    try fileManager.moveItem(at: oldURL, to: newURL)
-
-                    // Update fileURL in Core Data
-                    sheet.fileURL = newURL.path
-
-                    // Save context
-                    try context.save()
-
-                    print("✓ Migrated: \(oldURL.lastPathComponent) → \(newURL.lastPathComponent)")
-                    successCount += 1
-
-                    // Clean up empty old directory
-                    let oldDir = oldURL.deletingLastPathComponent()
-                    cleanupEmptyDirectories(startingAt: oldDir)
-
-                } catch {
-                    print("❌ Failed to migrate \(sheet.title ?? "Untitled"): \(error)")
-                    failedCount += 1
                 }
             }
 
             print("\n✓ File structure migration complete:")
-            print("  - Migrated: \(successCount)")
+            print("  - Migrated/Recreated: \(successCount)")
             print("  - Failed: \(failedCount)")
             print("  - Skipped: \(skippedCount)")
 
