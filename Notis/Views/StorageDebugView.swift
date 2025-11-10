@@ -190,6 +190,27 @@ struct StorageDebugView: View {
                     .cornerRadius(10)
                 }
 
+                if stats.coreData > 0 || stats.noStorage > 0 {
+                    Button(action: migrateAllToFiles) {
+                        HStack {
+                            if isMigrating {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "arrow.down.doc")
+                                Text("Migrate ALL Sheets to File Storage")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.green)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+                    .disabled(isMigrating)
+                }
+
                 if integrity.missing > 0 {
                     Button(action: migrateFiles) {
                         HStack {
@@ -199,7 +220,7 @@ struct StorageDebugView: View {
                                     .scaleEffect(0.8)
                             } else {
                                 Image(systemName: "folder.badge.gearshape")
-                                Text("Migrate Old Files to New Structure")
+                                Text("Fix Missing Files")
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -328,6 +349,25 @@ struct StorageDebugView: View {
         refreshStats()
     }
 
+    private func migrateAllToFiles() {
+        isMigrating = true
+        migrationResult = nil
+
+        // Run migration on main thread (Core Data context requirement)
+        DispatchQueue.main.async {
+            let result = FileStorageService.shared.migrateAllSheets(context: self.viewContext)
+
+            self.isMigrating = false
+            self.migrationResult = """
+            Migrated: \(result.success)
+            Failed: \(result.failed)
+            """
+
+            // Refresh stats
+            self.refreshStats()
+        }
+    }
+
     private func migrateFiles() {
         isMigrating = true
         migrationResult = nil
@@ -367,36 +407,76 @@ struct StorageDebugView: View {
         let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
         if let sheets = try? viewContext.fetch(fetchRequest) {
             print("\n📊 Individual Sheet Details:")
-            for (index, sheet) in sheets.enumerated() {
-                let title = sheet.title ?? "Untitled"
-                let storageType = sheet.storageType
-                let hasContent = !sheet.hybridContent.isEmpty
-                print("\n\(index + 1). \(title)")
-                print("   Storage: \(storageType)")
-                print("   Has Content: \(hasContent)")
-                print("   Word Count: \(sheet.wordCount)")
 
-                if let fileURLStored = sheet.fileURL {
-                    print("   Stored fileURL: \(fileURLStored)")
-                    let storedExists = FileManager.default.fileExists(atPath: fileURLStored)
-                    print("   File exists at stored path: \(storedExists ? "✓ YES" : "✗ NO")")
+            // Group by storage type
+            var fileStorageSheets: [Sheet] = []
+            var coreDataSheets: [Sheet] = []
+            var hybridSheets: [Sheet] = []
+            var noStorageSheets: [Sheet] = []
+
+            for sheet in sheets {
+                let hasFileURL = sheet.fileURL != nil && !sheet.fileURL!.isEmpty
+                let hasContent = sheet.content != nil && !sheet.content!.isEmpty
+
+                if hasFileURL && hasContent {
+                    hybridSheets.append(sheet)
+                } else if hasFileURL {
+                    fileStorageSheets.append(sheet)
+                } else if hasContent {
+                    coreDataSheets.append(sheet)
+                } else {
+                    noStorageSheets.append(sheet)
                 }
+            }
 
-                if let generatedURL = FileStorageService.shared.fileURL(for: sheet) {
-                    print("   Generated URL: \(generatedURL.path)")
-                    let generatedExists = FileManager.default.fileExists(atPath: generatedURL.path)
-                    print("   File exists at generated path: \(generatedExists ? "✓ YES" : "✗ NO")")
-
-                    // Check if paths match
-                    if let storedPath = sheet.fileURL {
-                        if storedPath == generatedURL.path {
-                            print("   ✓ Paths match!")
-                        } else {
-                            print("   ⚠️ PATH MISMATCH!")
-                            print("      Stored:    \(storedPath)")
-                            print("      Generated: \(generatedURL.path)")
-                        }
+            if !fileStorageSheets.isEmpty {
+                print("\n✅ FILE STORAGE ONLY (\(fileStorageSheets.count)):")
+                for (index, sheet) in fileStorageSheets.enumerated() {
+                    let title = sheet.title ?? "Untitled"
+                    print("\n\(index + 1). \(title)")
+                    print("   Word Count: \(sheet.wordCount)")
+                    if let fileURL = sheet.fileURL {
+                        print("   File: \(URL(fileURLWithPath: fileURL).lastPathComponent)")
+                        let exists = FileManager.default.fileExists(atPath: fileURL)
+                        print("   Exists: \(exists ? "✓ YES" : "✗ NO")")
                     }
+                }
+            }
+
+            if !coreDataSheets.isEmpty {
+                print("\n💾 CORE DATA ONLY (\(coreDataSheets.count)):")
+                for (index, sheet) in coreDataSheets.enumerated() {
+                    let title = sheet.title ?? "Untitled"
+                    print("\n\(index + 1). \(title)")
+                    print("   Word Count: \(sheet.wordCount)")
+                    print("   Content Length: \(sheet.content?.count ?? 0) chars")
+                }
+            }
+
+            if !hybridSheets.isEmpty {
+                print("\n⚠️ HYBRID (BOTH) (\(hybridSheets.count)):")
+                for (index, sheet) in hybridSheets.enumerated() {
+                    let title = sheet.title ?? "Untitled"
+                    print("\n\(index + 1). \(title)")
+                    print("   Word Count: \(sheet.wordCount)")
+                    print("   Core Data Length: \(sheet.content?.count ?? 0) chars")
+                    if let fileURL = sheet.fileURL {
+                        print("   File: \(URL(fileURLWithPath: fileURL).lastPathComponent)")
+                    }
+                }
+            }
+
+            if !noStorageSheets.isEmpty {
+                print("\n❌ NO STORAGE (EMPTY) (\(noStorageSheets.count)):")
+                for (index, sheet) in noStorageSheets.enumerated() {
+                    let title = sheet.title ?? "Untitled"
+                    let group = sheet.group?.name ?? "No Group"
+                    print("\n\(index + 1). \(title)")
+                    print("   Group: \(group)")
+                    print("   Created: \(sheet.createdAt ?? Date())")
+                    print("   Modified: \(sheet.modifiedAt ?? Date())")
+                    print("   ⚠️ This sheet has no content in Core Data or file storage")
+                    print("   → Content was lost or never existed")
                 }
             }
         }
