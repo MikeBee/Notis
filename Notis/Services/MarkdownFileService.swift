@@ -200,10 +200,9 @@ class MarkdownFileService {
 
             var metadata = parsed.metadata
 
-            // Ensure path is set
-            if metadata.path == nil {
-                metadata.path = relativePath(for: url)
-            }
+            // Always use actual file location as source of truth for path
+            // This handles external file renames where YAML path may be stale
+            metadata.path = relativePath(for: url)
 
             return (metadata, parsed.content)
         } catch {

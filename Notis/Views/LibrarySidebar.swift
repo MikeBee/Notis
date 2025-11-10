@@ -283,7 +283,15 @@ struct LibrarySidebar: View {
             do {
                 try viewContext.save()
                 appState.selectedGroup = newGroup
-                
+
+                // Create the actual filesystem folder
+                let folderPath = newGroup.folderPath()
+                if MarkdownFileService.shared.createFolder(path: folderPath) {
+                    print("✓ Created folder: \(folderPath)")
+                } else {
+                    print("⚠️ Failed to create folder: \(folderPath)")
+                }
+
                 // Reset dialog state
                 newGroupName = ""
                 newGroupIcon = "folder"
@@ -805,7 +813,15 @@ struct GroupRowView: View {
             do {
                 try viewContext.save()
                 appState.selectedGroup = subgroup
-                
+
+                // Create the actual filesystem folder
+                let folderPath = subgroup.folderPath()
+                if MarkdownFileService.shared.createFolder(path: folderPath) {
+                    print("✓ Created folder: \(folderPath)")
+                } else {
+                    print("⚠️ Failed to create folder: \(folderPath)")
+                }
+
                 // Reset dialog state
                 newSubgroupName = ""
                 newSubgroupIcon = "folder"
