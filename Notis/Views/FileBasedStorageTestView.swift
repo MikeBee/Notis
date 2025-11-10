@@ -514,7 +514,7 @@ struct FileBasedStorageTestView: View {
         statusMessage = "Performing full sync..."
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let stats = syncService.performFullSync()
+            let stats = syncService.performFullSyncWithCoreData(context: viewContext)
 
             DispatchQueue.main.async {
                 self.isSyncing = false
