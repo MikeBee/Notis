@@ -186,7 +186,7 @@ struct EnhancedSearchView: View {
 
                         // Results list
                         ForEach(searchResults, id: \.uuid) { note in
-                            SearchResultRow(note: note, query: searchQuery) {
+                            MarkdownSearchResultRow(note: note, query: searchQuery) {
                                 selectNote(note)
                             }
                         }
@@ -268,9 +268,9 @@ struct EnhancedSearchView: View {
     }
 }
 
-// MARK: - Search Result Row
+// MARK: - Markdown Search Result Row
 
-struct SearchResultRow: View {
+struct MarkdownSearchResultRow: View {
     let note: NoteMetadata
     let query: String
     let onSelect: () -> Void
