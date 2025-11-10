@@ -244,22 +244,19 @@ struct StorageDebugView: View {
         isMigrating = true
         migrationResult = nil
 
-        // Run migration in background
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = FileStorageService.shared.migrateToNewFileStructure(context: viewContext)
+        // Run migration on main thread (Core Data context requirement)
+        DispatchQueue.main.async {
+            let result = FileStorageService.shared.migrateToNewFileStructure(context: self.viewContext)
 
-            // Update UI on main thread
-            DispatchQueue.main.async {
-                isMigrating = false
-                migrationResult = """
-                Migrated: \(result.success)
-                Failed: \(result.failed)
-                Skipped: \(result.skipped)
-                """
+            self.isMigrating = false
+            self.migrationResult = """
+            Migrated: \(result.success)
+            Failed: \(result.failed)
+            Skipped: \(result.skipped)
+            """
 
-                // Refresh stats
-                refreshStats()
-            }
+            // Refresh stats
+            self.refreshStats()
         }
     }
 
@@ -278,24 +275,41 @@ struct StorageDebugView: View {
         print("✓ Valid: \(valid)")
         print("✗ Missing: \(missing)")
 
-        // List individual sheets
+        // List individual sheets with detailed info
         let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
         if let sheets = try? viewContext.fetch(fetchRequest) {
             print("\n📊 Individual Sheet Details:")
-            for (index, sheet) in sheets.prefix(10).enumerated() {
+            for (index, sheet) in sheets.enumerated() {
                 let title = sheet.title ?? "Untitled"
                 let storageType = sheet.storageType
                 let hasContent = !sheet.hybridContent.isEmpty
-                print("\(index + 1). \(title)")
+                print("\n\(index + 1). \(title)")
                 print("   Storage: \(storageType)")
                 print("   Has Content: \(hasContent)")
-                if let fileURL = sheet.fileURL {
-                    print("   File: \(fileURL)")
-                }
-            }
+                print("   Word Count: \(sheet.wordCount)")
 
-            if sheets.count > 10 {
-                print("   ... and \(sheets.count - 10) more sheets")
+                if let fileURLStored = sheet.fileURL {
+                    print("   Stored fileURL: \(fileURLStored)")
+                    let storedExists = FileManager.default.fileExists(atPath: fileURLStored)
+                    print("   File exists at stored path: \(storedExists ? "✓ YES" : "✗ NO")")
+                }
+
+                if let generatedURL = FileStorageService.shared.fileURL(for: sheet) {
+                    print("   Generated URL: \(generatedURL.path)")
+                    let generatedExists = FileManager.default.fileExists(atPath: generatedURL.path)
+                    print("   File exists at generated path: \(generatedExists ? "✓ YES" : "✗ NO")")
+
+                    // Check if paths match
+                    if let storedPath = sheet.fileURL {
+                        if storedPath == generatedURL.path {
+                            print("   ✓ Paths match!")
+                        } else {
+                            print("   ⚠️ PATH MISMATCH!")
+                            print("      Stored:    \(storedPath)")
+                            print("      Generated: \(generatedURL.path)")
+                        }
+                    }
+                }
             }
         }
 
