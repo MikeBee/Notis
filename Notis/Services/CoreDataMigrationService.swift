@@ -116,7 +116,7 @@ class CoreDataMigrationService {
         // Step 1: Create backup if requested
         if createBackup {
             print("💾 Creating backup before migration...")
-            backupPath = createBackup(context: context)
+            backupPath = performBackup(context: context)
             if backupPath == nil {
                 print("⚠️ Backup creation failed, but continuing with migration")
             } else {
@@ -329,7 +329,7 @@ class CoreDataMigrationService {
     // MARK: - Backup
 
     /// Create a backup of the CoreData database
-    private func createBackup(context: NSManagedObjectContext) -> String? {
+    private func performBackup(context: NSManagedObjectContext) -> String? {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd_HHmmss"
         let timestamp = dateFormatter.string(from: Date())
