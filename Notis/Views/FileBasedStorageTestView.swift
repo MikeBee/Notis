@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// Test view for Phase 1: YAML frontmatter + SQLite indexing
+/// Test view for Phase 1-2: YAML frontmatter + SQLite indexing + File Sync
 struct FileBasedStorageTestView: View {
     @State private var notes: [NoteMetadata] = []
     @State private var searchQuery: String = ""
@@ -17,9 +17,14 @@ struct FileBasedStorageTestView: View {
     @State private var allFolders: [String] = []
     @State private var statusMessage: String = ""
     @State private var notesDirectory: String = ""
+    @State private var isSyncing: Bool = false
+    @State private var isMonitoring: Bool = false
+    @State private var lastSyncDate: Date?
+    @State private var syncStats: FileSyncService.SyncStats?
 
     private let markdownService = MarkdownFileService.shared
     private let indexService = NotesIndexService.shared
+    private let syncService = FileSyncService.shared
 
     var body: some View {
         ScrollView {
@@ -28,9 +33,131 @@ struct FileBasedStorageTestView: View {
                     .font(.title2)
                     .fontWeight(.bold)
 
+                Text("Phase 2: File Sync & Monitoring")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
                 Divider()
 
-                // Statistics
+                // Sync Status
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Sync Status")
+                        .font(.headline)
+
+                    HStack {
+                        Text("Monitoring:")
+                        Spacer()
+                        Text(isMonitoring ? "Active" : "Inactive")
+                            .foregroundColor(isMonitoring ? .green : .secondary)
+                            .fontWeight(.semibold)
+                    }
+
+                    if let lastSync = lastSyncDate {
+                        HStack {
+                            Text("Last Sync:")
+                            Spacer()
+                            Text(lastSync, style: .relative)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    if let stats = syncStats, stats.totalChanges > 0 {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Last Sync Changes:")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            if stats.filesAdded > 0 {
+                                Text("  • Files added: \(stats.filesAdded)")
+                                    .font(.caption2)
+                                    .foregroundColor(.green)
+                            }
+                            if stats.indexEntriesUpdated > 0 {
+                                Text("  • Index updated: \(stats.indexEntriesUpdated)")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                            }
+                            if stats.indexEntriesDeleted > 0 {
+                                Text("  • Index deleted: \(stats.indexEntriesDeleted)")
+                                    .font(.caption2)
+                                    .foregroundColor(.red)
+                            }
+                            if stats.conflicts > 0 {
+                                Text("  • Conflicts resolved: \(stats.conflicts)")
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+                            }
+                            if stats.errors > 0 {
+                                Text("  • Errors: \(stats.errors)")
+                                    .font(.caption2)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+
+                // Sync Actions
+                VStack(spacing: 12) {
+                    Text("Sync Actions")
+                        .font(.headline)
+
+                    HStack(spacing: 12) {
+                        Button(action: performFullSync) {
+                            HStack {
+                                if isSyncing {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                    Text("Full Sync")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                        .disabled(isSyncing)
+
+                        Button(action: performQuickSync) {
+                            HStack {
+                                if isSyncing {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "bolt.circle.fill")
+                                    Text("Quick Sync")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.purple)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                        .disabled(isSyncing)
+                    }
+
+                    Button(action: toggleMonitoring) {
+                        HStack {
+                            Image(systemName: isMonitoring ? "stop.circle.fill" : "play.circle.fill")
+                            Text(isMonitoring ? "Stop Monitoring" : "Start Monitoring")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(isMonitoring ? Color.red : Color.green)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+                }
+
+                // Index Statistics
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Index Statistics")
                         .font(.headline)
@@ -96,7 +223,7 @@ struct FileBasedStorageTestView: View {
                         .cornerRadius(8)
                 }
 
-                // Actions
+                // Test Actions
                 VStack(spacing: 12) {
                     Text("Test Actions")
                         .font(.headline)
@@ -108,7 +235,7 @@ struct FileBasedStorageTestView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
+                        .background(Color.orange)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                     }
@@ -121,18 +248,6 @@ struct FileBasedStorageTestView: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                    }
-
-                    Button(action: syncFilesToIndex) {
-                        HStack {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                            Text("Sync Files to Index")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.orange)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                     }
@@ -261,10 +376,70 @@ struct FileBasedStorageTestView: View {
         .onAppear {
             loadStats()
             loadAllNotes()
+            updateSyncStatus()
         }
     }
 
-    // MARK: - Actions
+    // MARK: - Sync Actions
+
+    private func performFullSync() {
+        isSyncing = true
+        statusMessage = "Performing full sync..."
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let stats = syncService.performFullSync()
+
+            DispatchQueue.main.async {
+                self.isSyncing = false
+                self.syncStats = stats
+                self.lastSyncDate = syncService.lastSyncDate
+                self.statusMessage = "✓ Full sync complete: \(stats.totalChanges) changes"
+                self.loadStats()
+                self.loadAllNotes()
+            }
+        }
+    }
+
+    private func performQuickSync() {
+        isSyncing = true
+        statusMessage = "Performing quick sync..."
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let stats = syncService.performQuickSync()
+
+            DispatchQueue.main.async {
+                self.isSyncing = false
+                self.syncStats = stats
+                self.lastSyncDate = syncService.lastSyncDate
+                self.statusMessage = "✓ Quick sync complete: \(stats.totalChanges) changes"
+                self.loadStats()
+                self.loadAllNotes()
+            }
+        }
+    }
+
+    private func toggleMonitoring() {
+        if isMonitoring {
+            syncService.stopMonitoring()
+            isMonitoring = false
+            statusMessage = "Monitoring stopped"
+        } else {
+            syncService.startMonitoring()
+            isMonitoring = true
+            #if os(macOS)
+            statusMessage = "File watcher started (macOS)"
+            #else
+            statusMessage = "Background sync started (30s interval)"
+            #endif
+        }
+    }
+
+    private func updateSyncStatus() {
+        lastSyncDate = syncService.lastSyncDate
+        syncStats = syncService.lastSyncStats
+    }
+
+    // MARK: - Test Actions
 
     private func createTestNotes() {
         let testNotes = [
@@ -318,24 +493,6 @@ struct FileBasedStorageTestView: View {
 
         searchResults = indexService.search(query: searchQuery, limit: 20)
         statusMessage = "Found \(searchResults.count) results for '\(searchQuery)'"
-    }
-
-    private func syncFilesToIndex() {
-        // Scan all markdown files
-        let files = markdownService.scanAllFiles()
-        var syncedCount = 0
-
-        for fileURL in files {
-            if let (metadata, _) = markdownService.readFile(at: fileURL) {
-                if indexService.upsertNote(metadata) {
-                    syncedCount += 1
-                }
-            }
-        }
-
-        statusMessage = "✓ Synced \(syncedCount) files to index"
-        loadStats()
-        loadAllNotes()
     }
 }
 
