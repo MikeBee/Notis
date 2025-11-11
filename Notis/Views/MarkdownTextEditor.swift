@@ -152,21 +152,21 @@ struct MarkdownHighlightedText: View {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
             return (false, AttributedString(text))
         }
-        
+
         let nsText = text as NSString
         let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsText.length))
-        
+
         if matches.isEmpty {
             return (false, AttributedString(text))
         }
-        
+
         var fullAttributed = AttributedString()
         var lastLocation = 0
-        
+
         for match in matches {
             let fullRange = match.range
             let textRange = match.range(at: 1) // Capture group - text inside braces
-            
+
             // Add text before the annotation
             if fullRange.location > lastLocation {
                 let beforeRange = NSRange(location: lastLocation, length: fullRange.location - lastLocation)
@@ -176,7 +176,7 @@ struct MarkdownHighlightedText: View {
                 beforeAttributed.foregroundColor = Color.primary
                 fullAttributed.append(beforeAttributed)
             }
-            
+
             // Add the annotated text with highlighting
             if textRange.location != NSNotFound {
                 let annotatedText = nsText.substring(with: textRange)
@@ -186,10 +186,10 @@ struct MarkdownHighlightedText: View {
                 annotatedAttributed.backgroundColor = Color.yellow.opacity(0.3) // Highlight color
                 fullAttributed.append(annotatedAttributed)
             }
-            
+
             lastLocation = fullRange.location + fullRange.length
         }
-        
+
         // Add remaining text after last annotation
         if lastLocation < nsText.length {
             let remainingRange = NSRange(location: lastLocation, length: nsText.length - lastLocation)
@@ -199,8 +199,78 @@ struct MarkdownHighlightedText: View {
             remainingAttributed.foregroundColor = Color.primary
             fullAttributed.append(remainingAttributed)
         }
-        
+
         return (true, fullAttributed)
+    }
+
+    private func parseInlineMarkdown(_ text: String, baseFontSize: CGFloat) -> AttributedString {
+        // Parse inline bold (**text**) and italic (*text*) within a paragraph
+        // Pattern matches **bold** or *italic* but not *** (which would be bold+italic marker)
+        let pattern = #"(\*\*([^*]+)\*\*|\*([^*]+)\*)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            var attributed = AttributedString(text)
+            attributed.font = UIFont.systemFont(ofSize: baseFontSize)
+            return attributed
+        }
+
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsText.length))
+
+        if matches.isEmpty {
+            var attributed = AttributedString(text)
+            attributed.font = UIFont.systemFont(ofSize: baseFontSize)
+            return attributed
+        }
+
+        var fullAttributed = AttributedString()
+        var lastLocation = 0
+
+        for match in matches {
+            let fullRange = match.range
+            let boldTextRange = match.range(at: 2) // Capture group 2 - text inside **
+            let italicTextRange = match.range(at: 3) // Capture group 3 - text inside *
+
+            // Add text before the formatted section
+            if fullRange.location > lastLocation {
+                let beforeRange = NSRange(location: lastLocation, length: fullRange.location - lastLocation)
+                let beforeText = nsText.substring(with: beforeRange)
+                var beforeAttributed = AttributedString(beforeText)
+                beforeAttributed.font = UIFont.systemFont(ofSize: baseFontSize)
+                beforeAttributed.foregroundColor = Color.primary
+                fullAttributed.append(beforeAttributed)
+            }
+
+            // Check if it's bold text (**text**)
+            if boldTextRange.location != NSNotFound {
+                let boldText = nsText.substring(with: boldTextRange)
+                var boldAttributed = AttributedString(boldText)
+                boldAttributed.font = UIFont.boldSystemFont(ofSize: baseFontSize)
+                boldAttributed.foregroundColor = Color.primary
+                fullAttributed.append(boldAttributed)
+            }
+            // Check if it's italic text (*text*)
+            else if italicTextRange.location != NSNotFound {
+                let italicText = nsText.substring(with: italicTextRange)
+                var italicAttributed = AttributedString(italicText)
+                italicAttributed.font = UIFont.italicSystemFont(ofSize: baseFontSize)
+                italicAttributed.foregroundColor = Color.primary
+                fullAttributed.append(italicAttributed)
+            }
+
+            lastLocation = fullRange.location + fullRange.length
+        }
+
+        // Add remaining text after last formatted section
+        if lastLocation < nsText.length {
+            let remainingRange = NSRange(location: lastLocation, length: nsText.length - lastLocation)
+            let remainingText = nsText.substring(with: remainingRange)
+            var remainingAttributed = AttributedString(remainingText)
+            remainingAttributed.font = UIFont.systemFont(ofSize: baseFontSize)
+            remainingAttributed.foregroundColor = Color.primary
+            fullAttributed.append(remainingAttributed)
+        }
+
+        return fullAttributed
     }
     
     private var attributedText: AttributedString {
@@ -229,21 +299,10 @@ struct MarkdownHighlightedText: View {
             if annotationResult.hasAnnotations {
                 return annotationResult.attributedString
             }
-            
-            // Bold text
-            if text.contains("**") && text.count > 4 {
-                let displayText = text.replacingOccurrences(of: "**", with: "")
-                var attributed = AttributedString(displayText)
-                attributed.font = UIFont.boldSystemFont(ofSize: safeFontSize)
-                return attributed
-            }
-            
-            // Italic text  
-            if text.contains("*") && !text.contains("**") && text.count > 2 {
-                let displayText = text.replacingOccurrences(of: "*", with: "")
-                var attributed = AttributedString(displayText)
-                attributed.font = UIFont.italicSystemFont(ofSize: safeFontSize)
-                return attributed
+
+            // Check for inline bold/italic formatting
+            if text.contains("*") {
+                return parseInlineMarkdown(text, baseFontSize: safeFontSize)
             }
         }
         
