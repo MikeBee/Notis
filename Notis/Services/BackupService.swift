@@ -139,6 +139,7 @@ class BackupService: ObservableObject {
             let title: String?
             let content: String?
             let preview: String?
+            let fileURL: String?
             let groupId: UUID?
             let wordCount: Int32
             let goalCount: Int32
@@ -366,13 +367,14 @@ class BackupService: ObservableObject {
     private func fetchSheets() throws -> [BackupData.SheetBackup] {
         let request: NSFetchRequest<Sheet> = Sheet.fetchRequest()
         let sheets = try context.fetch(request)
-        
+
         return sheets.map { sheet in
             BackupData.SheetBackup(
                 id: sheet.id ?? UUID(),
                 title: sheet.title,
-                content: sheet.hybridContent,
+                content: sheet.unifiedContent,  // Use new unified content accessor
                 preview: sheet.preview,
+                fileURL: sheet.fileURL,  // Include fileURL for reference
                 groupId: sheet.group?.id,
                 wordCount: sheet.wordCount,
                 goalCount: sheet.goalCount,
@@ -803,14 +805,20 @@ class BackupService: ObservableObject {
                         template.modifiedAt = templateBackup.modifiedAt
                     }
                     
-                    // Step 3: Restore sheets
+                    // Step 3: Create group folders in filesystem
+                    let fileService = MarkdownFileService.shared
+                    for groupBackup in backupData.groups {
+                        if let group = groupLookup[groupBackup.id] {
+                            let folderPath = group.folderPath()
+                            _ = fileService.createFolder(path: folderPath)
+                        }
+                    }
+
+                    // Step 4: Restore sheets with markdown files
                     for sheetBackup in backupData.sheets {
                         let sheet = Sheet(context: self.context)
                         sheet.id = sheetBackup.id
-                        sheet.title = sheetBackup.title
-                        // Initialize file storage and restore content
-                        sheet.initializeFileStorage()
-                        sheet.hybridContent = sheetBackup.content ?? ""
+                        sheet.title = sheetBackup.title ?? "Untitled"
                         sheet.preview = sheetBackup.preview
                         sheet.wordCount = sheetBackup.wordCount
                         sheet.goalCount = sheetBackup.goalCount
@@ -821,17 +829,63 @@ class BackupService: ObservableObject {
                         sheet.createdAt = sheetBackup.createdAt
                         sheet.modifiedAt = sheetBackup.modifiedAt
                         sheet.deletedAt = sheetBackup.deletedAt
-                        
+
                         // Link to group if specified
                         if let groupId = sheetBackup.groupId,
                            let group = groupLookup[groupId] {
                             sheet.group = group
                         }
-                        
+
+                        // Create markdown file with content
+                        let content = sheetBackup.content ?? ""
+                        let folderPath = sheet.group?.folderPath()
+
+                        // Build metadata
+                        let metadata = NoteMetadata(
+                            uuid: sheet.id?.uuidString ?? UUID().uuidString,
+                            title: sheet.title ?? "Untitled",
+                            tags: [],
+                            created: sheet.createdAt ?? Date(),
+                            modified: sheet.modifiedAt ?? Date(),
+                            progress: 0.0,
+                            status: sheet.isFavorite ? "favorite" : "draft"
+                        )
+
+                        // Create the markdown file (in trash if needed)
+                        if sheetBackup.isInTrash {
+                            // For trashed sheets, create file in trash directory
+                            let trashFilename = "\(metadata.title).md"
+                            let trashURL = fileService.getTrashDirectory().appendingPathComponent(trashFilename)
+                            let markdown = YAMLFrontmatterService.shared.serialize(metadata: metadata, content: content)
+                            if let markdownData = markdown.data(using: .utf8) {
+                                try? markdownData.write(to: trashURL)
+                                sheet.fileURL = trashURL.path
+                                if let relativePath = fileService.relativePath(for: trashURL) {
+                                    var trashMetadata = metadata
+                                    trashMetadata.path = relativePath
+                                    _ = NotesIndexService.shared.upsertNote(trashMetadata)
+                                }
+                            }
+                        } else {
+                            // For normal sheets, create in Notes directory
+                            let result = fileService.createFile(
+                                title: sheet.title ?? "Untitled",
+                                content: content,
+                                folderPath: folderPath?.isEmpty == false ? folderPath : nil,
+                                tags: [],
+                                metadata: metadata
+                            )
+
+                            if result.success, let fileURL = result.url, let finalMetadata = result.metadata {
+                                sheet.fileURL = fileURL.path
+                                _ = NotesIndexService.shared.upsertNote(finalMetadata)
+                            }
+                        }
+
                         sheetLookup[sheetBackup.id] = sheet
                     }
                     
-                    // Step 4: Restore annotations
+                    // Step 5: Restore annotations
                     for annotationBackup in backupData.annotations {
                         guard let sheet = sheetLookup[annotationBackup.sheetId] else {
                             continue
@@ -847,7 +901,7 @@ class BackupService: ObservableObject {
                         annotation.sheet = sheet
                     }
                     
-                    // Step 5: Restore notes
+                    // Step 6: Restore notes
                     for noteBackup in backupData.notes {
                         guard let sheet = sheetLookup[noteBackup.sheetId] else {
                             continue
