@@ -885,6 +885,9 @@ struct GroupRowView: View {
                 sheet.group = nil
             }
 
+            // Delete the group folder from filesystem (including subgroups)
+            deleteGroupFolderRecursively(group)
+
             // Delete the group from CoreData (sheets remain in trash)
             viewContext.delete(group)
 
@@ -894,6 +897,27 @@ struct GroupRowView: View {
             } catch {
                 print("Failed to delete group: \(error)")
             }
+        }
+    }
+
+    /// Recursively delete the group's folder and all subgroup folders from the filesystem
+    private func deleteGroupFolderRecursively(_ group: Group) {
+        let fileService = MarkdownFileService.shared
+        let folderPath = group.folderPath()
+        let folderURL = fileService.getNotesDirectory().appendingPathComponent(folderPath, isDirectory: true)
+
+        // Check if folder exists
+        guard FileManager.default.fileExists(atPath: folderURL.path) else {
+            print("⚠️ Folder doesn't exist: \(folderPath)")
+            return
+        }
+
+        // Delete the folder and all its contents
+        do {
+            try FileManager.default.removeItem(at: folderURL)
+            print("✓ Deleted folder: \(folderPath)")
+        } catch {
+            print("❌ Failed to delete folder '\(folderPath)': \(error)")
         }
     }
 

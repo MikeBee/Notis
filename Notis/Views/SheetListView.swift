@@ -346,6 +346,44 @@ struct SheetListView: View {
 
             do {
                 try viewContext.save()
+
+                // Immediately create markdown file on disk so fileURL is set
+                let folderPath = targetGroup.folderPath()
+                let fileService = MarkdownFileService.shared
+
+                // Build metadata from the new sheet
+                let metadata = NoteMetadata(
+                    uuid: newSheet.id?.uuidString ?? UUID().uuidString,
+                    title: "Untitled",
+                    tags: [],
+                    created: newSheet.createdAt ?? Date(),
+                    modified: newSheet.modifiedAt ?? Date(),
+                    progress: 0.0,
+                    status: "draft"
+                )
+
+                // Create the markdown file with empty content
+                let result = fileService.createFile(
+                    title: "Untitled",
+                    content: "",
+                    folderPath: folderPath.isEmpty ? nil : folderPath,
+                    tags: [],
+                    metadata: metadata
+                )
+
+                if result.success, let fileURL = result.url, let finalMetadata = result.metadata {
+                    // Set fileURL so trash operations work
+                    newSheet.fileURL = fileURL.path
+
+                    // Add to SQLite index
+                    _ = NotesIndexService.shared.upsertNote(finalMetadata)
+
+                    try viewContext.save()
+                    print("✓ Created markdown file for new sheet: \(fileURL.lastPathComponent)")
+                } else {
+                    print("⚠️ Failed to create markdown file for new sheet")
+                }
+
                 // Select the new sheet and clear any essential selection
                 appState.selectSheet(newSheet)
                 appState.selectedEssential = nil
