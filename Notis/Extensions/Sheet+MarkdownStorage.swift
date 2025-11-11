@@ -46,6 +46,7 @@ extension Sheet {
         set {
             // Don't save to filesystem if sheet is in trash
             if isInTrash {
+                print("⊘ Skipping save for trashed sheet: \(title ?? "Untitled")")
                 // Just update in-memory content, don't persist to file
                 return
             }
@@ -67,6 +68,7 @@ extension Sheet {
     private func migrateToMarkdownStorage(content newContent: String) {
         // Don't migrate if sheet is in trash
         if isInTrash {
+            print("⊘ Skipping migration for trashed sheet: \(title ?? "Untitled")")
             return
         }
 
@@ -111,7 +113,7 @@ extension Sheet {
             metadata: metadata
         )
 
-        guard result.success, let finalMetadata = result.metadata else {
+        guard result.success, let finalMetadata = result.metadata, let createdURL = result.url else {
             print("❌ Failed to create markdown file for: \(title ?? "Untitled")")
             // Fall back to old storage
             hybridContent = newContent
@@ -121,9 +123,11 @@ extension Sheet {
         // Add to SQLite index
         _ = NotesIndexService.shared.upsertNote(finalMetadata)
 
-        // Clear old CoreData content to save space
+        // Set fileURL to the created file's path
+        fileURL = createdURL.path
+
+        // Clear old CoreData content field to save space (content now in file)
         content = nil
-        fileURL = nil
 
         // Update CoreData metadata
         updateMetadata(with: newContent)
