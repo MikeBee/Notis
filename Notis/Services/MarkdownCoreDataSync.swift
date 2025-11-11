@@ -45,13 +45,29 @@ class MarkdownCoreDataSync {
 
                 do {
                     let results = try context.fetch(fetchRequest)
-                    guard let sheet = results.first else {
-                        // Sheet doesn't exist in CoreData - this is OK, might be external file
-                        print("⚠️ No CoreData sheet found for: '\(note.title)' (path: \(note.path ?? "no path"))")
-                        notFoundCount += 1
+
+                    if results.first == nil {
+                        // Sheet doesn't exist in CoreData - create it from external file
+                        print("📥 Importing external file as new sheet: '\(note.title)'")
+
+                        let newSheet = Sheet(context: context)
+                        newSheet.id = sheetUUID
+                        newSheet.title = note.title
+                        newSheet.createdAt = note.created
+                        newSheet.modifiedAt = note.modified
+                        newSheet.isFavorite = (note.status == "favorite")
+                        newSheet.isInTrash = false
+
+                        // Set group based on folder path
+                        if let notePath = note.path {
+                            newSheet.group = findOrCreateGroup(fromPath: notePath, context: context)
+                        }
+
+                        updatedCount += 1
                         continue
                     }
 
+                    let sheet = results.first!
                     var changed = false
 
                     // Check if title needs updating
@@ -99,11 +115,19 @@ class MarkdownCoreDataSync {
                 }
             }
 
+            // Clean up orphaned groups (no sheets, no subgroups, and no matching folder in filesystem)
+            let deletedGroups = deleteOrphanedGroups(context: context)
+            if deletedGroups > 0 {
+                print("🗑️ Deleted \(deletedGroups) orphaned group(s)")
+            }
+
             // Save changes
-            if updatedCount > 0 {
+            if updatedCount > 0 || deletedGroups > 0 {
                 do {
                     try context.save()
-                    print("✅ Synced \(updatedCount) sheet(s) from markdown files to CoreData")
+                    if updatedCount > 0 {
+                        print("✅ Synced \(updatedCount) sheet(s) from markdown files to CoreData")
+                    }
                 } catch {
                     print("❌ Failed to save CoreData context: \(error)")
                 }
@@ -171,5 +195,52 @@ class MarkdownCoreDataSync {
         }
 
         return currentParent
+    }
+
+    /// Delete orphaned groups - groups with no sheets, no subgroups, and no matching folder in filesystem
+    /// This preserves intentional empty folders while cleaning up stale renamed folders
+    /// Returns the number of deleted groups
+    private func deleteOrphanedGroups(context: NSManagedObjectContext) -> Int {
+        let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
+        let fileService = MarkdownFileService.shared
+
+        // Get all folders that exist in filesystem
+        let filesystemFolders = fileService.getAllFolders()
+
+        var deletedCount = 0
+
+        do {
+            let allGroups = try context.fetch(fetchRequest)
+
+            for group in allGroups {
+                // Check if group has any sheets
+                let hasSheets = (group.sheets?.count ?? 0) > 0
+
+                // Check if group has any subgroups
+                let hasSubgroups = (group.subgroups?.count ?? 0) > 0
+
+                // Only consider deleting if empty
+                if !hasSheets && !hasSubgroups {
+                    // Build the folder path for this group
+                    let groupFolderPath = group.folderPath()
+
+                    // Check if this folder exists in filesystem
+                    let existsInFilesystem = filesystemFolders.contains(groupFolderPath)
+
+                    // Delete if no matching folder in filesystem
+                    if !existsInFilesystem {
+                        print("🗑️ Deleting orphaned group (no filesystem folder): '\(group.name ?? "Unknown")'")
+                        context.delete(group)
+                        deletedCount += 1
+                    } else {
+                        print("✓ Preserving empty group (folder exists): '\(group.name ?? "Unknown")'")
+                    }
+                }
+            }
+        } catch {
+            print("❌ Failed to fetch groups for cleanup: \(error)")
+        }
+
+        return deletedCount
     }
 }

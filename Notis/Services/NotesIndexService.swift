@@ -71,6 +71,20 @@ class NotesIndexService {
     private func createTables() {
         guard let db = db else { return }
 
+        // Drop old FTS5 table if it exists (migration for content column removal)
+        let dropOldFTS = "DROP TABLE IF EXISTS notes_fts;"
+        if sqlite3_exec(db, dropOldFTS, nil, nil, nil) == SQLITE_OK {
+            print("✓ Dropped old FTS5 table for migration")
+        }
+
+        // Drop old triggers
+        let dropTriggers = """
+        DROP TRIGGER IF EXISTS notes_ai;
+        DROP TRIGGER IF EXISTS notes_au;
+        DROP TRIGGER IF EXISTS notes_ad;
+        """
+        sqlite3_exec(db, dropTriggers, nil, nil, nil)
+
         // Main notes table
         let createNotesTable = """
         CREATE TABLE IF NOT EXISTS notes (
@@ -153,6 +167,15 @@ class NotesIndexService {
                 print("❌ Failed to execute SQL: \(error)")
                 sqlite3_free(errorMessage)
             }
+        }
+
+        // Repopulate FTS5 table from existing notes data
+        let repopulateFTS = """
+        INSERT INTO notes_fts(rowid, uuid, title, tags, excerpt)
+        SELECT rowid, uuid, title, tags, excerpt FROM notes;
+        """
+        if sqlite3_exec(db, repopulateFTS, nil, nil, nil) == SQLITE_OK {
+            print("✓ Repopulated FTS5 table with existing data")
         }
 
         print("✓ Created notes index tables and indexes")
