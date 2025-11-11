@@ -73,7 +73,7 @@ class ExportService: ObservableObject {
     }
     
     func exportSheet(_ sheet: Sheet, format: ExportFormat) {
-        let content = sheet.hybridContent
+        let content = sheet.unifiedContent
         guard !content.isEmpty else {
             print("No content to export")
             return
@@ -210,7 +210,7 @@ class ExportService: ObservableObject {
                 combinedContent += "# \(title)\n\n"
             }
 
-            let content = sheet.hybridContent
+            let content = sheet.unifiedContent
             if !content.isEmpty {
                 combinedContent += content
             }
@@ -282,7 +282,7 @@ class ExportService: ObservableObject {
         }
         #endif
 
-        let content = sheet.hybridContent
+        let content = sheet.unifiedContent
         guard !content.isEmpty else {
             print("No content to export to Obsidian")
             return
@@ -339,7 +339,7 @@ class ExportService: ObservableObject {
     
     private func createObsidianNote(sheet: Sheet) -> String {
         let title = sheet.title?.isEmpty == false ? sheet.title! : "Untitled"
-        let content = sheet.hybridContent
+        let content = sheet.unifiedContent
         let createdAt = sheet.createdAt ?? Date()
         let modifiedAt = sheet.modifiedAt ?? Date()
         let wordCount = sheet.wordCount
