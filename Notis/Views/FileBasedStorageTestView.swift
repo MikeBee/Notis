@@ -34,6 +34,9 @@ struct FileBasedStorageTestView: View {
     // FileURL diagnostic
     @State private var fileURLStatus: String = ""
 
+    // Trash cleanup
+    @State private var trashCleanupStatus: String = ""
+
     private let markdownService = MarkdownFileService.shared
     private let indexService = NotesIndexService.shared
     private let syncService = FileSyncService.shared
@@ -203,6 +206,28 @@ struct FileBasedStorageTestView: View {
 
                     if !fileURLStatus.isEmpty {
                         Text(fileURLStatus)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(8)
+                            .background(Color(.systemGray5))
+                            .cornerRadius(8)
+                    }
+
+                    // Trash cleanup button
+                    Button(action: cleanupGhostTrash) {
+                        HStack {
+                            Image(systemName: "trash.slash")
+                            Text("Clean Up Ghost Trash")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.red)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+
+                    if !trashCleanupStatus.isEmpty {
+                        Text(trashCleanupStatus)
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .padding(8)
@@ -654,6 +679,76 @@ struct FileBasedStorageTestView: View {
             print(fileURLStatus)
         } catch {
             fileURLStatus = "❌ Error checking fileURL status: \(error.localizedDescription)"
+        }
+    }
+
+    private func cleanupGhostTrash() {
+        let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "isInTrash == YES")
+
+        do {
+            let trashedSheets = try viewContext.fetch(fetchRequest)
+            let total = trashedSheets.count
+            var validFiles = 0
+            var invalidFiles = 0
+            var deletedSheets: [String] = []
+
+            let fileManager = FileManager.default
+
+            print("🗑️ Scanning \(total) trashed sheets...")
+
+            for sheet in trashedSheets {
+                let title = sheet.title ?? "Untitled"
+
+                guard let fileURLString = sheet.fileURL, !fileURLString.isEmpty else {
+                    print("⚠️ Ghost entry (no fileURL): \(title)")
+                    viewContext.delete(sheet)
+                    deletedSheets.append(title)
+                    invalidFiles += 1
+                    continue
+                }
+
+                // Check if file exists at the specified path
+                if fileManager.fileExists(atPath: fileURLString) {
+                    print("✓ Valid trash entry: \(title)")
+                    validFiles += 1
+                } else {
+                    print("❌ Ghost entry (file not found): \(title) at \(fileURLString)")
+                    viewContext.delete(sheet)
+                    deletedSheets.append(title)
+                    invalidFiles += 1
+                }
+            }
+
+            // Save the context to commit deletions
+            if invalidFiles > 0 {
+                try viewContext.save()
+                print("✓ Deleted \(invalidFiles) ghost trash entries")
+            }
+
+            // Build status message
+            trashCleanupStatus = "🗑️ Trash Cleanup Results:\n• Total trash entries: \(total)\n• Valid entries: \(validFiles) ✓\n• Ghost entries deleted: \(invalidFiles) 🧹"
+
+            if invalidFiles > 0 {
+                trashCleanupStatus += "\n\n🧹 Cleaned up:\n"
+                for (index, title) in deletedSheets.prefix(10).enumerated() {
+                    trashCleanupStatus += "  \(index + 1). \(title)\n"
+                }
+                if deletedSheets.count > 10 {
+                    trashCleanupStatus += "  ... and \(deletedSheets.count - 10) more\n"
+                }
+                trashCleanupStatus += "\n✓ Trash is now clean!"
+            } else if total > 0 {
+                trashCleanupStatus += "\n\n✓ All trash entries are valid - no cleanup needed!"
+            } else {
+                trashCleanupStatus += "\n\n✓ Trash is empty!"
+            }
+
+            print(trashCleanupStatus)
+
+        } catch {
+            trashCleanupStatus = "❌ Error cleaning trash: \(error.localizedDescription)"
+            print(trashCleanupStatus)
         }
     }
 

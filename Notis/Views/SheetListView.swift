@@ -958,10 +958,46 @@ struct SheetRowView: View {
     
     private func restoreFromTrash() {
         withAnimation {
+            // Physically move the file from .Trash back to Notes
+            if let fileURLString = sheet.fileURL, !fileURLString.isEmpty {
+                let trashURL = URL(fileURLWithPath: fileURLString)
+
+                // Build the destination path based on the group
+                let fileService = MarkdownFileService.shared
+                let filename = trashURL.lastPathComponent
+
+                // Build folder path from group hierarchy
+                var folderPath = ""
+                if let group = sheet.group {
+                    var pathComponents: [String] = []
+                    var currentGroup: Group? = group
+
+                    while let g = currentGroup {
+                        pathComponents.insert(g.name ?? "Untitled", at: 0)
+                        currentGroup = g.parent
+                    }
+
+                    folderPath = pathComponents.joined(separator: "/")
+                }
+
+                // Build full relative path
+                let relativePath = folderPath.isEmpty ? filename : "\(folderPath)/\(filename)"
+
+                // Restore the file
+                if fileService.restoreFileFromTrash(trashURL: trashURL, toPath: relativePath) {
+                    // Update fileURL to the new location
+                    let restoredURL = fileService.getNotesDirectory().appendingPathComponent(relativePath)
+                    sheet.fileURL = restoredURL.path
+                    print("✓ Restored file from trash: \(filename)")
+                } else {
+                    print("⚠️ Failed to restore file from trash, marking in database only")
+                }
+            }
+
             sheet.isInTrash = false
             sheet.deletedAt = nil
             sheet.modifiedAt = Date()
-            
+
             do {
                 try viewContext.save()
             } catch {
