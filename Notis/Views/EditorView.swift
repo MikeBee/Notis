@@ -26,7 +26,28 @@ struct EditorView: View {
     // hideShortcutBar now controlled by appState
     @AppStorage("disableQuickType") private var disableQuickType: Bool = false
     @AppStorage("showTagsPane") private var showTagsPane: Bool = true
-    
+
+    // Safe accessors with NaN protection
+    private var safeFontSize: Double {
+        guard fontSize.isFinite && !fontSize.isNaN && fontSize > 0 else { return 16 }
+        return max(10, min(72, fontSize))
+    }
+
+    private var safeLineSpacing: Double {
+        guard lineSpacing.isFinite && !lineSpacing.isNaN && lineSpacing > 0 else { return 1.4 }
+        return max(0.5, min(3.0, lineSpacing))
+    }
+
+    private var safeParagraphSpacing: Double {
+        guard paragraphSpacing.isFinite && !paragraphSpacing.isNaN && paragraphSpacing >= 0 else { return 8 }
+        return max(0, min(24, paragraphSpacing))
+    }
+
+    private var safeEditorMargins: Double {
+        guard editorMargins.isFinite && !editorMargins.isNaN && editorMargins >= 0 else { return 40 }
+        return max(0, min(200, editorMargins))
+    }
+
     var body: some View {
         ZStack {
             if let selectedSheet = appState.selectedSheet {
@@ -156,25 +177,25 @@ struct EditorView: View {
                             sheet: selectedSheet,
                             appState: appState,
                             fontSize: Binding(
-                                get: { CGFloat(fontSize) },
+                                get: { safeFontSize },
                                 set: { fontSize = Double($0) }
                             ),
                             lineSpacing: Binding(
-                                get: { CGFloat(lineSpacing) },
+                                get: { safeLineSpacing },
                                 set: { lineSpacing = Double($0) }
                             ),
                             paragraphSpacing: Binding(
-                                get: { CGFloat(paragraphSpacing) },
+                                get: { safeParagraphSpacing },
                                 set: { paragraphSpacing = Double($0) }
                             ),
                             fontFamily: fontFamily,
                             editorMargins: Binding(
-                                get: { 
+                                get: {
                                     // Only override margins in 3-pane view AND not in full screen
                                     if appState.viewMode == .threePane && !isFullScreen {
                                         return 20
                                     } else {
-                                        return CGFloat(editorMargins)
+                                        return safeEditorMargins
                                     }
                                 },
                                 set: { newValue in
@@ -191,7 +212,7 @@ struct EditorView: View {
                         // Word Counter at bottom if enabled
                         if showWordCounter {
                             WordCounterView(sheet: selectedSheet)
-                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : CGFloat(editorMargins))
+                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : safeEditorMargins)
                                 .padding(.bottom, 8)
                                 .background(Color(.systemBackground))
                         }
@@ -199,7 +220,7 @@ struct EditorView: View {
                         // Tag Editor
                         if showTagsPane {
                             TagEditorView(sheet: selectedSheet)
-                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : CGFloat(editorMargins))
+                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : safeEditorMargins)
                                 .padding(.vertical, 12)
                                 .background(Color(.systemBackground))
                                 .overlay(
@@ -456,20 +477,20 @@ struct MarkdownEditor: View {
                             }
                         }
                     }
-                    .padding(.horizontal, editorMargins)
+                    .padding(.horizontal, safeEditorMargins)
                     .padding(.top, 40)
-                    .padding(.bottom, CGFloat(paragraphSpacing + 12))
-                    
+                    .padding(.bottom, safeParagraphSpacing + 12)
+
                     // Content Editor
                     MarkdownTextEditor(
                         text: $content,
                         isTypewriterMode: $appState.isTypewriterMode,
                         isFocusMode: $appState.isFocusMode,
-                        fontSize: CGFloat(fontSize),
-                        lineSpacing: CGFloat(lineSpacing),
-                        paragraphSpacing: CGFloat(paragraphSpacing),
+                        fontSize: safeFontSize,
+                        lineSpacing: safeLineSpacing,
+                        paragraphSpacing: safeParagraphSpacing,
                         fontFamily: fontFamily,
-                        editorMargins: CGFloat(editorMargins),
+                        editorMargins: safeEditorMargins,
                         hideShortcutBar: appState.hideShortcutBar,
                         disableQuickType: disableQuickType,
                         onTextChange: { newText in
@@ -488,11 +509,11 @@ struct MarkdownEditor: View {
                         if isReadOnlyMode {
                             MarkdownReadOnlyView(
                                 text: content,
-                                fontSize: CGFloat(fontSize),
-                                lineSpacing: CGFloat(lineSpacing),
-                                paragraphSpacing: CGFloat(paragraphSpacing),
+                                fontSize: safeFontSize,
+                                lineSpacing: safeLineSpacing,
+                                paragraphSpacing: safeParagraphSpacing,
                                 fontFamily: fontFamily,
-                                editorMargins: CGFloat(editorMargins)
+                                editorMargins: safeEditorMargins
                             )
                             .background(Color(.systemBackground))
                             .onTapGesture {
