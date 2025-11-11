@@ -275,10 +275,11 @@ struct MarkdownHighlightedText: View {
     
     private var attributedText: AttributedString {
         let shouldShowFormatting = !isCurrentParagraph
-        
-        // Safe font size validation
-        let safeFontSize = max(12, min(32, fontSize))
-        
+
+        // Safe font size validation with NaN protection
+        let validFontSize = fontSize.isFinite && !fontSize.isNaN && fontSize > 0 ? fontSize : 16
+        let safeFontSize = max(12, min(32, validFontSize))
+
         if shouldShowFormatting {
             // Headers
             if text.hasPrefix("# ") {
