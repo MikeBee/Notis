@@ -53,8 +53,6 @@ class MarkdownFileService {
             try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
             try fileManager.createDirectory(at: notesDirectory, withIntermediateDirectories: true)
             try fileManager.createDirectory(at: trashDirectory, withIntermediateDirectories: true)
-            print("✓ Markdown file storage directories created at: \(notesDirectory.path)")
-            print("✓ Trash directory created at: \(trashDirectory.path)")
         } catch {
             print("❌ Failed to create directories: \(error)")
         }
@@ -80,10 +78,9 @@ class MarkdownFileService {
 
         do {
             try fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true)
-            print("✓ Created folder: \(path)")
             return true
         } catch {
-            print("❌ Failed to create folder: \(error)")
+            print("❌ Failed to create folder '\(path)': \(error)")
             return false
         }
     }
@@ -335,14 +332,13 @@ class MarkdownFileService {
         // Move file to trash
         do {
             try fileManager.moveItem(at: url, to: trashURL)
-            print("✓ Moved to trash: \(filename)")
 
             // Clean up old directory if empty
             cleanupEmptyDirectories(startingAt: url.deletingLastPathComponent())
 
             return (true, trashURL)
         } catch {
-            print("❌ Failed to move file to trash: \(error)")
+            print("❌ Failed to move '\(filename)' to trash: \(error)")
             return (false, nil)
         }
     }
@@ -376,10 +372,9 @@ class MarkdownFileService {
         // Move file back from trash
         do {
             try fileManager.moveItem(at: trashURL, to: restoreURL)
-            print("✓ Restored from trash: \(relativePath)")
             return true
         } catch {
-            print("❌ Failed to restore file from trash: \(error)")
+            print("❌ Failed to restore '\(relativePath)' from trash: \(error)")
             return false
         }
     }
@@ -392,10 +387,9 @@ class MarkdownFileService {
 
         do {
             try fileManager.removeItem(at: trashURL)
-            print("✓ Permanently deleted: \(trashURL.lastPathComponent)")
             return true
         } catch {
-            print("❌ Failed to permanently delete file: \(error)")
+            print("❌ Failed to permanently delete '\(trashURL.lastPathComponent)': \(error)")
             return false
         }
     }
@@ -450,7 +444,6 @@ class MarkdownFileService {
                 let contents = try fileManager.contentsOfDirectory(atPath: currentDir.path)
                 if contents.isEmpty {
                     try fileManager.removeItem(at: currentDir)
-                    print("✓ Removed empty directory: \(currentDir.lastPathComponent)")
                     currentDir = currentDir.deletingLastPathComponent()
                 } else {
                     // Directory not empty, stop cleanup
