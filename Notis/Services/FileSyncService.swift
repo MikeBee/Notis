@@ -73,13 +73,11 @@ class FileSyncService {
         isSyncing = true
         defer { isSyncing = false }
 
-        print("🔄 Starting full sync...")
         var stats = SyncStats()
 
         // Step 1: Scan all markdown files
         let files = markdownService.scanAllFiles()
         stats.filesScanned = files.count
-        print("📁 Found \(files.count) markdown files")
 
         // Step 2: Build map of files by UUID and path, detect filename/title mismatches and duplicate UUIDs
         var filesByUUID: [String: URL] = [:]
@@ -95,8 +93,6 @@ class FileSyncService {
             let filenameTitle = extractTitleFromFilename(fileURL)
             if filenameTitle != metadata.title && !filenameTitle.isEmpty {
                 // Filename changed externally, update YAML to match
-                print("📝 Detected filename/title mismatch: file='\(filenameTitle)' yaml='\(metadata.title)'")
-                print("   Updating YAML title to match filename: '\(filenameTitle)'")
 
                 var updatedMetadata = metadata
                 updatedMetadata.title = filenameTitle
@@ -104,7 +100,6 @@ class FileSyncService {
 
                 // Re-write file with updated YAML
                 if markdownService.updateFile(metadata: updatedMetadata, content: content) {
-                    print("   ✓ Updated YAML title in file")
 
                     // Check for duplicate UUID before adding
                     if let existingFile = filesByUUID[updatedMetadata.uuid] {
@@ -116,12 +111,9 @@ class FileSyncService {
                         // Generate new UUID for duplicate file
                         let newUUID = UUID().uuidString
                         updatedMetadata.uuid = newUUID
-                        print("   🔄 Regenerating UUID for File 2: \(newUUID)")
 
                         // Update the file with new UUID
-                        if markdownService.updateFile(metadata: updatedMetadata, content: content) {
-                            print("   ✓ Updated file with new UUID")
-                        }
+                        markdownService.updateFile(metadata: updatedMetadata, content: content)
                     }
 
                     // Use updated metadata for indexing
@@ -131,7 +123,7 @@ class FileSyncService {
                     }
                     continue
                 } else {
-                    print("   ❌ Failed to update YAML title")
+                    print("❌ Failed to update YAML title: \(filenameTitle)")
                 }
             }
 
@@ -146,17 +138,15 @@ class FileSyncService {
                 var updatedMetadata = metadata
                 let newUUID = UUID().uuidString
                 updatedMetadata.uuid = newUUID
-                print("   🔄 Regenerating UUID for File 2: \(newUUID)")
 
                 // Update the file with new UUID
                 if markdownService.updateFile(metadata: updatedMetadata, content: content) {
-                    print("   ✓ Updated file with new UUID")
                     filesByUUID[newUUID] = fileURL
                     if let path = updatedMetadata.path {
                         filesByPath[path] = fileURL
                     }
                 } else {
-                    print("   ❌ Failed to regenerate UUID for duplicate file")
+                    print("❌ Failed to regenerate UUID: \(fileURL.lastPathComponent)")
                 }
                 continue
             }
@@ -174,7 +164,6 @@ class FileSyncService {
 
         // Step 3: Get all notes from index
         let indexedNotes = indexService.getAllNotes()
-        print("📊 Found \(indexedNotes.count) notes in index")
 
         // Build map of indexed notes
         var indexedByUUID: [String: NoteMetadata] = [:]
@@ -213,7 +202,6 @@ class FileSyncService {
                 // New file, add to index
                 if indexService.upsertNote(metadata) {
                     stats.indexEntriesAdded += 1
-                    print("✓ Added new file to index: \(metadata.title)")
                 } else {
                     stats.errors += 1
                 }
@@ -228,7 +216,10 @@ class FileSyncService {
 
         // Step 5: Handle orphaned index entries (files deleted from disk)
         for (uuid, note) in indexedByUUID {
-            print("⚠️ File deleted from disk, removing from index: \(note.title)")
+            // Only log if not in trash
+            if !(note.path?.contains(".Trash") ?? false) {
+                print("⚠️ File deleted: \(note.title)")
+            }
             _ = indexService.deleteNote(uuid: uuid)
             stats.indexEntriesDeleted += 1
         }
@@ -237,8 +228,10 @@ class FileSyncService {
         lastSyncDate = Date()
         lastSyncStats = stats
 
-        print("✓ Sync complete: \(stats.totalChanges) changes")
-        printSyncStats(stats)
+        // Only log if there were changes
+        if stats.totalChanges > 0 {
+            print("✓ Sync: \(stats.totalChanges) changes")
+        }
 
         return stats
     }
@@ -246,18 +239,12 @@ class FileSyncService {
     /// Perform a full sync and update CoreData sheets with file changes
     @discardableResult
     func performFullSyncWithCoreData(context: NSManagedObjectContext) -> SyncStats {
-        print("🔄 performFullSyncWithCoreData called - starting full file→SQLite→CoreData sync")
-
         // First sync files → SQLite index
         let stats = performFullSync()
-
-        print("✅ File→SQLite sync complete, now syncing SQLite→CoreData...")
 
         // Then sync SQLite index → CoreData sheets
         // This updates CoreData with any external file changes
         MarkdownCoreDataSync.shared.syncMarkdownToCoreData(context: context)
-
-        print("✅ Full sync with CoreData complete")
 
         return stats
     }
@@ -274,13 +261,11 @@ class FileSyncService {
         isSyncing = true
         defer { isSyncing = false }
 
-        print("🔍 Starting DEEP sync (reading all file content)...")
         var stats = SyncStats()
 
         // Scan all markdown files
         let files = markdownService.scanAllFiles()
         stats.filesScanned = files.count
-        print("📁 Found \(files.count) markdown files to deep sync")
 
         var processedCount = 0
 
@@ -303,7 +288,6 @@ class FileSyncService {
                 if needsUpdate {
                     if indexService.upsertNote(metadata) {
                         stats.indexEntriesUpdated += 1
-                        print("✓ Deep synced: \(metadata.title) (\(metadata.wordCount) words)")
                     } else {
                         stats.errors += 1
                     }
@@ -312,28 +296,24 @@ class FileSyncService {
                 // New file
                 if indexService.upsertNote(metadata) {
                     stats.indexEntriesAdded += 1
-                    print("✓ Added new file: \(metadata.title)")
                 } else {
                     stats.errors += 1
                 }
             }
 
             processedCount += 1
-            if processedCount % 10 == 0 {
-                print("  Progress: \(processedCount)/\(files.count) files processed")
-            }
         }
 
         lastSyncDate = Date()
         lastSyncStats = stats
 
-        print("✓ Deep sync complete: \(stats.totalChanges) changes")
-        printSyncStats(stats)
+        // Only log if there were changes
+        if stats.totalChanges > 0 {
+            print("✓ Deep sync: \(stats.totalChanges) changes")
+        }
 
         // Sync to CoreData
-        print("✅ File→SQLite deep sync complete, now syncing SQLite→CoreData...")
         MarkdownCoreDataSync.shared.syncMarkdownToCoreData(context: context)
-        print("✅ Deep sync with CoreData complete")
 
         return stats
     }
@@ -343,12 +323,10 @@ class FileSyncService {
 
         // Check if path changed (file was moved)
         if metadata.path != existingNote.path {
-            print("📁 File moved: '\(existingNote.path ?? "?")' → '\(metadata.path ?? "?")'")
             if indexService.upsertNote(metadata) {
-                print("✓ Updated index with new path: \(metadata.title)")
                 return .updated
             } else {
-                print("❌ Failed to update index path: \(metadata.title)")
+                print("❌ Failed to update index for moved file: \(metadata.title)")
                 return .error
             }
         }
@@ -370,7 +348,6 @@ class FileSyncService {
         if fileModified > indexModified {
             // File is newer, update index
             if indexService.upsertNote(metadata) {
-                print("✓ Updated index from file: \(metadata.title)")
                 return .updated
             } else {
                 print("❌ Failed to update index: \(metadata.title)")
@@ -380,7 +357,7 @@ class FileSyncService {
             // Potential conflict (index newer than file, but hashes differ)
             // For now, trust the file (it's the source of truth)
             if indexService.upsertNote(metadata) {
-                print("⚠️ Resolved conflict (file wins): \(metadata.title)")
+                print("⚠️ Conflict resolved (file wins): \(metadata.title)")
                 return .conflict
             } else {
                 return .error
@@ -492,7 +469,6 @@ class FileSyncService {
         )
 
         source.setEventHandler { [weak self] in
-            print("📁 File system change detected, performing quick sync...")
             DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 1.0) {
                 self?.performQuickSync()
             }
@@ -504,15 +480,12 @@ class FileSyncService {
 
         source.resume()
         fileSystemWatcher = source
-
-        print("✓ File watcher started for: \(notesDir.path)")
     }
 
     /// Stop file system watcher
     private func stopFileWatcher() {
         fileSystemWatcher?.cancel()
         fileSystemWatcher = nil
-        print("✓ File watcher stopped")
     }
     #endif
 
@@ -522,18 +495,14 @@ class FileSyncService {
         // Sync every 30 seconds in background
         backgroundSyncTimer?.invalidate()
         backgroundSyncTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
-            print("⏰ Background sync triggered...")
             self?.performQuickSync()
         }
-
-        print("✓ Background sync started (30s interval)")
     }
 
     /// Stop background sync timer
     private func stopBackgroundSync() {
         backgroundSyncTimer?.invalidate()
         backgroundSyncTimer = nil
-        print("✓ Background sync stopped")
     }
     #endif
 
@@ -550,24 +519,6 @@ class FileSyncService {
 
         let title = String(filename.dropLast(3)) // Remove ".md"
         return title.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func printSyncStats(_ stats: SyncStats) {
-        print("""
-
-        📊 Sync Statistics:
-        ├─ Files scanned: \(stats.filesScanned)
-        ├─ Files added: \(stats.filesAdded)
-        ├─ Files updated: \(stats.filesUpdated)
-        ├─ Files deleted: \(stats.filesDeleted)
-        ├─ Index entries added: \(stats.indexEntriesAdded)
-        ├─ Index entries updated: \(stats.indexEntriesUpdated)
-        ├─ Index entries deleted: \(stats.indexEntriesDeleted)
-        ├─ Conflicts: \(stats.conflicts)
-        ├─ Errors: \(stats.errors)
-        └─ Total changes: \(stats.totalChanges)
-
-        """)
     }
 
     // MARK: - Sync Result
