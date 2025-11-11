@@ -924,6 +924,8 @@ struct SheetRowView: View {
     
     private func moveToTrash() {
         withAnimation {
+            let sheetTitle = sheet.title ?? "Untitled"
+
             // Physically move the file to .Trash folder
             if let fileURLString = sheet.fileURL, !fileURLString.isEmpty {
                 let fileURL = URL(fileURLWithPath: fileURLString)
@@ -933,10 +935,12 @@ struct SheetRowView: View {
                 if success, let trashURL = trashURL {
                     // Update fileURL to point to trash location
                     sheet.fileURL = trashURL.path
-                    print("✓ Moved file to trash: \(fileURL.lastPathComponent)")
+                    print("✓ Moved '\(sheetTitle)' to trash: \(fileURL.lastPathComponent)")
                 } else {
-                    print("⚠️ Failed to move file to trash, marking in database only")
+                    print("⚠️ Failed to move '\(sheetTitle)' to trash, marking in database only")
                 }
+            } else {
+                print("⚠️ Sheet '\(sheetTitle)' has no fileURL - marking as trashed but file may remain on disk")
             }
 
             sheet.isInTrash = true
