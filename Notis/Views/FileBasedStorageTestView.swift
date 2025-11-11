@@ -154,6 +154,25 @@ struct FileBasedStorageTestView: View {
                         .disabled(isSyncing)
                     }
 
+                    Button(action: performDeepSync) {
+                        HStack {
+                            if isSyncing {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "arrow.down.doc.fill")
+                                Text("Deep Sync")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.orange)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+                    .disabled(isSyncing)
+
                     Button(action: toggleMonitoring) {
                         HStack {
                             Image(systemName: isMonitoring ? "stop.circle.fill" : "play.circle.fill")
@@ -539,6 +558,24 @@ struct FileBasedStorageTestView: View {
                 self.syncStats = stats
                 self.lastSyncDate = syncService.lastSyncDate
                 self.statusMessage = "✓ Quick sync complete: \(stats.totalChanges) changes"
+                self.loadStats()
+                self.loadAllNotes()
+            }
+        }
+    }
+
+    private func performDeepSync() {
+        isSyncing = true
+        statusMessage = "Performing deep sync (reading all file content)..."
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let stats = syncService.performDeepSync(context: viewContext)
+
+            DispatchQueue.main.async {
+                self.isSyncing = false
+                self.syncStats = stats
+                self.lastSyncDate = syncService.lastSyncDate
+                self.statusMessage = "✓ Deep sync complete: \(stats.totalChanges) changes"
                 self.loadStats()
                 self.loadAllNotes()
             }

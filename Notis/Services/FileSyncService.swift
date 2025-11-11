@@ -262,6 +262,82 @@ class FileSyncService {
         return stats
     }
 
+    /// Perform a deep sync - reads all file content and updates word counts, excerpts, etc.
+    /// This is slower than regular sync but ensures all computed fields are up-to-date
+    @discardableResult
+    func performDeepSync(context: NSManagedObjectContext) -> SyncStats {
+        guard !isSyncing else {
+            print("⚠️ Sync already in progress")
+            return lastSyncStats ?? SyncStats()
+        }
+
+        isSyncing = true
+        defer { isSyncing = false }
+
+        print("🔍 Starting DEEP sync (reading all file content)...")
+        var stats = SyncStats()
+
+        // Scan all markdown files
+        let files = markdownService.scanAllFiles()
+        stats.filesScanned = files.count
+        print("📁 Found \(files.count) markdown files to deep sync")
+
+        var processedCount = 0
+
+        for fileURL in files {
+            // Read file with full content
+            guard let (metadata, content) = markdownService.readFile(at: fileURL) else {
+                stats.errors += 1
+                continue
+            }
+
+            // Get existing note from index
+            if let existingNote = indexService.getNote(uuid: metadata.uuid) {
+                // Check if content-derived fields need updating
+                let needsUpdate =
+                    metadata.wordCount != existingNote.wordCount ||
+                    metadata.charCount != existingNote.charCount ||
+                    metadata.excerpt != existingNote.excerpt ||
+                    metadata.contentHash != existingNote.contentHash
+
+                if needsUpdate {
+                    if indexService.upsertNote(metadata) {
+                        stats.indexEntriesUpdated += 1
+                        print("✓ Deep synced: \(metadata.title) (\(metadata.wordCount) words)")
+                    } else {
+                        stats.errors += 1
+                    }
+                }
+            } else {
+                // New file
+                if indexService.upsertNote(metadata) {
+                    stats.indexEntriesAdded += 1
+                    print("✓ Added new file: \(metadata.title)")
+                } else {
+                    stats.errors += 1
+                }
+            }
+
+            processedCount += 1
+            if processedCount % 10 == 0 {
+                print("  Progress: \(processedCount)/\(files.count) files processed")
+            }
+        }
+
+        lastSyncDate = Date()
+        lastSyncStats = stats
+
+        print("✓ Deep sync complete: \(stats.totalChanges) changes")
+        printSyncStats(stats)
+
+        // Sync to CoreData
+        print("✅ File→SQLite deep sync complete, now syncing SQLite→CoreData...")
+        MarkdownCoreDataSync.shared.syncMarkdownToCoreData(context: context)
+        print("✅ Deep sync with CoreData complete")
+
+        return stats
+    }
+
     /// Sync a single file to the index
     private func syncFileToIndex(metadata: NoteMetadata, content: String, existingNote: NoteMetadata, fileURL: URL) -> SyncResult {
 
