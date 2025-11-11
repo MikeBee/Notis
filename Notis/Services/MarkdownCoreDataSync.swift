@@ -243,4 +243,124 @@ class MarkdownCoreDataSync {
 
         return deletedCount
     }
+
+    // MARK: - Group Folder Management
+
+    /// Rename a group's folder on the filesystem and update all file paths
+    /// Call this when a group is renamed in the UI
+    func renameGroupFolder(group: Group, oldName: String, newName: String, context: NSManagedObjectContext) {
+        print("📁 Renaming group folder: '\(oldName)' → '\(newName)'")
+
+        let fileService = MarkdownFileService.shared
+        let indexService = NotesIndexService.shared
+        let notesDirectory = fileService.getNotesDirectory()
+
+        // Build old and new folder paths
+        let oldFolderPath = buildFolderPath(group: group, overrideName: oldName)
+        let newFolderPath = buildFolderPath(group: group, overrideName: newName)
+
+        let oldFolderURL = notesDirectory.appendingPathComponent(oldFolderPath, isDirectory: true)
+        let newFolderURL = notesDirectory.appendingPathComponent(newFolderPath, isDirectory: true)
+
+        // Check if old folder exists
+        guard FileManager.default.fileExists(atPath: oldFolderURL.path) else {
+            print("⚠️ Old folder doesn't exist: \(oldFolderPath)")
+            return
+        }
+
+        // Check if new folder already exists (conflict)
+        if FileManager.default.fileExists(atPath: newFolderURL.path) {
+            print("❌ Cannot rename - folder already exists: \(newFolderPath)")
+            return
+        }
+
+        // Ensure parent directory exists
+        let newParentDirectory = newFolderURL.deletingLastPathComponent()
+        if !FileManager.default.fileExists(atPath: newParentDirectory.path) {
+            do {
+                try FileManager.default.createDirectory(at: newParentDirectory, withIntermediateDirectories: true)
+            } catch {
+                print("❌ Failed to create parent directory: \(error)")
+                return
+            }
+        }
+
+        // Rename the folder
+        do {
+            try FileManager.default.moveItem(at: oldFolderURL, to: newFolderURL)
+            print("✓ Renamed folder on disk: \(oldFolderPath) → \(newFolderPath)")
+        } catch {
+            print("❌ Failed to rename folder: \(error)")
+            return
+        }
+
+        // Update all file paths in this folder and subfolders
+        updateFilePathsAfterFolderRename(oldBasePath: oldFolderPath, newBasePath: newFolderPath)
+
+        // Trigger a sync to update CoreData
+        MarkdownCoreDataSync.shared.syncMarkdownToCoreData(context: context)
+
+        print("✓ Group folder rename complete")
+    }
+
+    /// Build the folder path for a group with an optional name override
+    private func buildFolderPath(group: Group, overrideName: String? = nil) -> String {
+        var pathComponents: [String] = []
+        var currentGroup: Group? = group
+
+        // Build path from leaf to root
+        while let g = currentGroup {
+            let name = (currentGroup == group && overrideName != nil) ? overrideName! : (g.name ?? "Untitled")
+            pathComponents.insert(name, at: 0)
+            currentGroup = g.parent
+        }
+
+        return pathComponents.joined(separator: "/")
+    }
+
+    /// Update all file paths after a folder rename
+    private func updateFilePathsAfterFolderRename(oldBasePath: String, newBasePath: String) {
+        let indexService = NotesIndexService.shared
+        let fileService = MarkdownFileService.shared
+
+        let allNotes = indexService.getAllNotes()
+
+        for note in allNotes {
+            guard let notePath = note.path else { continue }
+
+            // Check if this file is in the renamed folder or a subfolder
+            if notePath.hasPrefix(oldBasePath + "/") || notePath == oldBasePath {
+                // Build new path by replacing the old base with the new base
+                let newPath = notePath.replacingOccurrences(of: oldBasePath, with: newBasePath)
+
+                // Read the file
+                let oldFileURL = fileService.getNotesDirectory().appendingPathComponent(notePath)
+                let newFileURL = fileService.getNotesDirectory().appendingPathComponent(newPath)
+
+                guard let (metadata, content) = fileService.readFile(at: newFileURL) else {
+                    print("⚠️ Failed to read file at new location: \(newPath)")
+                    continue
+                }
+
+                // Update metadata with new path
+                var updatedMetadata = metadata
+                updatedMetadata.path = newPath
+                updatedMetadata.modified = Date()
+
+                // Write the file back with updated metadata
+                let markdown = YAMLFrontmatterService.shared.serialize(metadata: updatedMetadata, content: content)
+                do {
+                    try markdown.write(to: newFileURL, atomically: true, encoding: .utf8)
+                    print("✓ Updated file path: \(notePath) → \(newPath)")
+                } catch {
+                    print("❌ Failed to update file: \(error)")
+                }
+
+                // Update the index
+                if indexService.upsertNote(updatedMetadata) {
+                    print("✓ Updated index for: \(updatedMetadata.title)")
+                }
+            }
+        }
+    }
 }

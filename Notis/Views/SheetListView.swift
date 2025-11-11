@@ -277,11 +277,25 @@ struct SheetListView: View {
             Button("Cancel", role: .cancel) { }
             Button("Rename") {
                 if let group = appState.selectedGroup {
-                    group.name = renameText.isEmpty ? "Untitled" : renameText
+                    let oldName = group.name ?? "Untitled"
+                    let newName = renameText.isEmpty ? "Untitled" : renameText
+
+                    // Only proceed if name actually changed
+                    guard oldName != newName else { return }
+
+                    group.name = newName
                     group.modifiedAt = Date()
-                    
+
                     do {
                         try viewContext.save()
+
+                        // Rename the folder on disk and update file paths
+                        MarkdownCoreDataSync.shared.renameGroupFolder(
+                            group: group,
+                            oldName: oldName,
+                            newName: newName,
+                            context: viewContext
+                        )
                     } catch {
                         print("Failed to rename group: \(error)")
                     }

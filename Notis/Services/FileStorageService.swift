@@ -45,11 +45,16 @@ class FileStorageService {
     // MARK: - Directory Management
 
     /// Create necessary directories
+    /// NOTE: Sheets directory creation disabled - legacy system no longer used
+    /// New markdown-based system uses MarkdownFileService with Notes/ directory
     private func createDirectories() {
         do {
             try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
-            try fileManager.createDirectory(at: sheetsDirectory, withIntermediateDirectories: true)
-            print("✓ File storage directories created at: \(sheetsDirectory.path)")
+            // Don't create Sheets directory - it's legacy and unused
+            // Only create it if files actually exist there (for backwards compatibility)
+            if fileManager.fileExists(atPath: sheetsDirectory.path) {
+                print("ℹ️ Sheets directory exists (legacy system)")
+            }
         } catch {
             print("❌ Failed to create directories: \(error)")
         }

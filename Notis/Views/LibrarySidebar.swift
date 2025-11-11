@@ -782,15 +782,33 @@ struct GroupRowView: View {
     }
     
     private func finishEditing() {
-        group.name = editingName.isEmpty ? "Untitled" : editingName
+        let oldName = group.name ?? "Untitled"
+        let newName = editingName.isEmpty ? "Untitled" : editingName
+
+        // Only proceed if name actually changed
+        guard oldName != newName else {
+            isEditing = false
+            isTextFieldFocused = false
+            return
+        }
+
+        group.name = newName
         group.modifiedAt = Date()
-        
+
         do {
             try viewContext.save()
+
+            // Rename the folder on disk and update file paths
+            MarkdownCoreDataSync.shared.renameGroupFolder(
+                group: group,
+                oldName: oldName,
+                newName: newName,
+                context: viewContext
+            )
         } catch {
             print("Failed to rename group: \(error)")
         }
-        
+
         isEditing = false
         isTextFieldFocused = false
     }
