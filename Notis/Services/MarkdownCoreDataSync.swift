@@ -58,6 +58,13 @@ class MarkdownCoreDataSync {
                         newSheet.isFavorite = (note.status == "favorite")
                         newSheet.isInTrash = false
 
+                        // Set fileURL to the markdown file path
+                        if let notePath = note.path {
+                            let fileURL = MarkdownFileService.shared.getNotesDirectory()
+                                .appendingPathComponent(notePath)
+                            newSheet.fileURL = fileURL.path
+                        }
+
                         // Set group based on folder path
                         if let notePath = note.path {
                             newSheet.group = findOrCreateGroup(fromPath: notePath, context: context)
@@ -69,6 +76,18 @@ class MarkdownCoreDataSync {
 
                     let sheet = results.first!
                     var changed = false
+
+                    // Update fileURL if not set or different
+                    if let notePath = note.path {
+                        let expectedFileURL = MarkdownFileService.shared.getNotesDirectory()
+                            .appendingPathComponent(notePath).path
+
+                        if sheet.fileURL != expectedFileURL {
+                            print("📎 Updating fileURL for '\(note.title)'")
+                            sheet.fileURL = expectedFileURL
+                            changed = true
+                        }
+                    }
 
                     // Check if title needs updating
                     if sheet.title != note.title {
