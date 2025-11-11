@@ -178,6 +178,8 @@ extension Sheet {
                let newRelativePath = MarkdownFileService.shared.relativePath(for: newURL) {
                 // Update path in metadata
                 updatedMetadata.path = newRelativePath
+                // Update fileURL in CoreData to point to renamed file
+                self.fileURL = newURL.path
                 print("✓ Renamed file from \(oldURL.lastPathComponent) to \(newURL.lastPathComponent)")
             } else {
                 print("❌ Failed to rename file, keeping original path")
