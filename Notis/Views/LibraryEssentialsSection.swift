@@ -40,9 +40,16 @@ struct LibraryEssentialsSection: View {
         animation: .default
     )
     private var trashedSheets: FetchedResults<Sheet>
-    
-    
-    
+
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \Sheet.modifiedAt, ascending: false)],
+        predicate: NSPredicate(format: "group == nil AND isInTrash == NO"),
+        animation: .default
+    )
+    private var ungroupedSheets: FetchedResults<Sheet>
+
+
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Essential Library Items
@@ -63,8 +70,16 @@ struct LibraryEssentialsSection: View {
                 appState: appState,
                 action: { selectRecentSheets() }
             )
-            
-            
+
+            LibraryEssentialRow(
+                icon: "tray",
+                title: "Inbox",
+                count: ungroupedSheets.count,
+                isSelected: appState.selectedEssential == "inbox" && appState.selectedGroup == nil,
+                appState: appState,
+                action: { selectInbox() }
+            )
+
             LibraryEssentialRow(
                 icon: "trash",
                 title: "Trash",
@@ -104,7 +119,13 @@ struct LibraryEssentialsSection: View {
         appState.selectedGroup = nil
         appState.selectedSheet = nil
     }
-    
+
+    private func selectInbox() {
+        appState.selectedEssential = "inbox"
+        appState.selectedGroup = nil
+        appState.selectedSheet = nil
+    }
+
     private func selectTrash() {
         appState.selectedEssential = "trash"
         appState.selectedGroup = nil
@@ -121,12 +142,37 @@ struct LibraryEssentialsSection: View {
             if let selectedSheet = appState.selectedSheet, selectedSheet.isInTrash {
                 appState.selectedSheet = nil
             }
-            
+
+            let fileService = MarkdownFileService.shared
+
             // Delete all trashed sheets
             for sheet in trashedSheets {
+                // Physically delete the file from trash
+                if let fileURLString = sheet.fileURL, !fileURLString.isEmpty {
+                    let fileURL = URL(fileURLWithPath: fileURLString)
+
+                    // Check if file is in trash
+                    if fileURL.path.contains(".Trash") {
+                        let success = fileService.permanentlyDeleteFromTrash(at: fileURL)
+                        if success {
+                            print("✓ Permanently deleted file: \(fileURL.lastPathComponent)")
+                        } else {
+                            print("⚠️ Failed to delete file from disk: \(fileURL.lastPathComponent)")
+                        }
+                    } else {
+                        // File is not in trash, delete from regular location
+                        let success = fileService.deleteFile(at: fileURL)
+                        if success {
+                            print("✓ Deleted file: \(fileURL.lastPathComponent)")
+                        } else {
+                            print("⚠️ Failed to delete file from disk: \(fileURL.lastPathComponent)")
+                        }
+                    }
+                }
+
                 viewContext.delete(sheet)
             }
-            
+
             do {
                 try viewContext.save()
                 HapticService.shared.itemDeleted()

@@ -20,6 +20,7 @@ class MarkdownFileService {
     private let yamlService = YAMLFrontmatterService.shared
     private let baseDirectory: URL
     private let notesDirectory: URL
+    private let trashDirectory: URL
 
     // MARK: - Initialization
 
@@ -37,6 +38,9 @@ class MarkdownFileService {
         // Create Notes directory for markdown files
         notesDirectory = baseDirectory.appendingPathComponent("Notes", isDirectory: true)
 
+        // Create .Trash directory for deleted files
+        trashDirectory = baseDirectory.appendingPathComponent(".Trash", isDirectory: true)
+
         // Create directories if they don't exist
         createDirectories()
     }
@@ -48,7 +52,9 @@ class MarkdownFileService {
         do {
             try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
             try fileManager.createDirectory(at: notesDirectory, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: trashDirectory, withIntermediateDirectories: true)
             print("✓ Markdown file storage directories created at: \(notesDirectory.path)")
+            print("✓ Trash directory created at: \(trashDirectory.path)")
         } catch {
             print("❌ Failed to create directories: \(error)")
         }
@@ -57,6 +63,11 @@ class MarkdownFileService {
     /// Get the notes directory URL
     func getNotesDirectory() -> URL {
         return notesDirectory
+    }
+
+    /// Get the trash directory URL
+    func getTrashDirectory() -> URL {
+        return trashDirectory
     }
 
     /// Create a subdirectory within notes
@@ -301,6 +312,106 @@ class MarkdownFileService {
             print("❌ Failed to move file: \(error)")
             return false
         }
+    }
+
+    /// Move a file to trash
+    /// Returns: (success, trashURL) - the URL where the file was moved in trash
+    func moveFileToTrash(at url: URL) -> (success: Bool, trashURL: URL?) {
+        guard fileManager.fileExists(atPath: url.path) else {
+            print("❌ Source file doesn't exist")
+            return (false, nil)
+        }
+
+        // Generate a unique filename in trash to avoid conflicts
+        let filename = url.lastPathComponent
+        var trashURL = trashDirectory.appendingPathComponent(filename)
+        var counter = 1
+
+        // Handle duplicate names in trash
+        while fileManager.fileExists(atPath: trashURL.path) {
+            let nameWithoutExt = (filename as NSString).deletingPathExtension
+            let ext = (filename as NSString).pathExtension
+            let newFilename = "\(nameWithoutExt) \(counter).\(ext)"
+            trashURL = trashDirectory.appendingPathComponent(newFilename)
+            counter += 1
+        }
+
+        // Move file to trash
+        do {
+            try fileManager.moveItem(at: url, to: trashURL)
+            print("✓ Moved to trash: \(filename)")
+
+            // Clean up old directory if empty
+            cleanupEmptyDirectories(startingAt: url.deletingLastPathComponent())
+
+            return (true, trashURL)
+        } catch {
+            print("❌ Failed to move file to trash: \(error)")
+            return (false, nil)
+        }
+    }
+
+    /// Move a file from trash back to notes directory
+    func restoreFileFromTrash(trashURL: URL, toPath relativePath: String) -> Bool {
+        guard fileManager.fileExists(atPath: trashURL.path) else {
+            print("❌ File doesn't exist in trash")
+            return false
+        }
+
+        let restoreURL = notesDirectory.appendingPathComponent(relativePath)
+
+        // Ensure destination directory exists
+        let restoreDirectory = restoreURL.deletingLastPathComponent()
+        if !fileManager.fileExists(atPath: restoreDirectory.path) {
+            do {
+                try fileManager.createDirectory(at: restoreDirectory, withIntermediateDirectories: true)
+            } catch {
+                print("❌ Failed to create restore directory: \(error)")
+                return false
+            }
+        }
+
+        // Check for conflicts
+        if fileManager.fileExists(atPath: restoreURL.path) {
+            print("⚠️ File already exists at restore location: \(relativePath)")
+            return false
+        }
+
+        // Move file back from trash
+        do {
+            try fileManager.moveItem(at: trashURL, to: restoreURL)
+            print("✓ Restored from trash: \(relativePath)")
+            return true
+        } catch {
+            print("❌ Failed to restore file from trash: \(error)")
+            return false
+        }
+    }
+
+    /// Permanently delete a file from trash
+    func permanentlyDeleteFromTrash(at trashURL: URL) -> Bool {
+        guard fileManager.fileExists(atPath: trashURL.path) else {
+            return true // Already deleted
+        }
+
+        do {
+            try fileManager.removeItem(at: trashURL)
+            print("✓ Permanently deleted: \(trashURL.lastPathComponent)")
+            return true
+        } catch {
+            print("❌ Failed to permanently delete file: \(error)")
+            return false
+        }
+    }
+
+    /// Get the relative path for a file in trash (for file manager display)
+    func trashRelativePath(for url: URL) -> String? {
+        guard url.path.hasPrefix(trashDirectory.path) else {
+            return nil
+        }
+
+        let relativePath = url.path.replacingOccurrences(of: trashDirectory.path + "/", with: "")
+        return relativePath
     }
 
     // MARK: - Content Processing
