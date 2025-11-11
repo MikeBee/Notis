@@ -40,8 +40,8 @@ extension Sheet {
                 return content
             }
 
-            // Fall back to old hybrid system
-            return hybridContent
+            // Fall back to CoreData content
+            return content ?? ""
         }
         set {
             // Don't save to filesystem if sheet is in trash
@@ -75,9 +75,10 @@ extension Sheet {
         // Don't migrate empty or whitespace-only content
         let trimmedContent = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else {
-            // Fall back to old storage for empty sheets
+            // Keep empty content in CoreData
             print("⊘ Sheet has no content, keeping in CoreData: \(title ?? "Untitled")")
-            hybridContent = newContent
+            content = newContent
+            updateMetadata(with: newContent)
             return
         }
 
@@ -111,8 +112,9 @@ extension Sheet {
 
         guard result.success, let finalMetadata = result.metadata, let createdURL = result.url else {
             print("❌ Failed to create markdown file for: \(title ?? "Untitled")")
-            // Fall back to old storage
-            hybridContent = newContent
+            // Fall back to CoreData storage
+            content = newContent
+            updateMetadata(with: newContent)
             return
         }
 
@@ -267,6 +269,25 @@ extension Sheet {
 
         guard !pathComponents.isEmpty else { return nil }
         return pathComponents.joined(separator: "/")
+    }
+
+    /// Update word count and preview from content
+    private func updateMetadata(with newContent: String) {
+        // Update word count
+        let words = newContent.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        wordCount = Int32(words.count)
+
+        // Update preview
+        let trimmed = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count <= 200 {
+            preview = trimmed
+        } else {
+            preview = String(trimmed.prefix(200)) + "..."
+        }
+
+        // Update modified date
+        modifiedAt = Date()
     }
 
     /// Generate a title from content (first heading or first line)
