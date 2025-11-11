@@ -99,11 +99,19 @@ class MarkdownCoreDataSync {
                 }
             }
 
+            // Clean up empty groups (folders with no sheets)
+            let deletedGroups = deleteEmptyGroups(context: context)
+            if deletedGroups > 0 {
+                print("🗑️ Deleted \(deletedGroups) empty group(s)")
+            }
+
             // Save changes
-            if updatedCount > 0 {
+            if updatedCount > 0 || deletedGroups > 0 {
                 do {
                     try context.save()
-                    print("✅ Synced \(updatedCount) sheet(s) from markdown files to CoreData")
+                    if updatedCount > 0 {
+                        print("✅ Synced \(updatedCount) sheet(s) from markdown files to CoreData")
+                    }
                 } catch {
                     print("❌ Failed to save CoreData context: \(error)")
                 }
@@ -171,5 +179,36 @@ class MarkdownCoreDataSync {
         }
 
         return currentParent
+    }
+
+    /// Delete groups that have no sheets or subgroups
+    /// Returns the number of deleted groups
+    private func deleteEmptyGroups(context: NSManagedObjectContext) -> Int {
+        let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
+
+        var deletedCount = 0
+
+        do {
+            let allGroups = try context.fetch(fetchRequest)
+
+            for group in allGroups {
+                // Check if group has any sheets
+                let hasSheets = (group.sheets?.count ?? 0) > 0
+
+                // Check if group has any subgroups
+                let hasSubgroups = (group.subgroups?.count ?? 0) > 0
+
+                // Delete if empty
+                if !hasSheets && !hasSubgroups {
+                    print("🗑️ Deleting empty group: '\(group.name ?? "Unknown")'")
+                    context.delete(group)
+                    deletedCount += 1
+                }
+            }
+        } catch {
+            print("❌ Failed to fetch groups for cleanup: \(error)")
+        }
+
+        return deletedCount
     }
 }
