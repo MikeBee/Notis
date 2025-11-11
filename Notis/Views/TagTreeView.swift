@@ -32,6 +32,7 @@ struct TagTreeView: View {
     @State private var searchText = ""
     @State private var selectedFilterOperation: TagFilterOperation = .and
     @State private var showingTagSearch = false
+    @State private var showingCleanupDialog = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -42,6 +43,7 @@ struct TagTreeView: View {
                 searchText: $searchText,
                 selectedTags: tagService.selectedTags,
                 filterOperation: $selectedFilterOperation,
+                showingCleanupDialog: $showingCleanupDialog,
                 onClearFilters: {
                     tagService.selectedTags.removeAll()
                     searchText = ""
@@ -93,6 +95,11 @@ struct TagTreeView: View {
                 onCreate: createNewTag
             )
         }
+        .sheet(isPresented: $showingCleanupDialog) {
+            CleanupTagsDialog(
+                isPresented: $showingCleanupDialog
+            )
+        }
         .onChange(of: tagService.selectedTags) {
             updateAppStateForTagFilter()
         }
@@ -132,9 +139,10 @@ struct TagTreeHeader: View {
     @Binding var searchText: String
     let selectedTags: Set<Tag>
     @Binding var filterOperation: TagFilterOperation
+    @Binding var showingCleanupDialog: Bool
     let onClearFilters: () -> Void
     @StateObject private var tagService = TagService.shared
-    
+
     @State private var isSearchButtonHovering = false
     @State private var isPlusButtonHovering = false
     @State private var showingSortMenu = false
@@ -189,7 +197,7 @@ struct TagTreeHeader: View {
                     }
                     
                     Divider()
-                    
+
                     // Direction toggle
                     Button(action: {
                         tagService.setSortOrder(tagService.currentSortOrder, ascending: !tagService.sortAscending)
@@ -199,6 +207,18 @@ struct TagTreeHeader: View {
                             Text(tagService.sortAscending ? "Ascending" : "Descending")
                             Spacer()
                             Image(systemName: "checkmark")
+                        }
+                    }
+
+                    Divider()
+
+                    // Clean up unused tags
+                    Button(action: {
+                        showingCleanupDialog = true
+                    }) {
+                        HStack {
+                            Image(systemName: "trash.circle")
+                            Text("Clean up unused tags...")
                         }
                     }
                 } label: {
@@ -618,6 +638,242 @@ struct TagChip: View {
             Capsule()
                 .strokeBorder(tag.tagColor.opacity(isSelected ? 0.5 : 0.3), lineWidth: 1)
         )
+    }
+}
+
+// MARK: - Cleanup Tags Dialog
+
+struct CleanupTagsDialog: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Binding var isPresented: Bool
+    @StateObject private var tagService = TagService.shared
+
+    @State private var unusedTags: [Tag] = []
+    @State private var selectedTags: Set<Tag> = []
+    @State private var isDeleting = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Clean Up Unused Tags")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                Spacer()
+
+                Button(action: { isPresented = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            .padding()
+
+            Divider()
+
+            // Info message
+            if unusedTags.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 60))
+                        .foregroundColor(.green)
+
+                    Text("No Unused Tags")
+                        .font(.headline)
+
+                    Text("All your tags are currently in use.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding()
+            } else {
+                VStack(spacing: 12) {
+                    // Summary
+                    HStack {
+                        Text("\(unusedTags.count) unused tag\(unusedTags.count == 1 ? "" : "s") found")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        if !selectedTags.isEmpty {
+                            Text("\(selectedTags.count) selected")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+
+                    // Select/Deselect all
+                    HStack {
+                        Button(action: selectAll) {
+                            Text("Select All")
+                                .font(.subheadline)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+
+                        Button(action: deselectAll) {
+                            Text("Deselect All")
+                                .font(.subheadline)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+
+                    Divider()
+
+                    // List of unused tags
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(unusedTags, id: \.self) { tag in
+                                UnusedTagRow(
+                                    tag: tag,
+                                    isSelected: selectedTags.contains(tag),
+                                    onToggle: { toggleTagSelection(tag) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            // Footer buttons
+            HStack {
+                Button(action: { isPresented = false }) {
+                    Text("Cancel")
+                        .frame(minWidth: 80)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .padding(8)
+
+                Spacer()
+
+                Button(action: deleteSelectedTags) {
+                    if isDeleting {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Text("Delete Selected (\(selectedTags.count))")
+                            .frame(minWidth: 120)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .disabled(selectedTags.isEmpty || isDeleting)
+                .padding(8)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+        }
+        .frame(width: 500, height: 600)
+        .background(Color(NSColor.windowBackgroundColor))
+        .onAppear {
+            loadUnusedTags()
+        }
+    }
+
+    private func loadUnusedTags() {
+        unusedTags = tagService.getUnusedTags()
+        // Auto-select all by default
+        selectedTags = Set(unusedTags)
+    }
+
+    private func selectAll() {
+        selectedTags = Set(unusedTags)
+    }
+
+    private func deselectAll() {
+        selectedTags.removeAll()
+    }
+
+    private func toggleTagSelection(_ tag: Tag) {
+        if selectedTags.contains(tag) {
+            selectedTags.remove(tag)
+        } else {
+            selectedTags.insert(tag)
+        }
+    }
+
+    private func deleteSelectedTags() {
+        guard !selectedTags.isEmpty else { return }
+
+        isDeleting = true
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            tagService.deleteTags(Array(selectedTags))
+
+            // Refresh the list
+            loadUnusedTags()
+            isDeleting = false
+
+            // Close dialog if no more unused tags
+            if unusedTags.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    isPresented = false
+                }
+            }
+        }
+    }
+}
+
+struct UnusedTagRow: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let tag: Tag
+    let isSelected: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Checkbox
+            Button(action: onToggle) {
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                    .font(.title3)
+                    .foregroundColor(isSelected ? .blue : .secondary)
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            // Tag color indicator
+            Circle()
+                .fill(tag.tagColor)
+                .frame(width: 12, height: 12)
+
+            // Tag name/path
+            VStack(alignment: .leading, spacing: 2) {
+                Text(tag.displayName)
+                    .font(.body)
+
+                if let path = tag.path, path != tag.name {
+                    Text(path)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            // Usage count (should be 0)
+            Text("0 uses")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(
+            Rectangle()
+                .fill(isSelected ? Color.blue.opacity(0.1) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onToggle()
+        }
     }
 }
 

@@ -107,16 +107,55 @@ class TagService: ObservableObject {
                 child.path = generatePath(for: child)
             }
         }
-        
+
         viewContext.delete(tag)
-        
+
         do {
             try viewContext.save()
         } catch {
             print("Failed to delete tag: \(error)")
         }
     }
-    
+
+    func deleteTags(_ tags: [Tag]) {
+        for tag in tags {
+            // Move child tags to parent or root level
+            if let children = tag.children?.allObjects as? [Tag] {
+                for child in children {
+                    child.parent = tag.parent
+                    child.path = generatePath(for: child)
+                }
+            }
+
+            viewContext.delete(tag)
+        }
+
+        do {
+            try viewContext.save()
+            print("✓ Deleted \(tags.count) tag(s)")
+        } catch {
+            print("Failed to delete tags: \(error)")
+        }
+    }
+
+    func getUnusedTags() -> [Tag] {
+        let fetchRequest: NSFetchRequest<Tag> = Tag.fetchRequest()
+        fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Tag.path, ascending: true)]
+
+        do {
+            let allTags = try viewContext.fetch(fetchRequest)
+            // Filter tags with no sheet associations
+            let unusedTags = allTags.filter { tag in
+                let sheetCount = tag.sheetTags?.count ?? 0
+                return sheetCount == 0
+            }
+            return unusedTags
+        } catch {
+            print("Failed to fetch unused tags: \(error)")
+            return []
+        }
+    }
+
     func renameTag(_ tag: Tag, newName: String) {
         let normalizedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedName.isEmpty else { return }
