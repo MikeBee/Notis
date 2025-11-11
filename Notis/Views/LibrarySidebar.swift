@@ -858,6 +858,7 @@ struct GroupRowView: View {
 
             // Move all sheets to trash
             let fileService = MarkdownFileService.shared
+            var movedCount = 0
             for sheet in sheetsToTrash {
                 // Physically move the file to .Trash folder
                 if let fileURLString = sheet.fileURL, !fileURLString.isEmpty {
@@ -867,21 +868,29 @@ struct GroupRowView: View {
                     if success, let trashURL = trashURL {
                         // Update fileURL to point to trash location
                         sheet.fileURL = trashURL.path
+                        movedCount += 1
+                        print("✓ Moved '\(sheet.title ?? "Untitled")' to trash")
+                    } else {
+                        print("⚠️ Failed to move '\(sheet.title ?? "Untitled")' to trash")
                     }
+                } else {
+                    print("⚠️ Sheet '\(sheet.title ?? "Untitled")' has no fileURL")
                 }
 
                 // Mark sheet as trashed
                 sheet.isInTrash = true
                 sheet.deletedAt = Date()
                 sheet.modifiedAt = Date()
+                // Clear group reference BEFORE deleting the group to prevent cascade deletion
+                sheet.group = nil
             }
 
-            // Delete the group from CoreData
+            // Delete the group from CoreData (sheets remain in trash)
             viewContext.delete(group)
 
             do {
                 try viewContext.save()
-                print("✓ Deleted group and moved \(sheetsToTrash.count) sheet(s) to trash")
+                print("✓ Deleted group '\(group.name ?? "Untitled")' - moved \(movedCount)/\(sheetsToTrash.count) file(s) to trash")
             } catch {
                 print("Failed to delete group: \(error)")
             }
