@@ -81,9 +81,10 @@ class FileSyncService {
         stats.filesScanned = files.count
         print("📁 Found \(files.count) markdown files")
 
-        // Step 2: Build map of files by UUID and path, detect filename/title mismatches
+        // Step 2: Build map of files by UUID and path, detect filename/title mismatches and duplicate UUIDs
         var filesByUUID: [String: URL] = [:]
         var filesByPath: [String: URL] = [:]
+        var duplicateUUIDs: [(uuid: String, file1: URL, file2: URL)] = []
 
         for fileURL in files {
             guard let (metadata, content) = markdownService.readFile(at: fileURL) else {
@@ -104,6 +105,25 @@ class FileSyncService {
                 // Re-write file with updated YAML
                 if markdownService.updateFile(metadata: updatedMetadata, content: content) {
                     print("   ✓ Updated YAML title in file")
+
+                    // Check for duplicate UUID before adding
+                    if let existingFile = filesByUUID[updatedMetadata.uuid] {
+                        print("⚠️ DUPLICATE UUID DETECTED: \(updatedMetadata.uuid)")
+                        print("   File 1: \(existingFile.lastPathComponent)")
+                        print("   File 2: \(fileURL.lastPathComponent)")
+                        duplicateUUIDs.append((uuid: updatedMetadata.uuid, file1: existingFile, file2: fileURL))
+
+                        // Generate new UUID for duplicate file
+                        let newUUID = UUID().uuidString
+                        updatedMetadata.uuid = newUUID
+                        print("   🔄 Regenerating UUID for File 2: \(newUUID)")
+
+                        // Update the file with new UUID
+                        if markdownService.updateFile(metadata: updatedMetadata, content: content) {
+                            print("   ✓ Updated file with new UUID")
+                        }
+                    }
+
                     // Use updated metadata for indexing
                     filesByUUID[updatedMetadata.uuid] = fileURL
                     if let path = updatedMetadata.path {
@@ -115,10 +135,41 @@ class FileSyncService {
                 }
             }
 
+            // Check for duplicate UUID before adding
+            if let existingFile = filesByUUID[metadata.uuid] {
+                print("⚠️ DUPLICATE UUID DETECTED: \(metadata.uuid)")
+                print("   File 1: \(existingFile.lastPathComponent)")
+                print("   File 2: \(fileURL.lastPathComponent)")
+                duplicateUUIDs.append((uuid: metadata.uuid, file1: existingFile, file2: fileURL))
+
+                // Generate new UUID for duplicate file
+                var updatedMetadata = metadata
+                let newUUID = UUID().uuidString
+                updatedMetadata.uuid = newUUID
+                print("   🔄 Regenerating UUID for File 2: \(newUUID)")
+
+                // Update the file with new UUID
+                if markdownService.updateFile(metadata: updatedMetadata, content: content) {
+                    print("   ✓ Updated file with new UUID")
+                    filesByUUID[newUUID] = fileURL
+                    if let path = updatedMetadata.path {
+                        filesByPath[path] = fileURL
+                    }
+                } else {
+                    print("   ❌ Failed to regenerate UUID for duplicate file")
+                }
+                continue
+            }
+
             filesByUUID[metadata.uuid] = fileURL
             if let path = metadata.path {
                 filesByPath[path] = fileURL
             }
+        }
+
+        // Report duplicate UUIDs found
+        if !duplicateUUIDs.isEmpty {
+            print("⚠️ Found \(duplicateUUIDs.count) duplicate UUID(s) and regenerated them")
         }
 
         // Step 3: Get all notes from index
@@ -207,6 +258,82 @@ class FileSyncService {
         MarkdownCoreDataSync.shared.syncMarkdownToCoreData(context: context)
 
         print("✅ Full sync with CoreData complete")
+
+        return stats
+    }
+
+    /// Perform a deep sync - reads all file content and updates word counts, excerpts, etc.
+    /// This is slower than regular sync but ensures all computed fields are up-to-date
+    @discardableResult
+    func performDeepSync(context: NSManagedObjectContext) -> SyncStats {
+        guard !isSyncing else {
+            print("⚠️ Sync already in progress")
+            return lastSyncStats ?? SyncStats()
+        }
+
+        isSyncing = true
+        defer { isSyncing = false }
+
+        print("🔍 Starting DEEP sync (reading all file content)...")
+        var stats = SyncStats()
+
+        // Scan all markdown files
+        let files = markdownService.scanAllFiles()
+        stats.filesScanned = files.count
+        print("📁 Found \(files.count) markdown files to deep sync")
+
+        var processedCount = 0
+
+        for fileURL in files {
+            // Read file with full content
+            guard let (metadata, content) = markdownService.readFile(at: fileURL) else {
+                stats.errors += 1
+                continue
+            }
+
+            // Get existing note from index
+            if let existingNote = indexService.getNote(uuid: metadata.uuid) {
+                // Check if content-derived fields need updating
+                let needsUpdate =
+                    metadata.wordCount != existingNote.wordCount ||
+                    metadata.charCount != existingNote.charCount ||
+                    metadata.excerpt != existingNote.excerpt ||
+                    metadata.contentHash != existingNote.contentHash
+
+                if needsUpdate {
+                    if indexService.upsertNote(metadata) {
+                        stats.indexEntriesUpdated += 1
+                        print("✓ Deep synced: \(metadata.title) (\(metadata.wordCount) words)")
+                    } else {
+                        stats.errors += 1
+                    }
+                }
+            } else {
+                // New file
+                if indexService.upsertNote(metadata) {
+                    stats.indexEntriesAdded += 1
+                    print("✓ Added new file: \(metadata.title)")
+                } else {
+                    stats.errors += 1
+                }
+            }
+
+            processedCount += 1
+            if processedCount % 10 == 0 {
+                print("  Progress: \(processedCount)/\(files.count) files processed")
+            }
+        }
+
+        lastSyncDate = Date()
+        lastSyncStats = stats
+
+        print("✓ Deep sync complete: \(stats.totalChanges) changes")
+        printSyncStats(stats)
+
+        // Sync to CoreData
+        print("✅ File→SQLite deep sync complete, now syncing SQLite→CoreData...")
+        MarkdownCoreDataSync.shared.syncMarkdownToCoreData(context: context)
+        print("✅ Deep sync with CoreData complete")
 
         return stats
     }
