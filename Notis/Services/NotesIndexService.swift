@@ -252,11 +252,9 @@ class NotesIndexService {
         }
 
         let result = sqlite3_step(statement) == SQLITE_DONE
-        if result {
-            print("✓ Upserted note: \(metadata.title)")
-        } else {
+        if !result {
             let error = String(cString: sqlite3_errmsg(db))
-            print("❌ Failed to upsert note: \(error)")
+            print("❌ Failed to upsert note '\(metadata.title)': \(error)")
         }
 
         return result

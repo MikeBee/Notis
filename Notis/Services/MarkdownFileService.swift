@@ -185,7 +185,6 @@ class MarkdownFileService {
         // Write to file
         do {
             try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
-            print("✓ Created file: \(fileURL.lastPathComponent)")
             return (true, finalMetadata, fileURL)
         } catch {
             print("❌ Failed to write file: \(error)")
@@ -247,7 +246,6 @@ class MarkdownFileService {
         // Write to file
         do {
             try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
-            print("✓ Updated file: \(fileURL.lastPathComponent)")
             return true
         } catch {
             print("❌ Failed to update file: \(error)")
@@ -263,7 +261,6 @@ class MarkdownFileService {
 
         do {
             try fileManager.removeItem(at: url)
-            print("✓ Deleted file: \(url.lastPathComponent)")
 
             // Clean up empty directories
             cleanupEmptyDirectories(startingAt: url.deletingLastPathComponent())
@@ -302,7 +299,6 @@ class MarkdownFileService {
         // Move file
         do {
             try fileManager.moveItem(at: oldURL, to: newURL)
-            print("✓ Moved file: \(oldURL.lastPathComponent) → \(newURL.lastPathComponent)")
 
             // Clean up old directory if empty
             cleanupEmptyDirectories(startingAt: oldURL.deletingLastPathComponent())
