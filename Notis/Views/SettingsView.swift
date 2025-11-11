@@ -291,23 +291,6 @@ struct SettingsView: View {
                         }
                     }
 
-                    NavigationLink(destination: StorageDebugView()) {
-                        HStack {
-                            Image(systemName: "doc.badge.gearshape")
-                                .foregroundColor(.purple)
-                            Text("File Storage Debug")
-                            Spacer()
-                        }
-                    }
-
-                    NavigationLink(destination: FileBasedStorageTestView()) {
-                        HStack {
-                            Image(systemName: "doc.text.magnifyingglass")
-                                .foregroundColor(.blue)
-                            Text("File-Based Storage Test")
-                            Spacer()
-                        }
-                    }
                 }
 
                 Section("Markdown File Browser") {
@@ -334,15 +317,6 @@ struct SettingsView: View {
                             Image(systemName: "magnifyingglass")
                                 .foregroundColor(.purple)
                             Text("Full-Text Search")
-                            Spacer()
-                        }
-                    }
-
-                    NavigationLink(destination: FileSystemStatsView()) {
-                        HStack {
-                            Image(systemName: "chart.bar.fill")
-                                .foregroundColor(.green)
-                            Text("Storage Statistics")
                             Spacer()
                         }
                     }
