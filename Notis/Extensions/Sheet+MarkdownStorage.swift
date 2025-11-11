@@ -89,12 +89,9 @@ extension Sheet {
         // Build metadata from CoreData sheet
         var metadata = buildNoteMetadata()
 
-        print("🔄 Migrating sheet: '\(metadata.title)' with \(trimmedContent.count) chars")
-
         // Auto-generate better title if it's "Untitled" or empty
         if metadata.title.isEmpty || metadata.title == "Untitled" {
             let generatedTitle = generateTitleFromContent(trimmedContent)
-            print("  📝 Auto-generated title: '\(generatedTitle)' from content")
             metadata.title = generatedTitle
             // Update CoreData title too
             title = generatedTitle
@@ -104,7 +101,6 @@ extension Sheet {
         let folderPath = buildFolderPath()
 
         // Create markdown file
-        print("  📄 Creating file: '\(metadata.title).md'")
         let result = MarkdownFileService.shared.createFile(
             title: metadata.title,
             content: newContent,
@@ -131,8 +127,6 @@ extension Sheet {
 
         // Update CoreData metadata
         updateMetadata(with: newContent)
-
-        print("✓ Migrated sheet to markdown storage: \(title ?? "Untitled")")
     }
 
     /// Update existing markdown file
@@ -180,7 +174,6 @@ extension Sheet {
                 updatedMetadata.path = newRelativePath
                 // Update fileURL in CoreData to point to renamed file
                 self.fileURL = newURL.path
-                print("✓ Renamed file from \(oldURL.lastPathComponent) to \(newURL.lastPathComponent)")
             } else {
                 print("❌ Failed to rename file, keeping original path")
             }
