@@ -44,6 +44,12 @@ extension Sheet {
             return hybridContent
         }
         set {
+            // Don't save to filesystem if sheet is in trash
+            if isInTrash {
+                // Just update in-memory content, don't persist to file
+                return
+            }
+
             // If already using markdown storage, update it
             if let metadata = markdownMetadata {
                 updateMarkdownFile(content: newValue, existingMetadata: metadata)
@@ -59,6 +65,11 @@ extension Sheet {
 
     /// Migrate this sheet to the new markdown storage system
     private func migrateToMarkdownStorage(content newContent: String) {
+        // Don't migrate if sheet is in trash
+        if isInTrash {
+            return
+        }
+
         // Don't migrate empty or whitespace-only content
         let trimmedContent = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else {
@@ -122,6 +133,11 @@ extension Sheet {
 
     /// Update existing markdown file
     private func updateMarkdownFile(content newContent: String, existingMetadata: NoteMetadata) {
+        // Don't update file if sheet is in trash
+        if isInTrash {
+            return
+        }
+
         // Update metadata
         var updatedMetadata = existingMetadata
         updatedMetadata.modified = Date()
