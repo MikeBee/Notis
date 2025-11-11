@@ -147,27 +147,34 @@ struct LibraryEssentialsSection: View {
 
             // Delete all trashed sheets
             for sheet in trashedSheets {
+                let sheetTitle = sheet.title ?? "Untitled"
+
                 // Physically delete the file from trash
                 if let fileURLString = sheet.fileURL, !fileURLString.isEmpty {
                     let fileURL = URL(fileURLWithPath: fileURLString)
+
+                    print("🗑️ Emptying trash for '\(sheetTitle)': \(fileURL.path)")
 
                     // Check if file is in trash
                     if fileURL.path.contains(".Trash") {
                         let success = fileService.permanentlyDeleteFromTrash(at: fileURL)
                         if success {
-                            print("✓ Permanently deleted file: \(fileURL.lastPathComponent)")
+                            print("✓ Permanently deleted from .Trash: \(fileURL.lastPathComponent)")
                         } else {
-                            print("⚠️ Failed to delete file from disk: \(fileURL.lastPathComponent)")
+                            print("⚠️ Failed to delete from .Trash: \(fileURL.lastPathComponent)")
                         }
                     } else {
                         // File is not in trash, delete from regular location
+                        print("⚠️ fileURL not in .Trash, deleting from: \(fileURL.path)")
                         let success = fileService.deleteFile(at: fileURL)
                         if success {
-                            print("✓ Deleted file: \(fileURL.lastPathComponent)")
+                            print("✓ Deleted file from non-trash location: \(fileURL.lastPathComponent)")
                         } else {
-                            print("⚠️ Failed to delete file from disk: \(fileURL.lastPathComponent)")
+                            print("⚠️ Failed to delete file: \(fileURL.lastPathComponent)")
                         }
                     }
+                } else {
+                    print("⚠️ No fileURL for trashed sheet: \(sheetTitle)")
                 }
 
                 viewContext.delete(sheet)
