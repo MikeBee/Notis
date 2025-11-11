@@ -868,6 +868,15 @@ struct GroupRowView: View {
                     if success, let trashURL = trashURL {
                         // Update fileURL to point to trash location
                         sheet.fileURL = trashURL.path
+
+                        // Update SQLite index with new trash location
+                        if let uuid = sheet.id?.uuidString,
+                           var metadata = NotesIndexService.shared.getNote(uuid: uuid),
+                           let relativePath = fileService.relativePath(for: trashURL) {
+                            metadata.path = relativePath
+                            _ = NotesIndexService.shared.upsertNote(metadata)
+                        }
+
                         movedCount += 1
                         print("✓ Moved '\(sheet.title ?? "Untitled")' to trash")
                     } else {
@@ -908,7 +917,7 @@ struct GroupRowView: View {
 
         // Check if folder exists
         guard FileManager.default.fileExists(atPath: folderURL.path) else {
-            print("⚠️ Folder doesn't exist: \(folderPath)")
+            // Folder already deleted (likely by cleanupEmptyDirectories), which is fine
             return
         }
 
