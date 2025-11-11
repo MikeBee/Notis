@@ -21,10 +21,7 @@ class MarkdownCoreDataSync {
     /// Sync metadata from markdown files back to CoreData sheets
     /// Call this after FileSyncService updates the SQLite index
     func syncMarkdownToCoreData(context: NSManagedObjectContext) {
-        print("🔄 Starting CoreData sync from markdown files...")
-
         let allNotes = indexService.getAllNotes()
-        print("📊 Found \(allNotes.count) notes in SQLite index to sync")
 
         // Perform CoreData operations on the context's thread
         context.performAndWait {
@@ -48,7 +45,6 @@ class MarkdownCoreDataSync {
 
                     if results.first == nil {
                         // Sheet doesn't exist in CoreData - create it from external file
-                        print("📥 Importing external file as new sheet: '\(note.title)'")
 
                         let newSheet = Sheet(context: context)
                         newSheet.id = sheetUUID
@@ -83,7 +79,6 @@ class MarkdownCoreDataSync {
                             .appendingPathComponent(notePath).path
 
                         if sheet.fileURL != expectedFileURL {
-                            print("📎 Updating fileURL for '\(note.title)'")
                             sheet.fileURL = expectedFileURL
                             changed = true
                         }
@@ -91,7 +86,6 @@ class MarkdownCoreDataSync {
 
                     // Check if title needs updating
                     if sheet.title != note.title {
-                        print("📝 Syncing title change: '\(sheet.title ?? "")' → '\(note.title)'")
                         sheet.title = note.title
                         changed = true
                     }
@@ -114,7 +108,6 @@ class MarkdownCoreDataSync {
                         let newGroup = findOrCreateGroup(fromPath: notePath, context: context)
 
                         if sheet.group != newGroup {
-                            print("📁 Moving '\(note.title)': '\(sheet.group?.name ?? "root")' → '\(newGroup?.name ?? "root")'")
                             sheet.group = newGroup
                             changed = true
                         }
@@ -132,22 +125,14 @@ class MarkdownCoreDataSync {
 
             // Clean up orphaned groups (no sheets, no subgroups, and no matching folder in filesystem)
             let deletedGroups = deleteOrphanedGroups(context: context)
-            if deletedGroups > 0 {
-                print("🗑️ Deleted \(deletedGroups) orphaned group(s)")
-            }
 
             // Save changes
             if updatedCount > 0 || deletedGroups > 0 {
                 do {
                     try context.save()
-                    if updatedCount > 0 {
-                        print("✅ Synced \(updatedCount) sheet(s) from markdown files to CoreData")
-                    }
                 } catch {
                     print("❌ Failed to save CoreData context: \(error)")
                 }
-            } else {
-                print("ℹ️ No CoreData sheets needed updating (\(notFoundCount) notes have no matching sheet)")
             }
 
             if errorCount > 0 {
@@ -200,7 +185,6 @@ class MarkdownCoreDataSync {
                     newGroup.modifiedAt = Date()
                     newGroup.sortOrder = Int32(currentParent?.subgroups?.count ?? 0)
 
-                    print("📁 Created group from file path: \(folderName)")
                     currentParent = newGroup
                 }
             } catch {
@@ -244,11 +228,8 @@ class MarkdownCoreDataSync {
 
                     // Delete if no matching folder in filesystem
                     if !existsInFilesystem {
-                        print("🗑️ Deleting orphaned group (no filesystem folder): '\(group.name ?? "Unknown")'")
                         context.delete(group)
                         deletedCount += 1
-                    } else {
-                        print("✓ Preserving empty group (folder exists): '\(group.name ?? "Unknown")'")
                     }
                 }
             }
@@ -264,7 +245,6 @@ class MarkdownCoreDataSync {
     /// Rename a group's folder on the filesystem and update all file paths
     /// Call this when a group is renamed in the UI
     func renameGroupFolder(group: Group, oldName: String, newName: String, context: NSManagedObjectContext) {
-        print("📁 Renaming group folder: '\(oldName)' → '\(newName)'")
 
         let fileService = MarkdownFileService.shared
         let indexService = NotesIndexService.shared
@@ -303,9 +283,8 @@ class MarkdownCoreDataSync {
         // Rename the folder
         do {
             try FileManager.default.moveItem(at: oldFolderURL, to: newFolderURL)
-            print("✓ Renamed folder on disk: \(oldFolderPath) → \(newFolderPath)")
         } catch {
-            print("❌ Failed to rename folder: \(error)")
+            print("❌ Failed to rename folder '\(oldName)' to '\(newName)': \(error)")
             return
         }
 
@@ -314,8 +293,6 @@ class MarkdownCoreDataSync {
 
         // Trigger a sync to update CoreData
         MarkdownCoreDataSync.shared.syncMarkdownToCoreData(context: context)
-
-        print("✓ Group folder rename complete")
     }
 
     /// Build the folder path for a group with an optional name override
