@@ -96,7 +96,6 @@ class NotesIndexService {
         CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
             uuid UNINDEXED,
             title,
-            content,
             tags,
             excerpt,
             content='notes',
@@ -107,8 +106,8 @@ class NotesIndexService {
         // Trigger to keep FTS table in sync
         let createInsertTrigger = """
         CREATE TRIGGER IF NOT EXISTS notes_ai AFTER INSERT ON notes BEGIN
-            INSERT INTO notes_fts(rowid, uuid, title, content, tags, excerpt)
-            VALUES (new.rowid, new.uuid, new.title, '', new.tags, new.excerpt);
+            INSERT INTO notes_fts(rowid, uuid, title, tags, excerpt)
+            VALUES (new.rowid, new.uuid, new.title, new.tags, new.excerpt);
         END;
         """
 
