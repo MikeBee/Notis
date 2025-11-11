@@ -214,6 +214,18 @@ class FileSyncService {
     /// Sync a single file to the index
     private func syncFileToIndex(metadata: NoteMetadata, content: String, existingNote: NoteMetadata, fileURL: URL) -> SyncResult {
 
+        // Check if path changed (file was moved)
+        if metadata.path != existingNote.path {
+            print("📁 File moved: '\(existingNote.path ?? "?")' → '\(metadata.path ?? "?")'")
+            if indexService.upsertNote(metadata) {
+                print("✓ Updated index with new path: \(metadata.title)")
+                return .updated
+            } else {
+                print("❌ Failed to update index path: \(metadata.title)")
+                return .error
+            }
+        }
+
         // Check if file has been modified since last sync
         let fileModified = metadata.modified
         let indexModified = existingNote.modified
