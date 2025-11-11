@@ -286,9 +286,7 @@ struct LibrarySidebar: View {
 
                 // Create the actual filesystem folder
                 let folderPath = newGroup.folderPath()
-                if MarkdownFileService.shared.createFolder(path: folderPath) {
-                    print("✓ Created folder: \(folderPath)")
-                } else {
+                if !MarkdownFileService.shared.createFolder(path: folderPath) {
                     print("⚠️ Failed to create folder: \(folderPath)")
                 }
 
@@ -335,7 +333,6 @@ struct LibrarySidebar: View {
                 }
                 
                 try viewContext.save()
-                print("✅ Successfully reordered groups")
             } catch {
                 print("❌ Failed to reorder groups: \(error)")
                 // Rollback to avoid corrupt state
@@ -431,7 +428,6 @@ struct LibrarySidebar: View {
                     group.setValue(Int32(rootGroups.count), forKey: "sortOrder")
                     
                     try viewContext.save()
-                    print("✅ Successfully moved group to root level")
                 } catch {
                     print("❌ Failed to outdent group: \(error)")
                     viewContext.refresh(group, mergeChanges: false)
@@ -476,7 +472,6 @@ struct LibrarySidebar: View {
                 }
                 
                 try viewContext.save()
-                print("✅ Successfully reordered subgroups")
             } catch {
                 print("❌ Failed to reorder subgroups: \(error)")
                 // Rollback to avoid corrupt state
@@ -507,7 +502,6 @@ struct LibrarySidebar: View {
                 droppedGroup.setValue(Int32(existingSubgroups.count), forKey: "sortOrder")
                 
                 try viewContext.save()
-                print("✅ Successfully moved group to new parent")
             } catch {
                 print("❌ Failed to move group to new parent: \(error)")
                 // Refresh the context to avoid corrupt state
@@ -834,9 +828,7 @@ struct GroupRowView: View {
 
                 // Create the actual filesystem folder
                 let folderPath = subgroup.folderPath()
-                if MarkdownFileService.shared.createFolder(path: folderPath) {
-                    print("✓ Created folder: \(folderPath)")
-                } else {
+                if !MarkdownFileService.shared.createFolder(path: folderPath) {
                     print("⚠️ Failed to create folder: \(folderPath)")
                 }
 
@@ -853,8 +845,6 @@ struct GroupRowView: View {
         withAnimation {
             // Get all sheets in this group (recursively including subgroups)
             let sheetsToTrash = getAllSheetsInGroup(group)
-
-            print("🗑️ Deleting group '\(group.name ?? "Untitled")' with \(sheetsToTrash.count) sheet(s)")
 
             // Move all sheets to trash
             let fileService = MarkdownFileService.shared
@@ -878,7 +868,6 @@ struct GroupRowView: View {
                         }
 
                         movedCount += 1
-                        print("✓ Moved '\(sheet.title ?? "Untitled")' to trash")
                     } else {
                         print("⚠️ Failed to move '\(sheet.title ?? "Untitled")' to trash")
                     }
@@ -902,7 +891,6 @@ struct GroupRowView: View {
 
             do {
                 try viewContext.save()
-                print("✓ Deleted group '\(group.name ?? "Untitled")' - moved \(movedCount)/\(sheetsToTrash.count) file(s) to trash")
             } catch {
                 print("Failed to delete group: \(error)")
             }
@@ -924,7 +912,6 @@ struct GroupRowView: View {
         // Delete the folder and all its contents
         do {
             try FileManager.default.removeItem(at: folderURL)
-            print("✓ Deleted folder: \(folderPath)")
         } catch {
             print("❌ Failed to delete folder '\(folderPath)': \(error)")
         }

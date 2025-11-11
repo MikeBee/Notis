@@ -143,15 +143,12 @@ struct SheetListView: View {
                         Menu("Sort by") {
                             ForEach(AppState.SheetSortOption.allCases, id: \.self) { option in
                                 Button {
-                                    print("🔄 Sort option tapped: \(option.rawValue), current: \(appState.sheetSortOption.rawValue)")
                                     if appState.sheetSortOption == option {
                                         appState.sheetSortAscending.toggle()
-                                        print("🔄 Toggled sort direction: \(appState.sheetSortAscending)")
                                     } else {
                                         appState.sheetSortOption = option
                                         appState.sheetSortAscending = (option == .alphabetical)
-                                        print("🔄 Changed sort to: \(option.rawValue), ascending: \(appState.sheetSortAscending)")
-                                        
+
                                         // Repair sort order when switching to manual mode
                                         if option == .manual {
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -379,7 +376,6 @@ struct SheetListView: View {
                     _ = NotesIndexService.shared.upsertNote(finalMetadata)
 
                     try viewContext.save()
-                    print("✓ Created markdown file for new sheet: \(fileURL.lastPathComponent)")
                 } else {
                     print("⚠️ Failed to create markdown file for new sheet")
                 }
@@ -695,7 +691,6 @@ struct SheetRowView: View {
                         }
                     }
                     .onDrag {
-                        print("🔄 Dragging sheet: \(sheet.title ?? "Untitled")")
                         isDragging = true
                         return NSItemProvider(object: sheet.id?.uuidString as NSString? ?? NSString())
                     }
@@ -981,8 +976,6 @@ struct SheetRowView: View {
                         metadata.path = relativePath
                         _ = NotesIndexService.shared.upsertNote(metadata)
                     }
-
-                    print("✓ Moved '\(sheetTitle)' to trash: \(fileURL.lastPathComponent)")
                 } else {
                     print("⚠️ Failed to move '\(sheetTitle)' to trash, marking in database only")
                 }
@@ -1039,7 +1032,6 @@ struct SheetRowView: View {
                     // Update fileURL to the new location
                     let restoredURL = fileService.getNotesDirectory().appendingPathComponent(relativePath)
                     sheet.fileURL = restoredURL.path
-                    print("✓ Restored file from trash: \(filename)")
                 } else {
                     print("⚠️ Failed to restore file from trash, marking in database only")
                 }
@@ -1067,17 +1059,13 @@ struct SheetRowView: View {
                 // Check if file is in trash
                 if fileURL.path.contains(".Trash") {
                     let success = fileService.permanentlyDeleteFromTrash(at: fileURL)
-                    if success {
-                        print("✓ Permanently deleted file: \(fileURL.lastPathComponent)")
-                    } else {
+                    if !success {
                         print("⚠️ Failed to delete file from disk")
                     }
                 } else {
                     // File is not in trash, delete from regular location
                     let success = fileService.deleteFile(at: fileURL)
-                    if success {
-                        print("✓ Deleted file: \(fileURL.lastPathComponent)")
-                    } else {
+                    if !success {
                         print("⚠️ Failed to delete file from disk")
                     }
                 }
@@ -1123,30 +1111,26 @@ struct SheetDropDelegate: DropDelegate {
     let isEditingOrder: Bool
     
     func performDrop(info: DropInfo) -> Bool {
-        print("🎯 Drop attempted on sheet: \(targetSheet.title ?? "Untitled")")
         guard appState.sheetSortOption == .manual,
               isEditingOrder,
-              let item = info.itemProviders(for: [.text]).first else { 
+              let item = info.itemProviders(for: [.text]).first else {
             print("❌ Drop failed - conditions not met")
-            return false 
+            return false
         }
-        
-        print("✅ Drop conditions met, processing...")
+
         item.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
             guard let data = data as? Data,
                   let draggedSheetId = String(data: data, encoding: .utf8),
-                  let draggedUUID = UUID(uuidString: draggedSheetId) else { 
+                  let draggedUUID = UUID(uuidString: draggedSheetId) else {
                 print("❌ Failed to decode dragged sheet ID")
-                return 
+                return
             }
-            
-            print("🔍 Looking for dragged sheet with ID: \(draggedSheetId)")
+
             // Find the dragged sheet - we need to search through Core Data
             DispatchQueue.main.async {
                 // We'll rely on the reorderAction to handle finding the sheet
                 // by using a placeholder sheet with the correct ID
                 if let draggedSheet = findSheetWithId(draggedUUID) {
-                    print("✅ Found dragged sheet: \(draggedSheet.title ?? "Untitled"), reordering...")
                     reorderAction(draggedSheet, targetSheet)
                 } else {
                     print("❌ Could not find dragged sheet with ID: \(draggedSheetId)")
