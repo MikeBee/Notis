@@ -774,7 +774,11 @@ struct CleanupTagsDialog: View {
             .padding(.vertical, 12)
         }
         .frame(width: 500, height: 600)
+        #if os(macOS)
         .background(Color(NSColor.windowBackgroundColor))
+        #else
+        .background(Color(.systemBackground))
+        #endif
         .onAppear {
             loadUnusedTags()
         }
