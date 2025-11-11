@@ -187,8 +187,6 @@ extension Sheet {
 
             // Update CoreData metadata
             updateMetadata(with: newContent)
-
-            print("✓ Updated markdown file: \(title ?? "Untitled")")
         } else {
             print("❌ Failed to update markdown file: \(title ?? "Untitled")")
         }

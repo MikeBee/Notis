@@ -111,16 +111,12 @@ class MarkdownCoreDataSync {
 
                     // Update group based on folder path
                     if let notePath = note.path {
-                        print("🔍 Checking folder for '\(note.title)': path='\(notePath)'")
                         let newGroup = findOrCreateGroup(fromPath: notePath, context: context)
-                        print("   Current group: '\(sheet.group?.name ?? "root")', New group: '\(newGroup?.name ?? "root")'")
 
                         if sheet.group != newGroup {
-                            print("📁 Syncing folder change: '\(sheet.group?.name ?? "root")' → '\(newGroup?.name ?? "root")'")
+                            print("📁 Moving '\(note.title)': '\(sheet.group?.name ?? "root")' → '\(newGroup?.name ?? "root")'")
                             sheet.group = newGroup
                             changed = true
-                        } else {
-                            print("   ✓ Group already correct")
                         }
                     }
 
@@ -370,15 +366,12 @@ class MarkdownCoreDataSync {
                 let markdown = YAMLFrontmatterService.shared.serialize(metadata: updatedMetadata, content: content)
                 do {
                     try markdown.write(to: newFileURL, atomically: true, encoding: .utf8)
-                    print("✓ Updated file path: \(notePath) → \(newPath)")
                 } catch {
                     print("❌ Failed to update file: \(error)")
                 }
 
                 // Update the index
-                if indexService.upsertNote(updatedMetadata) {
-                    print("✓ Updated index for: \(updatedMetadata.title)")
-                }
+                _ = indexService.upsertNote(updatedMetadata)
             }
         }
     }
