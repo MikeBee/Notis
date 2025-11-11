@@ -31,6 +31,9 @@ struct FileBasedStorageTestView: View {
     @State private var dryRunStats: CoreDataMigrationService.MigrationStats?
     @State private var showMigrationConfirmation: Bool = false
 
+    // FileURL diagnostic
+    @State private var fileURLStatus: String = ""
+
     private let markdownService = MarkdownFileService.shared
     private let indexService = NotesIndexService.shared
     private let syncService = FileSyncService.shared
@@ -183,6 +186,28 @@ struct FileBasedStorageTestView: View {
                         .background(isMonitoring ? Color.red : Color.green)
                         .foregroundColor(.white)
                         .cornerRadius(10)
+                    }
+
+                    // Diagnostic button
+                    Button(action: checkFileURLStatus) {
+                        HStack {
+                            Image(systemName: "doc.text.magnifyingglass")
+                            Text("Check fileURL Status")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+
+                    if !fileURLStatus.isEmpty {
+                        Text(fileURLStatus)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(8)
+                            .background(Color(.systemGray5))
+                            .cornerRadius(8)
                     }
                 }
 
@@ -601,6 +626,35 @@ struct FileBasedStorageTestView: View {
     private func updateSyncStatus() {
         lastSyncDate = syncService.lastSyncDate
         syncStats = syncService.lastSyncStats
+    }
+
+    private func checkFileURLStatus() {
+        let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "isInTrash == NO")
+
+        do {
+            let sheets = try viewContext.fetch(fetchRequest)
+            let total = sheets.count
+            let withFileURL = sheets.filter { sheet in
+                if let fileURL = sheet.fileURL, !fileURL.isEmpty {
+                    return true
+                }
+                return false
+            }.count
+            let withoutFileURL = total - withFileURL
+
+            fileURLStatus = "📊 fileURL Status:\n• Total sheets: \(total)\n• With fileURL: \(withFileURL) ✓\n• Without fileURL: \(withoutFileURL) ⚠️"
+
+            if withoutFileURL > 0 {
+                fileURLStatus += "\n\n⚠️ Run a Full Sync to populate fileURL!"
+            } else {
+                fileURLStatus += "\n\n✓ All sheets have fileURL - trash will work!"
+            }
+
+            print(fileURLStatus)
+        } catch {
+            fileURLStatus = "❌ Error checking fileURL status: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Test Actions
