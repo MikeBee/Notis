@@ -851,14 +851,60 @@ struct GroupRowView: View {
     
     private func deleteGroup() {
         withAnimation {
+            // Get all sheets in this group (recursively including subgroups)
+            let sheetsToTrash = getAllSheetsInGroup(group)
+
+            print("🗑️ Deleting group '\(group.name ?? "Untitled")' with \(sheetsToTrash.count) sheet(s)")
+
+            // Move all sheets to trash
+            let fileService = MarkdownFileService.shared
+            for sheet in sheetsToTrash {
+                // Physically move the file to .Trash folder
+                if let fileURLString = sheet.fileURL, !fileURLString.isEmpty {
+                    let fileURL = URL(fileURLWithPath: fileURLString)
+
+                    let (success, trashURL) = fileService.moveFileToTrash(at: fileURL)
+                    if success, let trashURL = trashURL {
+                        // Update fileURL to point to trash location
+                        sheet.fileURL = trashURL.path
+                    }
+                }
+
+                // Mark sheet as trashed
+                sheet.isInTrash = true
+                sheet.deletedAt = Date()
+                sheet.modifiedAt = Date()
+            }
+
+            // Delete the group from CoreData
             viewContext.delete(group)
-            
+
             do {
                 try viewContext.save()
+                print("✓ Deleted group and moved \(sheetsToTrash.count) sheet(s) to trash")
             } catch {
                 print("Failed to delete group: \(error)")
             }
         }
+    }
+
+    /// Recursively get all sheets in a group and its subgroups
+    private func getAllSheetsInGroup(_ group: Group) -> [Sheet] {
+        var allSheets: [Sheet] = []
+
+        // Add direct sheets in this group
+        if let sheets = group.sheets as? Set<Sheet> {
+            allSheets.append(contentsOf: sheets)
+        }
+
+        // Recursively add sheets from subgroups
+        if let subgroups = group.subgroups as? Set<Group> {
+            for subgroup in subgroups {
+                allSheets.append(contentsOf: getAllSheetsInGroup(subgroup))
+            }
+        }
+
+        return allSheets
     }
     
     
