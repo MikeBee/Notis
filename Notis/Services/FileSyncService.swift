@@ -81,9 +81,10 @@ class FileSyncService {
         stats.filesScanned = files.count
         print("📁 Found \(files.count) markdown files")
 
-        // Step 2: Build map of files by UUID and path, detect filename/title mismatches
+        // Step 2: Build map of files by UUID and path, detect filename/title mismatches and duplicate UUIDs
         var filesByUUID: [String: URL] = [:]
         var filesByPath: [String: URL] = [:]
+        var duplicateUUIDs: [(uuid: String, file1: URL, file2: URL)] = []
 
         for fileURL in files {
             guard let (metadata, content) = markdownService.readFile(at: fileURL) else {
@@ -104,6 +105,25 @@ class FileSyncService {
                 // Re-write file with updated YAML
                 if markdownService.updateFile(metadata: updatedMetadata, content: content) {
                     print("   ✓ Updated YAML title in file")
+
+                    // Check for duplicate UUID before adding
+                    if let existingFile = filesByUUID[updatedMetadata.uuid] {
+                        print("⚠️ DUPLICATE UUID DETECTED: \(updatedMetadata.uuid)")
+                        print("   File 1: \(existingFile.lastPathComponent)")
+                        print("   File 2: \(fileURL.lastPathComponent)")
+                        duplicateUUIDs.append((uuid: updatedMetadata.uuid, file1: existingFile, file2: fileURL))
+
+                        // Generate new UUID for duplicate file
+                        let newUUID = UUID().uuidString
+                        updatedMetadata.uuid = newUUID
+                        print("   🔄 Regenerating UUID for File 2: \(newUUID)")
+
+                        // Update the file with new UUID
+                        if markdownService.updateFile(metadata: updatedMetadata, content: content) {
+                            print("   ✓ Updated file with new UUID")
+                        }
+                    }
+
                     // Use updated metadata for indexing
                     filesByUUID[updatedMetadata.uuid] = fileURL
                     if let path = updatedMetadata.path {
@@ -115,10 +135,41 @@ class FileSyncService {
                 }
             }
 
+            // Check for duplicate UUID before adding
+            if let existingFile = filesByUUID[metadata.uuid] {
+                print("⚠️ DUPLICATE UUID DETECTED: \(metadata.uuid)")
+                print("   File 1: \(existingFile.lastPathComponent)")
+                print("   File 2: \(fileURL.lastPathComponent)")
+                duplicateUUIDs.append((uuid: metadata.uuid, file1: existingFile, file2: fileURL))
+
+                // Generate new UUID for duplicate file
+                var updatedMetadata = metadata
+                let newUUID = UUID().uuidString
+                updatedMetadata.uuid = newUUID
+                print("   🔄 Regenerating UUID for File 2: \(newUUID)")
+
+                // Update the file with new UUID
+                if markdownService.updateFile(metadata: updatedMetadata, content: content) {
+                    print("   ✓ Updated file with new UUID")
+                    filesByUUID[newUUID] = fileURL
+                    if let path = updatedMetadata.path {
+                        filesByPath[path] = fileURL
+                    }
+                } else {
+                    print("   ❌ Failed to regenerate UUID for duplicate file")
+                }
+                continue
+            }
+
             filesByUUID[metadata.uuid] = fileURL
             if let path = metadata.path {
                 filesByPath[path] = fileURL
             }
+        }
+
+        // Report duplicate UUIDs found
+        if !duplicateUUIDs.isEmpty {
+            print("⚠️ Found \(duplicateUUIDs.count) duplicate UUID(s) and regenerated them")
         }
 
         // Step 3: Get all notes from index
