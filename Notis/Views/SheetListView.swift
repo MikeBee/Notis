@@ -973,6 +973,15 @@ struct SheetRowView: View {
                 if success, let trashURL = trashURL {
                     // Update fileURL to point to trash location
                     sheet.fileURL = trashURL.path
+
+                    // Update SQLite index with new trash location
+                    if let uuid = sheet.id?.uuidString,
+                       var metadata = NotesIndexService.shared.getNote(uuid: uuid),
+                       let relativePath = fileService.relativePath(for: trashURL) {
+                        metadata.path = relativePath
+                        _ = NotesIndexService.shared.upsertNote(metadata)
+                    }
+
                     print("✓ Moved '\(sheetTitle)' to trash: \(fileURL.lastPathComponent)")
                 } else {
                     print("⚠️ Failed to move '\(sheetTitle)' to trash, marking in database only")
