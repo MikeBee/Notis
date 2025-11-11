@@ -82,8 +82,8 @@ struct SheetListView: View {
                 let oneDayAgo = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
                 predicate = NSPredicate(format: "modifiedAt >= %@ AND isInTrash == NO", oneDayAgo as NSDate)
             case "inbox":
-                // Show sheets from Inbox group
-                predicate = NSPredicate(format: "group.name == %@ AND isInTrash == NO", "Inbox")
+                // Show ungrouped sheets (files at root level)
+                predicate = NSPredicate(format: "group == nil AND isInTrash == NO")
             case "projects":
                 // Show sheets from all groups except Inbox
                 predicate = NSPredicate(format: "group.name != %@ AND isInTrash == NO", "Inbox")
@@ -910,15 +910,30 @@ struct SheetRowView: View {
     
     private func moveToTrash() {
         withAnimation {
+            // Physically move the file to .Trash folder
+            if let fileURLString = sheet.fileURL, !fileURLString.isEmpty {
+                let fileURL = URL(fileURLWithPath: fileURLString)
+                let fileService = MarkdownFileService.shared
+
+                let (success, trashURL) = fileService.moveFileToTrash(at: fileURL)
+                if success, let trashURL = trashURL {
+                    // Update fileURL to point to trash location
+                    sheet.fileURL = trashURL.path
+                    print("✓ Moved file to trash: \(fileURL.lastPathComponent)")
+                } else {
+                    print("⚠️ Failed to move file to trash, marking in database only")
+                }
+            }
+
             sheet.isInTrash = true
             sheet.deletedAt = Date()
             sheet.modifiedAt = Date()
-            
+
             if appState.selectedSheet == sheet {
                 appState.selectedSheet = nil
             }
             appState.clearLastOpenedSheetIfNeeded(sheet)
-            
+
             do {
                 try viewContext.save()
             } catch {
@@ -943,12 +958,36 @@ struct SheetRowView: View {
     
     private func deleteSheetPermanently() {
         withAnimation {
+            // Physically delete the file from trash
+            if let fileURLString = sheet.fileURL, !fileURLString.isEmpty {
+                let fileURL = URL(fileURLWithPath: fileURLString)
+                let fileService = MarkdownFileService.shared
+
+                // Check if file is in trash
+                if fileURL.path.contains(".Trash") {
+                    let success = fileService.permanentlyDeleteFromTrash(at: fileURL)
+                    if success {
+                        print("✓ Permanently deleted file: \(fileURL.lastPathComponent)")
+                    } else {
+                        print("⚠️ Failed to delete file from disk")
+                    }
+                } else {
+                    // File is not in trash, delete from regular location
+                    let success = fileService.deleteFile(at: fileURL)
+                    if success {
+                        print("✓ Deleted file: \(fileURL.lastPathComponent)")
+                    } else {
+                        print("⚠️ Failed to delete file from disk")
+                    }
+                }
+            }
+
             if appState.selectedSheet == sheet {
                 appState.selectedSheet = nil
             }
             appState.clearLastOpenedSheetIfNeeded(sheet)
             viewContext.delete(sheet)
-            
+
             do {
                 try viewContext.save()
             } catch {
