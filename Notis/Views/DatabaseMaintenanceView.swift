@@ -14,6 +14,9 @@ struct DatabaseMaintenanceView: View {
     @StateObject private var maintenance: DatabaseMaintenance
     @State private var showingReport = false
     @State private var autoFixEnabled = false
+    @State private var showingFirstDeleteConfirmation = false
+    @State private var showingSecondDeleteConfirmation = false
+    @State private var deleteConfirmationText = ""
     
     init(context: NSManagedObjectContext) {
         _maintenance = StateObject(wrappedValue: DatabaseMaintenance(context: context))
@@ -51,6 +54,46 @@ struct DatabaseMaintenanceView: View {
             if let report = maintenance.lastReport {
                 MaintenanceReportView(report: report, context: viewContext)
             }
+        }
+        .alert("Delete All Data?", isPresented: $showingFirstDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Continue", role: .destructive) {
+                showingSecondDeleteConfirmation = true
+            }
+        } message: {
+            Text("This will permanently delete ALL sheets, tags, goals, annotations, and all other data. This action cannot be undone.")
+        }
+        .alert("FINAL WARNING", isPresented: $showingSecondDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete Everything", role: .destructive) {
+                deleteAllData()
+            }
+        } message: {
+            Text("Are you absolutely sure? This will permanently erase ALL your data including:\n\n• All sheets and their content\n• All tags and tag associations\n• All goals and progress\n• All annotations\n• All metadata\n\nThis action is IRREVERSIBLE.")
+        }
+    }
+
+    private func deleteAllData() {
+        // Delete all entities in Core Data
+        let entitiesToDelete = ["Sheet", "Tag", "Goal", "Annotation", "WritingSession", "TagAssociation"]
+
+        for entityName in entitiesToDelete {
+            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: entityName)
+            let batchDeleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+
+            do {
+                try viewContext.execute(batchDeleteRequest)
+            } catch {
+                Logger.shared.error("Failed to delete \(entityName) entities", error: error, category: .coreData)
+            }
+        }
+
+        // Save the context
+        do {
+            try viewContext.save()
+            Logger.shared.info("All data deleted successfully", category: .coreData)
+        } catch {
+            Logger.shared.error("Failed to save after deleting all data", error: error, category: .coreData)
         }
     }
     
@@ -175,6 +218,46 @@ struct DatabaseMaintenanceView: View {
                     .cornerRadius(12)
                 }
                 .buttonStyle(PlainButtonStyle())
+
+                // Delete All Data - Danger Zone
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Danger Zone")
+                        .font(.headline)
+                        .foregroundColor(.red)
+                        .padding(.top, 8)
+
+                    Button(action: {
+                        showingFirstDeleteConfirmation = true
+                    }) {
+                        HStack {
+                            Image(systemName: "trash.fill")
+                                .font(.title2)
+                                .foregroundColor(.red)
+
+                            VStack(alignment: .leading) {
+                                Text("Delete All Data")
+                                    .font(.headline)
+                                    .foregroundColor(.red)
+                                Text("Permanently delete all sheets, tags, and metadata")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.red.opacity(0.5), lineWidth: 2)
+                        )
+                        .cornerRadius(12)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
             }
         }
     }
