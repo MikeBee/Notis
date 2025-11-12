@@ -591,34 +591,16 @@ struct MarkdownTextEditor: View {
                             .padding(.top, isTypewriterMode ? geometry.size.height * 0.25 : 0)
                             .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.75 : 0)
                             .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidChangeNotification)) { notification in
-                                Logger.shared.debug("[LIST] NOTIFICATION FIRED - checking object type", category: .ui)
+                                if let textView = notification.object as? UITextView, textView.isFirstResponder {
+                                    let currentText = textView.text ?? ""
 
-                                if let textView = notification.object as? UITextView {
-                                    Logger.shared.debug("[LIST] Got UITextView, isFirstResponder: \(textView.isFirstResponder)", category: .ui)
-
-                                    if textView.isFirstResponder {
-                                        Logger.shared.debug("[LIST] UITextView is first responder - proceeding", category: .ui)
-
-                                        // Handle list continuation from the actual UITextView text
-                                        let currentText = textView.text ?? ""
-                                        Logger.shared.debug("[LIST] TextView text length: \(currentText.count)", category: .ui)
-
-                                        // Check if we should handle list continuation
-                                        if !isHandlingListContinuation {
-                                            handleListContinuationFromTextView(textView: textView, currentText: currentText)
-                                        } else {
-                                            Logger.shared.debug("[LIST] Skipping - flag is true", category: .ui)
-                                        }
-
-                                        // Reduce jumping by batching cursor updates
-                                        DispatchQueue.main.async {
-                                            updateCursorPosition(textView.selectedRange)
-                                        }
-                                    } else {
-                                        Logger.shared.debug("[LIST] UITextView NOT first responder - skipping", category: .ui)
+                                    if !isHandlingListContinuation {
+                                        handleListContinuationFromTextView(textView: textView, currentText: currentText)
                                     }
-                                } else {
-                                    Logger.shared.debug("[LIST] Notification object is NOT UITextView: \(type(of: notification.object))", category: .ui)
+
+                                    DispatchQueue.main.async {
+                                        updateCursorPosition(textView.selectedRange)
+                                    }
                                 }
                             }
                             .onAppear {
@@ -701,21 +683,9 @@ struct MarkdownTextEditor: View {
             }
         }
         .onChange(of: text) { oldValue, newValue in
-            // Skip list continuation if we're already handling it (prevents recursive updates)
-            let oldLast = oldValue.last?.unicodeScalars.first?.value ?? 0
-            let newLast = newValue.last?.unicodeScalars.first?.value ?? 0
-            Logger.shared.debug("[LIST] onChange triggered - flag: \(isHandlingListContinuation), oldLen: \(oldValue.count), newLen: \(newValue.count), oldLast: \(oldLast), newLast: \(newLast)", category: .ui)
-
-            if !isHandlingListContinuation {
-                Logger.shared.debug("[LIST] Calling handleListContinuation", category: .ui)
-                handleListContinuation(oldValue: oldValue, newValue: newValue)
-            } else {
-                Logger.shared.debug("[LIST] SKIPPED handleListContinuation (flag is true)", category: .ui)
-            }
-
             onTextChange(newValue)
-            // Don't update cursor position here - let the UIKit notifications handle it
             lastTextLength = newValue.count
+
             // Track writing activity for time-based goals (debounce this)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 WritingSessionService.shared.recordActivity()
@@ -801,86 +771,40 @@ struct MarkdownTextEditor: View {
     }
 
     private func handleListContinuationFromTextView(textView: UITextView, currentText: String) {
-        Logger.shared.debug("[LIST] handleListContinuationFromTextView called", category: .ui)
-        Logger.shared.debug("[LIST] Current text length: \(currentText.count), last tracked: \(lastTextLength)", category: .ui)
+        guard currentText.count > lastTextLength else { return }
+        guard let lastChar = currentText.last, lastChar.isNewline else { return }
 
-        // Check if text has grown (character added)
-        guard currentText.count > lastTextLength else {
-            Logger.shared.debug("[LIST] Text not growing, returning", category: .ui)
-            return
-        }
-
-        // Check what the last character is
-        guard let lastChar = currentText.last else {
-            Logger.shared.debug("[LIST] No last character", category: .ui)
-            return
-        }
-
-        let unicodeScalar = lastChar.unicodeScalars.first?.value ?? 0
-        Logger.shared.debug("[LIST] Last char: '\(lastChar)', Unicode: \(unicodeScalar), isNewline: \(lastChar.isNewline)", category: .ui)
-
-        // Only proceed if a newline was just added
-        guard lastChar.isNewline else {
-            Logger.shared.debug("[LIST] Not a newline, returning", category: .ui)
-            return
-        }
-
-        Logger.shared.debug("[LIST] Newline detected!", category: .ui)
-
-        // Get the lines
         let lines = currentText.components(separatedBy: .newlines)
-        guard lines.count >= 2 else {
-            Logger.shared.debug("[LIST] Not enough lines (\(lines.count)), returning", category: .ui)
-            return
-        }
+        guard lines.count >= 2 else { return }
 
-        // Get the previous line (second to last, since last is empty after newline)
         let previousLineIndex = lines.count - 2
         let previousLine = lines[previousLineIndex]
-        Logger.shared.debug("[LIST] Previous line: '\(previousLine)'", category: .ui)
 
         // Check for bullet list (- )
         if previousLine.hasPrefix("- ") {
-            Logger.shared.debug("[LIST] Bullet list detected!", category: .ui)
             let contentAfterBullet = previousLine.dropFirst(2)
 
-            // If the previous line is just "- " with no content, remove it and don't continue
             if contentAfterBullet.trimmingCharacters(in: .whitespaces).isEmpty {
-                Logger.shared.debug("[LIST] Empty bullet, removing it", category: .ui)
-                // Remove the empty bullet point
+                // Remove empty bullet point
                 isHandlingListContinuation = true
-                Logger.shared.debug("[LIST] Flag set to TRUE", category: .ui)
 
-                let newText = currentText.dropLast() // Remove the newline we just added
+                let newText = currentText.dropLast()
                 var allLines = newText.components(separatedBy: .newlines)
-                allLines[previousLineIndex] = "" // Clear the bullet line
+                allLines[previousLineIndex] = ""
                 let updatedText = allLines.joined(separator: "\n")
 
-                Logger.shared.debug("[LIST] About to update text (remove empty bullet)", category: .ui)
-                // Only update the SwiftUI binding - let it propagate to UITextView
                 self.text = updatedText
 
-                // Reset flag after a small delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    Logger.shared.debug("[LIST] Flag set to FALSE", category: .ui)
                     self.isHandlingListContinuation = false
                 }
             } else {
-                Logger.shared.debug("[LIST] Continuing bullet list", category: .ui)
-                // Continue the bullet list
+                // Continue bullet list
                 isHandlingListContinuation = true
-                Logger.shared.debug("[LIST] Flag set to TRUE", category: .ui)
-
                 let updatedText = currentText + "- "
-                Logger.shared.debug("[LIST] About to update text: adding '- '", category: .ui)
-
-                // Only update the SwiftUI binding - let it propagate to UITextView
-                // Updating both causes race conditions
                 self.text = updatedText
 
-                // Reset flag after a small delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    Logger.shared.debug("[LIST] Flag set to FALSE", category: .ui)
                     self.isHandlingListContinuation = false
                 }
             }
@@ -890,198 +814,40 @@ struct MarkdownTextEditor: View {
         // Check for numbered list (1. , 2. , etc.)
         let numberedListPattern = #"^(\d+)\.\s"#
         if let regex = try? NSRegularExpression(pattern: numberedListPattern),
-           let match = regex.firstMatch(in: previousLine, range: NSRange(previousLine.startIndex..., in: previousLine)) {
+           let match = regex.firstMatch(in: previousLine, range: NSRange(previousLine.startIndex..., in: previousLine)),
+           let numberRange = Range(match.range(at: 1), in: previousLine) {
 
-            Logger.shared.debug("[LIST] Numbered list detected!", category: .ui)
+            let numberString = String(previousLine[numberRange])
+            let contentStart = previousLine.index(previousLine.startIndex, offsetBy: match.range.length)
+            let contentAfterNumber = previousLine[contentStart...]
 
-            // Extract the number
-            if let numberRange = Range(match.range(at: 1), in: previousLine) {
-                let numberString = String(previousLine[numberRange])
-
-                // Check if line has content after the number
-                let contentStart = previousLine.index(previousLine.startIndex, offsetBy: match.range.length)
-                let contentAfterNumber = previousLine[contentStart...]
-
-                if contentAfterNumber.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Logger.shared.debug("[LIST] Empty numbered item, removing it", category: .ui)
-                    // Empty numbered item, remove it and stop the list
-                    isHandlingListContinuation = true
-                    Logger.shared.debug("[LIST] Flag set to TRUE", category: .ui)
-
-                    let newText = currentText.dropLast() // Remove the newline
-                    var allLines = newText.components(separatedBy: .newlines)
-                    allLines[previousLineIndex] = "" // Clear the numbered line
-                    let updatedText = allLines.joined(separator: "\n")
-
-                    Logger.shared.debug("[LIST] About to update text (remove empty numbered item)", category: .ui)
-                    // Only update the SwiftUI binding - let it propagate to UITextView
-                    self.text = updatedText
-
-                    // Reset flag after a small delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        Logger.shared.debug("[LIST] Flag set to FALSE", category: .ui)
-                        self.isHandlingListContinuation = false
-                    }
-                } else if let number = Int(numberString) {
-                    Logger.shared.debug("[LIST] Continuing numbered list with number \(number + 1)", category: .ui)
-                    // Continue with next number
-                    let nextNumber = number + 1
-                    isHandlingListContinuation = true
-                    Logger.shared.debug("[LIST] Flag set to TRUE", category: .ui)
-
-                    let updatedText = currentText + "\(nextNumber). "
-                    Logger.shared.debug("[LIST] About to update text: adding '\(nextNumber). '", category: .ui)
-
-                    // Only update the SwiftUI binding - let it propagate to UITextView
-                    self.text = updatedText
-
-                    // Reset flag after a small delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        Logger.shared.debug("[LIST] Flag set to FALSE", category: .ui)
-                        self.isHandlingListContinuation = false
-                    }
-                }
-            }
-            return
-        }
-
-        Logger.shared.debug("[LIST] No list pattern matched", category: .ui)
-    }
-
-    private func handleListContinuation(oldValue: String, newValue: String) {
-        Logger.shared.debug("[LIST] handleListContinuation called", category: .ui)
-        Logger.shared.debug("[LIST] oldValue.count: \(oldValue.count), newValue.count: \(newValue.count)", category: .ui)
-
-        // Debug: Check what the last character actually is
-        if let lastChar = newValue.last {
-            let unicodeScalar = lastChar.unicodeScalars.first?.value ?? 0
-            Logger.shared.debug("[LIST] Last char: '\(lastChar)', Unicode: \(unicodeScalar), isNewline: \(lastChar.isNewline)", category: .ui)
-        } else {
-            Logger.shared.debug("[LIST] No last character found", category: .ui)
-        }
-
-        // Check if a newline was just added
-        guard newValue.count > oldValue.count,
-              let lastChar = newValue.last,
-              lastChar.isNewline else {
-            Logger.shared.debug("[LIST] No newline detected, returning early", category: .ui)
-            return
-        }
-
-        Logger.shared.debug("[LIST] Newline detected!", category: .ui)
-
-        // Get the lines
-        let lines = newValue.components(separatedBy: .newlines)
-        guard lines.count >= 2 else {
-            Logger.shared.debug("[LIST] Not enough lines (\(lines.count)), returning", category: .ui)
-            return
-        }
-
-        // Get the previous line (second to last, since last is empty after newline)
-        let previousLineIndex = lines.count - 2
-        let previousLine = lines[previousLineIndex]
-        Logger.shared.debug("[LIST] Previous line: '\(previousLine)'", category: .ui)
-
-        // Check for bullet list (- )
-        if previousLine.hasPrefix("- ") {
-            Logger.shared.debug("[LIST] Bullet list detected!", category: .ui)
-            let contentAfterBullet = previousLine.dropFirst(2)
-
-            // If the previous line is just "- " with no content, remove it and don't continue
-            if contentAfterBullet.trimmingCharacters(in: .whitespaces).isEmpty {
-                Logger.shared.debug("[LIST] Empty bullet, removing it", category: .ui)
-                // Remove the empty bullet point
+            if contentAfterNumber.trimmingCharacters(in: .whitespaces).isEmpty {
+                // Remove empty numbered item
                 isHandlingListContinuation = true
-                Logger.shared.debug("[LIST] Flag set to TRUE (before async)", category: .ui)
 
-                let newText = newValue.dropLast() // Remove the newline we just added
+                let newText = currentText.dropLast()
                 var allLines = newText.components(separatedBy: .newlines)
-                allLines[previousLineIndex] = "" // Clear the bullet line
+                allLines[previousLineIndex] = ""
                 let updatedText = allLines.joined(separator: "\n")
 
-                Logger.shared.debug("[LIST] About to update text (remove empty bullet)", category: .ui)
                 self.text = updatedText
 
-                // Reset flag after a small delay to ensure onChange completes
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    Logger.shared.debug("[LIST] Flag set to FALSE (after async delay)", category: .ui)
                     self.isHandlingListContinuation = false
                 }
-            } else {
-                Logger.shared.debug("[LIST] Continuing bullet list", category: .ui)
-                // Continue the bullet list
+            } else if let number = Int(numberString) {
+                // Continue numbered list
+                let nextNumber = number + 1
                 isHandlingListContinuation = true
-                Logger.shared.debug("[LIST] Flag set to TRUE (before async)", category: .ui)
 
-                let updatedText = newValue + "- "
-                Logger.shared.debug("[LIST] About to update text: adding '- '", category: .ui)
+                let updatedText = currentText + "\(nextNumber). "
                 self.text = updatedText
 
-                // Reset flag after a small delay to ensure onChange completes
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    Logger.shared.debug("[LIST] Flag set to FALSE (after async delay)", category: .ui)
                     self.isHandlingListContinuation = false
                 }
             }
-            return
         }
-
-        // Check for numbered list (1. , 2. , etc.)
-        let numberedListPattern = #"^(\d+)\.\s"#
-        if let regex = try? NSRegularExpression(pattern: numberedListPattern),
-           let match = regex.firstMatch(in: previousLine, range: NSRange(previousLine.startIndex..., in: previousLine)) {
-
-            Logger.shared.debug("[LIST] Numbered list detected!", category: .ui)
-
-            // Extract the number
-            if let numberRange = Range(match.range(at: 1), in: previousLine) {
-                let numberString = String(previousLine[numberRange])
-
-                // Check if line has content after the number
-                let contentStart = previousLine.index(previousLine.startIndex, offsetBy: match.range.length)
-                let contentAfterNumber = previousLine[contentStart...]
-
-                if contentAfterNumber.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Logger.shared.debug("[LIST] Empty numbered item, removing it", category: .ui)
-                    // Empty numbered item, remove it and stop the list
-                    isHandlingListContinuation = true
-                    Logger.shared.debug("[LIST] Flag set to TRUE (before async)", category: .ui)
-
-                    let newText = newValue.dropLast() // Remove the newline
-                    var allLines = newText.components(separatedBy: .newlines)
-                    allLines[previousLineIndex] = "" // Clear the numbered line
-                    let updatedText = allLines.joined(separator: "\n")
-
-                    Logger.shared.debug("[LIST] About to update text (remove empty numbered item)", category: .ui)
-                    self.text = updatedText
-
-                    // Reset flag after a small delay to ensure onChange completes
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        Logger.shared.debug("[LIST] Flag set to FALSE (after async delay)", category: .ui)
-                        self.isHandlingListContinuation = false
-                    }
-                } else if let number = Int(numberString) {
-                    Logger.shared.debug("[LIST] Continuing numbered list with number \(number + 1)", category: .ui)
-                    // Continue with next number
-                    let nextNumber = number + 1
-                    isHandlingListContinuation = true
-                    Logger.shared.debug("[LIST] Flag set to TRUE (before async)", category: .ui)
-
-                    let updatedText = newValue + "\(nextNumber). "
-                    Logger.shared.debug("[LIST] About to update text: adding '\(nextNumber). '", category: .ui)
-                    self.text = updatedText
-
-                    // Reset flag after a small delay to ensure onChange completes
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        Logger.shared.debug("[LIST] Flag set to FALSE (after async delay)", category: .ui)
-                        self.isHandlingListContinuation = false
-                    }
-                }
-            }
-            return
-        }
-
-        Logger.shared.debug("[LIST] No list pattern matched", category: .ui)
     }
 
     private func configureTextViewForStability() {
