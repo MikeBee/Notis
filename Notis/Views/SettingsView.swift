@@ -133,10 +133,10 @@ struct SettingsView: View {
 
                 // MARK: - Markdown Headers
                 Section {
-                    // H1 Settings
+                    // H1 - Color + Size in one row
                     HStack {
-                        Text("H1 Color")
-                        Spacer()
+                        Text("H1")
+                            .frame(width: 30, alignment: .leading)
                         Menu {
                             ForEach(headingColorOptions, id: \.name) { option in
                                 Button(action: {
@@ -155,30 +155,20 @@ struct SettingsView: View {
                                 }
                             }
                         } label: {
-                            HStack {
-                                Circle()
-                                    .fill(colorFromName(h1Color))
-                                    .frame(width: 16, height: 16)
-                                Text(h1Color.capitalized)
-                                    .foregroundColor(.secondary)
-                            }
+                            Circle()
+                                .fill(colorFromName(h1Color))
+                                .frame(width: 20, height: 20)
                         }
-                    }
-
-                    HStack {
-                        Text("H1 Size")
                         Slider(value: $h1SizeMultiplier, in: 1.0...3.0, step: 0.1)
                         Text(String(format: "%.1fx", h1SizeMultiplier))
                             .foregroundColor(.secondary)
                             .frame(width: 40)
                     }
 
-                    Divider()
-
-                    // H2 Settings
+                    // H2 - Color + Size in one row
                     HStack {
-                        Text("H2 Color")
-                        Spacer()
+                        Text("H2")
+                            .frame(width: 30, alignment: .leading)
                         Menu {
                             ForEach(headingColorOptions, id: \.name) { option in
                                 Button(action: {
@@ -197,30 +187,20 @@ struct SettingsView: View {
                                 }
                             }
                         } label: {
-                            HStack {
-                                Circle()
-                                    .fill(colorFromName(h2Color))
-                                    .frame(width: 16, height: 16)
-                                Text(h2Color.capitalized)
-                                    .foregroundColor(.secondary)
-                            }
+                            Circle()
+                                .fill(colorFromName(h2Color))
+                                .frame(width: 20, height: 20)
                         }
-                    }
-
-                    HStack {
-                        Text("H2 Size")
                         Slider(value: $h2SizeMultiplier, in: 1.0...2.5, step: 0.1)
                         Text(String(format: "%.1fx", h2SizeMultiplier))
                             .foregroundColor(.secondary)
                             .frame(width: 40)
                     }
 
-                    Divider()
-
-                    // H3 Settings
+                    // H3 - Color + Size in one row
                     HStack {
-                        Text("H3 Color")
-                        Spacer()
+                        Text("H3")
+                            .frame(width: 30, alignment: .leading)
                         Menu {
                             ForEach(headingColorOptions, id: \.name) { option in
                                 Button(action: {
@@ -239,18 +219,10 @@ struct SettingsView: View {
                                 }
                             }
                         } label: {
-                            HStack {
-                                Circle()
-                                    .fill(colorFromName(h3Color))
-                                    .frame(width: 16, height: 16)
-                                Text(h3Color.capitalized)
-                                    .foregroundColor(.secondary)
-                            }
+                            Circle()
+                                .fill(colorFromName(h3Color))
+                                .frame(width: 20, height: 20)
                         }
-                    }
-
-                    HStack {
-                        Text("H3 Size")
                         Slider(value: $h3SizeMultiplier, in: 1.0...2.0, step: 0.1)
                         Text(String(format: "%.1fx", h3SizeMultiplier))
                             .foregroundColor(.secondary)
@@ -263,7 +235,7 @@ struct SettingsView: View {
                 // MARK: - Markdown Styling
                 Section {
                     HStack {
-                        Text("Highlight Color")
+                        Text("Highlight")
                         Spacer()
                         Menu {
                             ForEach(headingColorOptions, id: \.name) { option in
@@ -283,18 +255,14 @@ struct SettingsView: View {
                                 }
                             }
                         } label: {
-                            HStack {
-                                Circle()
-                                    .fill(colorFromName(annotationColor))
-                                    .frame(width: 16, height: 16)
-                                Text(annotationColor.capitalized)
-                                    .foregroundColor(.secondary)
-                            }
+                            Circle()
+                                .fill(colorFromName(annotationColor))
+                                .frame(width: 20, height: 20)
                         }
                     }
 
                     HStack {
-                        Text("Strikethrough Color")
+                        Text("Strikethrough")
                         Spacer()
                         Menu {
                             ForEach(headingColorOptions, id: \.name) { option in
@@ -314,13 +282,9 @@ struct SettingsView: View {
                                 }
                             }
                         } label: {
-                            HStack {
-                                Circle()
-                                    .fill(colorFromName(strikethroughColor))
-                                    .frame(width: 16, height: 16)
-                                Text(strikethroughColor.capitalized)
-                                    .foregroundColor(.secondary)
-                            }
+                            Circle()
+                                .fill(colorFromName(strikethroughColor))
+                                .frame(width: 20, height: 20)
                         }
                     }
                 } header: {
