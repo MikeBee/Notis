@@ -21,6 +21,7 @@ struct SettingsView: View {
     @AppStorage("fontFamily") private var fontFamily: String = "system"
     @AppStorage("editorMargins") private var editorMargins: Double = 40
     @AppStorage("disableQuickType") private var disableQuickType: Bool = false
+    @AppStorage("showLineNumbers") private var showLineNumbers: Bool = false
 
     // Writing Settings
     @AppStorage("defaultGoalType") private var defaultGoalType: String = "words"
@@ -122,6 +123,7 @@ struct SettingsView: View {
                     Toggle("Typewriter Mode", isOn: $appState.isTypewriterMode)
                     Toggle("Focus Mode", isOn: $appState.isFocusMode)
                     Toggle("Show Markdown Header Symbols", isOn: $appState.showMarkdownHeaderSymbols)
+                    Toggle("Show Line Numbers", isOn: $showLineNumbers)
 
                     // Keyboard
                     Toggle("Disable QuickType", isOn: $disableQuickType)
