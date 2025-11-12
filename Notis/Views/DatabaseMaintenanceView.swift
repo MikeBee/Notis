@@ -38,7 +38,7 @@ struct DatabaseMaintenanceView: View {
             }
             .padding(24)
             .navigationTitle("Database Maintenance")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
@@ -289,7 +289,7 @@ struct MaintenanceReportView: View {
                 }
             }
             .navigationTitle("Maintenance Report")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {

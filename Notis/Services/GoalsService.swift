@@ -14,8 +14,33 @@ class GoalsService: ObservableObject {
             name: .NSManagedObjectContextDidSave,
             object: PersistenceController.shared.container.viewContext
         )
-        
+
+        // Observe app lifecycle events to check for daily resets
+        #if os(iOS)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        #else
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        #endif
+
         // Check for daily resets on startup
+        DispatchQueue.main.async {
+            self.checkAndResetDailyGoals()
+            WritingSessionService.shared.updateTimeGoals()
+        }
+    }
+
+    @objc private func appDidBecomeActive() {
+        // Check for daily resets whenever app becomes active
         DispatchQueue.main.async {
             self.checkAndResetDailyGoals()
             WritingSessionService.shared.updateTimeGoals()
