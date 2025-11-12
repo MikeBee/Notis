@@ -689,12 +689,16 @@ struct MarkdownTextEditor: View {
             }
         }
         .onChange(of: text) { oldValue, newValue in
-            onTextChange(newValue)
             lastTextLength = newValue.count
 
-            // Track writing activity for time-based goals (debounce this)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                WritingSessionService.shared.recordActivity()
+            // Only call onTextChange if content actually changed (not just cursor movement)
+            if oldValue != newValue {
+                onTextChange(newValue)
+
+                // Track writing activity for time-based goals (debounce this)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    WritingSessionService.shared.recordActivity()
+                }
             }
         }
         .onChange(of: isTextEditorFocused) { _, focused in

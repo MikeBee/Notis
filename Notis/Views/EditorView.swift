@@ -423,6 +423,8 @@ struct MarkdownEditor: View {
     @State private var content: String = ""
     @State private var saveTimer: Timer?
     @State private var tagProcessingTimer: Timer?
+    @State private var wordCountTimer: Timer?
+    @State private var annotationTimer: Timer?
     @State private var isEditingTitle: Bool = false
     @State private var shouldSelectTitleText: Bool = false
     @FocusState private var titleFocused: Bool
@@ -498,9 +500,8 @@ struct MarkdownEditor: View {
                         disableQuickType: disableQuickType,
                         onTextChange: { newText in
                             content = newText
-                            updateWordCount()
-                            updatePreview()
-                            processAnnotations(newText)
+                            scheduleWordCount()
+                            scheduleAnnotationProcessing(newText)
                             scheduleTagProcessing(for: newText, sheet: sheet)
                             scheduleAutoSave()
                         }
@@ -600,15 +601,31 @@ struct MarkdownEditor: View {
         }
     }
     
-    private func updateWordCount() {
-        let words = content.components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-        sheet.wordCount = Int32(words.count)
+    private func scheduleWordCount() {
+        wordCountTimer?.invalidate()
+        wordCountTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+            self?.updateWordCountAndPreview()
+        }
     }
-    
-    private func updatePreview() {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        sheet.preview = trimmed.count <= 200 ? trimmed : String(trimmed.prefix(200)) + "..."
+
+    private func updateWordCountAndPreview() {
+        // Perform word counting off the main thread to avoid blocking
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+
+            let words = self.content.components(separatedBy: .whitespacesAndNewlines)
+                .filter { !$0.isEmpty }
+            let wordCount = Int32(words.count)
+
+            let trimmed = self.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let preview = trimmed.count <= 200 ? trimmed : String(trimmed.prefix(200)) + "..."
+
+            // Update Core Data on main thread
+            DispatchQueue.main.async {
+                self.sheet.wordCount = wordCount
+                self.sheet.preview = preview
+            }
+        }
     }
     
     private func scheduleAutoSave() {
@@ -618,6 +635,13 @@ struct MarkdownEditor: View {
         }
     }
     
+    private func scheduleAnnotationProcessing(_ text: String) {
+        annotationTimer?.invalidate()
+        annotationTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
+            self?.processAnnotations(text)
+        }
+    }
+
     private func scheduleTagProcessing(for text: String, sheet: Sheet) {
         tagProcessingTimer?.invalidate()
         tagProcessingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
@@ -640,10 +664,22 @@ struct MarkdownEditor: View {
             targetSheet.modifiedAt = Date()
         }
 
-        do {
-            try viewContext.save()
-        } catch {
-            print("❌ Failed to save sheet: \(error)")
+        // Save asynchronously on a background context to avoid blocking UI
+        let sheetID = targetSheet.objectID
+        DispatchQueue.global(qos: .utility).async {
+            let backgroundContext = PersistenceController.shared.container.newBackgroundContext()
+            backgroundContext.automaticallyMergesChangesFromParent = true
+            backgroundContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+
+            do {
+                // Fetch the sheet in the background context
+                if let bgSheet = try? backgroundContext.existingObject(with: sheetID) as? Sheet {
+                    // The changes from the main context should already be merged
+                    try backgroundContext.save()
+                }
+            } catch {
+                Logger.shared.error("Failed to save sheet in background", error: error, category: .coreData)
+            }
         }
     }
     
