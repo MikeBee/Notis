@@ -673,12 +673,36 @@ struct MarkdownTextEditor: View {
                 ToolbarItemGroup(placement: .keyboard) {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
+                            // Text styling
                             Button("**Bold**") { insertMarkdown("**", "**") }
                                 .font(.caption)
                             Button("*Italic*") { insertMarkdown("*", "*") }
                                 .font(.caption)
+                            Button("__Bold__") { insertMarkdown("__", "__") }
+                                .font(.caption)
+                            Button("_Italic_") { insertMarkdown("_", "_") }
+                                .font(.caption)
+                            Button("~~Strike~~") { insertMarkdown("~~", "~~") }
+                                .font(.caption)
+                            Button("==Highlight==") { insertMarkdown("==", "==") }
+                                .font(.caption)
+
+                            Divider()
+                                .frame(height: 20)
+
+                            // Structure
                             Button("# Header") { insertMarkdown("# ", "") }
                                 .font(.caption)
+                            Button("> Quote") { insertMarkdown("> ", "") }
+                                .font(.caption)
+                            Button("%%Comment%%") { insertMarkdown("%%", "%%") }
+                                .font(.caption)
+                            Button("Footnote") { insertFootnote() }
+                                .font(.caption)
+
+                            Divider()
+                                .frame(height: 20)
+
                             Button("Hide") { isTextEditorFocused = false }
                                 .font(.caption)
                         }
@@ -786,6 +810,37 @@ struct MarkdownTextEditor: View {
     
     private func insertTab() {
         text = text + "\t"
+    }
+
+    private func insertFootnote() {
+        // Find the next available footnote number
+        let footnotePattern = #"\[\^(\d+)\]"#
+        var maxNumber = 0
+
+        if let regex = try? NSRegularExpression(pattern: footnotePattern, options: []) {
+            let matches = regex.matches(in: text, options: [], range: NSRange(text.startIndex..., in: text))
+            for match in matches {
+                if match.numberOfRanges > 1,
+                   let numberRange = Range(match.range(at: 1), in: text),
+                   let number = Int(text[numberRange]) {
+                    maxNumber = max(maxNumber, number)
+                }
+            }
+        }
+
+        let nextNumber = maxNumber + 1
+        let footnoteRef = "[^\(nextNumber)]"
+        let footnoteDef = "\n[^\(nextNumber)]: "
+
+        // Insert reference at current position
+        let currentText = text
+        text = currentText + footnoteRef
+
+        // Add definition at the end of the document
+        if !currentText.hasSuffix("\n") {
+            text = text + "\n"
+        }
+        text = text + footnoteDef
     }
 
     private func performRedo() {
