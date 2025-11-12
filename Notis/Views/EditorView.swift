@@ -197,7 +197,7 @@ struct EditorView: View {
                                     editorMargins = Double(newValue)
                                 }
                             ),
-                            hideShortcutBar: appState.hideShortcutBar,
+                            hideShortcutBar: appState.hideShortcutBar || appState.isFullScreen,
                             disableQuickType: disableQuickType,
                             showStats: $showStats,
                             isReadOnlyMode: $isReadOnlyMode
@@ -496,7 +496,7 @@ struct MarkdownEditor: View {
                         paragraphSpacing: paragraphSpacing,
                         fontFamily: fontFamily,
                         editorMargins: editorMargins,
-                        hideShortcutBar: appState.hideShortcutBar,
+                        hideShortcutBar: appState.hideShortcutBar || appState.isFullScreen,
                         disableQuickType: disableQuickType,
                         onTextChange: { newText in
                             content = newText
