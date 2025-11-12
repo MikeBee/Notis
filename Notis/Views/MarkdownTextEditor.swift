@@ -437,6 +437,7 @@ struct MarkdownTextEditor: View {
     @State private var textEditorHeight: CGFloat = 0
     @State private var cursorPositionInLine: Int = 0
     @State private var lastTextLength: Int = 0
+    @State private var isHandlingListContinuation = false
     @FocusState private var isTextEditorFocused: Bool
     @AppStorage("showLineNumbers") private var showLineNumbers: Bool = false
     
@@ -677,8 +678,10 @@ struct MarkdownTextEditor: View {
             }
         }
         .onChange(of: text) { oldValue, newValue in
-            // Handle list continuation before calling onTextChange
-            handleListContinuation(oldValue: oldValue, newValue: newValue)
+            // Skip list continuation if we're already handling it (prevents recursive updates)
+            if !isHandlingListContinuation {
+                handleListContinuation(oldValue: oldValue, newValue: newValue)
+            }
 
             onTextChange(newValue)
             // Don't update cursor position here - let the UIKit notifications handle it
@@ -790,16 +793,20 @@ struct MarkdownTextEditor: View {
             // If the previous line is just "- " with no content, remove it and don't continue
             if contentAfterBullet.trimmingCharacters(in: .whitespaces).isEmpty {
                 // Remove the empty bullet point
+                isHandlingListContinuation = true
                 DispatchQueue.main.async {
                     let newText = newValue.dropLast() // Remove the newline we just added
                     var allLines = newText.components(separatedBy: .newlines)
                     allLines[previousLineIndex] = "" // Clear the bullet line
                     self.text = allLines.joined(separator: "\n")
+                    self.isHandlingListContinuation = false
                 }
             } else {
                 // Continue the bullet list
+                isHandlingListContinuation = true
                 DispatchQueue.main.async {
                     self.text = newValue + "- "
+                    self.isHandlingListContinuation = false
                 }
             }
             return
@@ -820,17 +827,21 @@ struct MarkdownTextEditor: View {
 
                 if contentAfterNumber.trimmingCharacters(in: .whitespaces).isEmpty {
                     // Empty numbered item, remove it and stop the list
+                    isHandlingListContinuation = true
                     DispatchQueue.main.async {
                         let newText = newValue.dropLast() // Remove the newline
                         var allLines = newText.components(separatedBy: .newlines)
                         allLines[previousLineIndex] = "" // Clear the numbered line
                         self.text = allLines.joined(separator: "\n")
+                        self.isHandlingListContinuation = false
                     }
                 } else if let number = Int(numberString) {
                     // Continue with next number
                     let nextNumber = number + 1
+                    isHandlingListContinuation = true
                     DispatchQueue.main.async {
                         self.text = newValue + "\(nextNumber). "
+                        self.isHandlingListContinuation = false
                     }
                 }
             }
