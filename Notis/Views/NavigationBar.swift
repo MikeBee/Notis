@@ -45,12 +45,15 @@ struct NavigationBar: View {
                     Button("Sheets Only") {
                         appState.viewMode = .sheetsOnly
                     }
+                    .keyboardShortcut("2", modifiers: .command)
                     Button("Editor Only") {
                         appState.viewMode = .editorOnly
                     }
+                    .keyboardShortcut("3", modifiers: .command)
                     Button("All Panes") {
                         appState.viewMode = .threePane
                     }
+                    .keyboardShortcut("1", modifiers: .command)
                 } label: {
                     HStack(spacing: 4) {
                         Text(appState.viewMode.rawValue)
