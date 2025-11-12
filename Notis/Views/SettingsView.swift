@@ -632,14 +632,34 @@ struct SettingsView: View {
     }
 
     private func exportAsJSON(sheets: [Sheet]) {
-        let exportData = sheets.map { sheet in
-            ExportedSheet(
+        // Helper function to build path from root to group
+        func buildGroupPath(_ group: Group) -> [String] {
+            var path: [String] = []
+            var current: Group? = group
+            while let g = current {
+                path.insert(g.name ?? "Untitled", at: 0)
+                current = g.parent
+            }
+            return path
+        }
+
+        // Helper function to build parent path (excludes the group itself)
+        func buildParentPath(_ group: Group) -> [String]? {
+            guard let parent = group.parent else { return nil }
+            return buildGroupPath(parent)
+        }
+
+        // Export sheets with group paths
+        let exportedSheets = sheets.map { sheet in
+            let groupPath = sheet.group.flatMap { buildGroupPath($0) }
+            return ExportedSheet(
                 id: sheet.id?.uuidString ?? UUID().uuidString,
                 title: sheet.title ?? "Untitled",
                 content: sheet.unifiedContent,
                 createdAt: sheet.createdAt ?? Date(),
                 modifiedAt: sheet.modifiedAt ?? Date(),
                 groupName: sheet.group?.name,
+                groupPath: groupPath,
                 wordCount: Int(sheet.wordCount),
                 goalCount: Int(sheet.goalCount),
                 goalType: sheet.goalType,
@@ -647,8 +667,46 @@ struct SettingsView: View {
             )
         }
 
+        // Collect all unique groups from sheets
+        let allGroups = Set(sheets.compactMap { $0.group })
+
+        // Also need to include all ancestor groups (parents of parents)
+        var groupsToExport = Set<Group>()
+        for group in allGroups {
+            var current: Group? = group
+            while let g = current {
+                groupsToExport.insert(g)
+                current = g.parent
+            }
+        }
+
+        // Export groups with metadata
+        let exportedGroups = groupsToExport.map { group in
+            let groupId = group.id?.uuidString ?? UUID().uuidString
+            let icon = UserDefaults.standard.string(forKey: "group_icon_\(groupId)")
+            let color = UserDefaults.standard.string(forKey: "group_color_\(groupId)")
+
+            return ExportedGroup(
+                id: groupId,
+                name: group.name ?? "Untitled",
+                sortOrder: Int(group.sortOrder),
+                parentPath: buildParentPath(group),
+                icon: icon,
+                color: color,
+                isFavorite: group.isFavorite,
+                createdAt: group.createdAt ?? Date(),
+                modifiedAt: group.modifiedAt ?? Date()
+            )
+        }.sorted { $0.sortOrder < $1.sortOrder } // Sort by sortOrder for proper reconstruction
+
+        let fullExportData = ExportData(
+            sheets: exportedSheets,
+            groups: exportedGroups,
+            exportedAt: Date()
+        )
+
         do {
-            let jsonData = try JSONEncoder().encode(exportData)
+            let jsonData = try JSONEncoder().encode(fullExportData)
             self.exportData = jsonData
             self.exportFileName = "notis-export-\(DateFormatter.exportFormatter.string(from: Date())).json"
             showingExportFilePicker = true
@@ -707,9 +765,15 @@ struct SettingsView: View {
 
             do {
                 let data = try Data(contentsOf: url)
-                let sheets = try JSONDecoder().decode([ExportedSheet].self, from: data)
 
-                importSheets(sheets)
+                // Try new format first (ExportData with groups)
+                if let fullExport = try? JSONDecoder().decode(ExportData.self, from: data) {
+                    importFullData(fullExport)
+                } else {
+                    // Fall back to old format (just sheets array)
+                    let sheets = try JSONDecoder().decode([ExportedSheet].self, from: data)
+                    importSheets(sheets, groups: [])
+                }
             } catch {
                 alertMessage = "Failed to import: \(error.localizedDescription)"
                 showingAlert = true
@@ -720,75 +784,145 @@ struct SettingsView: View {
         }
     }
 
-    private func importSheets(_ exportedSheets: [ExportedSheet]) {
+    private func importFullData(_ exportData: ExportData) {
+        // First, reconstruct all groups with hierarchy
+        let groupsByPath = reconstructGroups(exportData.groups)
+
+        // Then import sheets using the reconstructed groups
+        importSheets(exportData.sheets, groups: exportData.groups, groupsByPath: groupsByPath)
+    }
+
+    private func reconstructGroups(_ exportedGroups: [ExportedGroup]) -> [String: Group] {
+        var groupsByPath: [String: Group] = [:]
+        var groupsById: [String: Group] = [:]
+
+        // Sort groups by depth (root groups first, then children)
+        let sortedGroups = exportedGroups.sorted { (g1, g2) in
+            let depth1 = g1.parentPath?.count ?? 0
+            let depth2 = g2.parentPath?.count ?? 0
+            if depth1 != depth2 {
+                return depth1 < depth2
+            }
+            return g1.sortOrder < g2.sortOrder
+        }
+
+        for exportedGroup in sortedGroups {
+            // Build the full path for this group
+            var fullPath = exportedGroup.parentPath ?? []
+            fullPath.append(exportedGroup.name)
+            let pathKey = fullPath.joined(separator: "/")
+
+            // Find or create the group
+            let group: Group
+            if let existingGroup = groupsById[exportedGroup.id] {
+                group = existingGroup
+            } else {
+                // Check if group exists in database by name and parent
+                let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
+                if let parentPath = exportedGroup.parentPath, !parentPath.isEmpty {
+                    let parentKey = parentPath.joined(separator: "/")
+                    if let parentGroup = groupsByPath[parentKey] {
+                        fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == %@", exportedGroup.name, parentGroup)
+                    } else {
+                        fetchRequest.predicate = NSPredicate(format: "name == %@", exportedGroup.name)
+                    }
+                } else {
+                    fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == nil", exportedGroup.name)
+                }
+
+                if let existingGroup = try? viewContext.fetch(fetchRequest).first {
+                    group = existingGroup
+                } else {
+                    // Create new group
+                    group = Group(context: viewContext)
+                    group.id = UUID(uuidString: exportedGroup.id) ?? UUID()
+                    group.name = exportedGroup.name
+                    group.createdAt = exportedGroup.createdAt
+                    group.modifiedAt = exportedGroup.modifiedAt
+                }
+
+                group.sortOrder = Int32(exportedGroup.sortOrder)
+                group.isFavorite = exportedGroup.isFavorite
+
+                // Set parent relationship
+                if let parentPath = exportedGroup.parentPath, !parentPath.isEmpty {
+                    let parentKey = parentPath.joined(separator: "/")
+                    group.parent = groupsByPath[parentKey]
+                } else {
+                    group.parent = nil
+                }
+
+                groupsById[exportedGroup.id] = group
+            }
+
+            groupsByPath[pathKey] = group
+
+            // Restore icon and color from UserDefaults
+            if let icon = exportedGroup.icon {
+                UserDefaults.standard.set(icon, forKey: "group_icon_\(exportedGroup.id)")
+            }
+            if let color = exportedGroup.color {
+                UserDefaults.standard.set(color, forKey: "group_color_\(exportedGroup.id)")
+            }
+        }
+
+        return groupsByPath
+    }
+
+    private func importSheets(_ exportedSheets: [ExportedSheet], groups: [ExportedGroup], groupsByPath: [String: Group] = [:]) {
         var importedCount = 0
-        var groupCache: [String: Group] = [:] // Cache groups to avoid repeated fetches
         var groupCounters: [String: Int32] = [:] // Track number of sheets added to each group
 
         for exportedSheet in exportedSheets {
-            // Find or create the target group
-            let targetGroupName: String
-            let targetGroup: Group
+            // Find the target group using groupPath if available
+            let targetGroup: Group?
+            let targetGroupKey: String
 
-            if let groupName = exportedSheet.groupName {
-                targetGroupName = groupName
-                // Try to find existing group in cache first
-                if let cachedGroup = groupCache[groupName] {
-                    targetGroup = cachedGroup
-                } else {
-                    // Search for existing group
-                    let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
-                    fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == nil", groupName)
-
-                    if let existingGroup = try? viewContext.fetch(fetchRequest).first {
-                        targetGroup = existingGroup
-                        groupCache[groupName] = existingGroup
-                    } else {
-                        // Create new group
-                        let newGroup = Group(context: viewContext)
-                        newGroup.id = UUID()
-                        newGroup.name = groupName
-                        newGroup.createdAt = Date()
-                        newGroup.modifiedAt = Date()
-                        newGroup.sortOrder = Int32(groupCache.count)
-                        targetGroup = newGroup
-                        groupCache[groupName] = newGroup
-                    }
-                }
+            if let groupPath = exportedSheet.groupPath, !groupPath.isEmpty {
+                let pathKey = groupPath.joined(separator: "/")
+                targetGroupKey = pathKey
+                targetGroup = groupsByPath[pathKey]
+            } else if let groupName = exportedSheet.groupName {
+                // Fallback to simple name lookup (for backward compatibility)
+                targetGroupKey = groupName
+                let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
+                fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == nil", groupName)
+                targetGroup = try? viewContext.fetch(fetchRequest).first
             } else {
-                // No group name - use "Imported" group
-                targetGroupName = "Imported"
-                if let cachedGroup = groupCache["Imported"] {
-                    targetGroup = cachedGroup
-                } else {
-                    let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
-                    fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == nil", "Imported")
+                targetGroupKey = "Imported"
+                targetGroup = nil
+            }
 
-                    if let existingGroup = try? viewContext.fetch(fetchRequest).first {
-                        targetGroup = existingGroup
-                        groupCache["Imported"] = existingGroup
-                    } else {
-                        let newGroup = Group(context: viewContext)
-                        newGroup.id = UUID()
-                        newGroup.name = "Imported"
-                        newGroup.createdAt = Date()
-                        newGroup.modifiedAt = Date()
-                        newGroup.sortOrder = 0
-                        targetGroup = newGroup
-                        groupCache["Imported"] = newGroup
-                    }
+            // Create "Imported" group if no group found
+            let finalGroup: Group
+            if let group = targetGroup {
+                finalGroup = group
+            } else {
+                let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
+                fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == nil", "Imported")
+
+                if let existingGroup = try? viewContext.fetch(fetchRequest).first {
+                    finalGroup = existingGroup
+                } else {
+                    let newGroup = Group(context: viewContext)
+                    newGroup.id = UUID()
+                    newGroup.name = "Imported"
+                    newGroup.createdAt = Date()
+                    newGroup.modifiedAt = Date()
+                    newGroup.sortOrder = 0
+                    finalGroup = newGroup
                 }
             }
 
             // Find max sort order in target group (only once per group)
-            if groupCounters[targetGroupName] == nil {
+            if groupCounters[targetGroupKey] == nil {
                 let maxSortOrder: Int32
-                if let sheets = targetGroup.sheets as? Set<Sheet>, !sheets.isEmpty {
+                if let sheets = finalGroup.sheets as? Set<Sheet>, !sheets.isEmpty {
                     maxSortOrder = sheets.map { $0.sortOrder }.max() ?? -1
                 } else {
                     maxSortOrder = -1
                 }
-                groupCounters[targetGroupName] = maxSortOrder + 1
+                groupCounters[targetGroupKey] = maxSortOrder + 1
             }
 
             // Create new sheet
@@ -798,7 +932,7 @@ struct SettingsView: View {
             newSheet.content = exportedSheet.content
             newSheet.createdAt = exportedSheet.createdAt
             newSheet.modifiedAt = exportedSheet.modifiedAt
-            newSheet.group = targetGroup
+            newSheet.group = finalGroup
             newSheet.wordCount = Int32(exportedSheet.wordCount)
             newSheet.goalCount = Int32(exportedSheet.goalCount)
             newSheet.goalType = exportedSheet.goalType
@@ -810,15 +944,15 @@ struct SettingsView: View {
             newSheet.preview = trimmed.count <= 200 ? trimmed : String(trimmed.prefix(200)) + "..."
 
             // Set sort order to avoid duplicates (increment counter for this group)
-            newSheet.sortOrder = groupCounters[targetGroupName]!
-            groupCounters[targetGroupName]! += 1
+            newSheet.sortOrder = groupCounters[targetGroupKey]!
+            groupCounters[targetGroupKey]! += 1
 
             importedCount += 1
         }
 
         do {
             try viewContext.save()
-            let groupCount = groupCache.count
+            let groupCount = groups.isEmpty ? groupCounters.count : groups.count
             alertMessage = "Successfully imported \(importedCount) sheets into \(groupCount) group(s)!"
             showingAlert = true
         } catch {
@@ -888,10 +1022,29 @@ struct ExportedSheet: Codable {
     let createdAt: Date
     let modifiedAt: Date
     let groupName: String?
+    let groupPath: [String]? // Full path from root to group (e.g., ["Parent", "Child"])
     let wordCount: Int
     let goalCount: Int
     let goalType: String?
     let isFavorite: Bool
+}
+
+struct ExportedGroup: Codable {
+    let id: String
+    let name: String
+    let sortOrder: Int
+    let parentPath: [String]? // Path to parent group (nil for root groups)
+    let icon: String?
+    let color: String?
+    let isFavorite: Bool
+    let createdAt: Date
+    let modifiedAt: Date
+}
+
+struct ExportData: Codable {
+    let sheets: [ExportedSheet]
+    let groups: [ExportedGroup]
+    let exportedAt: Date
 }
 
 struct ExportDocument: FileDocument {
