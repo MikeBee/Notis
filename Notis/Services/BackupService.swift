@@ -14,7 +14,7 @@ class BackupService: ObservableObject {
     static let shared = BackupService()
     
     private let context: NSManagedObjectContext
-    private let cloudKitContainer: CKContainer
+    internal let cloudKitContainer: CKContainer
     @Published var isBackingUp = false
     @Published var lastBackupDate: Date?
     @Published var backupStatus: BackupStatus = .idle
@@ -316,7 +316,7 @@ class BackupService: ObservableObject {
         }
     }
     
-    private func prepareBackupData() async throws -> BackupData {
+    internal func prepareBackupData() async throws -> BackupData {
         return try await withCheckedThrowingContinuation { continuation in
             context.perform {
                 do {

@@ -274,12 +274,15 @@ struct LibrarySidebar: View {
             newGroup.createdAt = Date()
             newGroup.modifiedAt = Date()
             newGroup.sortOrder = Int32(rootGroups.count)
-            
+
+            // Ensure unique sort order to prevent duplicates
+            viewContext.ensureUniqueSortOrder(for: newGroup)
+
             // Set the icon
             if let groupId = newGroup.id?.uuidString {
                 UserDefaults.standard.set(newGroupIcon, forKey: "group_icon_\(groupId)")
             }
-            
+
             do {
                 try viewContext.save()
                 appState.selectedGroup = newGroup
@@ -327,11 +330,11 @@ struct LibrarySidebar: View {
                 for (index, group) in reorderedGroups.enumerated() {
                     // Check if the object is still valid before modifying
                     guard !group.isDeleted && group.managedObjectContext != nil else { continue }
-                    
+
                     group.sortOrder = Int32(index)
                     group.modifiedAt = Date()
                 }
-                
+
                 try viewContext.save()
             } catch {
                 Logger.shared.error("Failed to reorder groups", error: error, category: .general)
@@ -816,12 +819,15 @@ struct GroupRowView: View {
             subgroup.createdAt = Date()
             subgroup.modifiedAt = Date()
             subgroup.sortOrder = Int32(group.subgroups?.count ?? 0)
-            
+
+            // Ensure unique sort order to prevent duplicates
+            viewContext.ensureUniqueSortOrder(for: subgroup)
+
             // Set the icon
             if let subgroupId = subgroup.id?.uuidString {
                 UserDefaults.standard.set(newSubgroupIcon, forKey: "group_icon_\(subgroupId)")
             }
-            
+
             do {
                 try viewContext.save()
                 appState.selectedGroup = subgroup
