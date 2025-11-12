@@ -144,7 +144,10 @@ struct PersistenceController {
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
 
         // Configure context for optimal performance
-        container.viewContext.undoManager = nil // Disable undo for performance
+        // Enable undo manager for text editing support
+        let undoManager = UndoManager()
+        undoManager.levelsOfUndo = 100 // Limit to prevent memory issues
+        container.viewContext.undoManager = undoManager
         container.viewContext.shouldDeleteInaccessibleFaults = true
     }
 }
