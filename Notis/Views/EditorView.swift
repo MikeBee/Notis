@@ -57,7 +57,7 @@ struct EditorView: View {
                         // Navigation Buttons
                         HStack(spacing: 8) {
                             Button(action: {
-                                appState.navigateBackInHistory()
+                                _ = appState.navigateBackInHistory()
                             }) {
                                 Image(systemName: "chevron.left")
                                     .font(.system(size: 18, weight: .medium))
@@ -69,7 +69,7 @@ struct EditorView: View {
                             .help("Back in History (⌘←)")
                             
                             Button(action: {
-                                appState.navigateForwardInHistory()
+                                _ = appState.navigateForwardInHistory()
                             }) {
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 18, weight: .medium))
@@ -177,15 +177,15 @@ struct EditorView: View {
                             sheet: selectedSheet,
                             appState: appState,
                             fontSize: Binding(
-                                get: { safeFontSize },
+                                get: { CGFloat(safeFontSize) },
                                 set: { fontSize = Double($0) }
                             ),
                             lineSpacing: Binding(
-                                get: { safeLineSpacing },
+                                get: { CGFloat(safeLineSpacing) },
                                 set: { lineSpacing = Double($0) }
                             ),
                             paragraphSpacing: Binding(
-                                get: { safeParagraphSpacing },
+                                get: { CGFloat(safeParagraphSpacing) },
                                 set: { paragraphSpacing = Double($0) }
                             ),
                             fontFamily: fontFamily,
@@ -195,7 +195,7 @@ struct EditorView: View {
                                     if appState.viewMode == .threePane && !isFullScreen {
                                         return 20
                                     } else {
-                                        return safeEditorMargins
+                                        return CGFloat(safeEditorMargins)
                                     }
                                 },
                                 set: { newValue in
@@ -212,7 +212,7 @@ struct EditorView: View {
                         // Word Counter at bottom if enabled
                         if showWordCounter {
                             WordCounterView(sheet: selectedSheet)
-                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : safeEditorMargins)
+                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : CGFloat(safeEditorMargins))
                                 .padding(.bottom, 8)
                                 .background(Color(.systemBackground))
                         }
@@ -220,7 +220,7 @@ struct EditorView: View {
                         // Tag Editor
                         if showTagsPane {
                             TagEditorView(sheet: selectedSheet)
-                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : safeEditorMargins)
+                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : CGFloat(safeEditorMargins))
                                 .padding(.vertical, 12)
                                 .background(Color(.systemBackground))
                                 .overlay(
@@ -477,20 +477,20 @@ struct MarkdownEditor: View {
                             }
                         }
                     }
-                    .padding(.horizontal, safeEditorMargins)
+                    .padding(.horizontal, editorMargins)
                     .padding(.top, 40)
-                    .padding(.bottom, safeParagraphSpacing + 12)
+                    .padding(.bottom, paragraphSpacing + 12)
 
                     // Content Editor
                     MarkdownTextEditor(
                         text: $content,
                         isTypewriterMode: $appState.isTypewriterMode,
                         isFocusMode: $appState.isFocusMode,
-                        fontSize: safeFontSize,
-                        lineSpacing: safeLineSpacing,
-                        paragraphSpacing: safeParagraphSpacing,
+                        fontSize: fontSize,
+                        lineSpacing: lineSpacing,
+                        paragraphSpacing: paragraphSpacing,
                         fontFamily: fontFamily,
-                        editorMargins: safeEditorMargins,
+                        editorMargins: editorMargins,
                         hideShortcutBar: appState.hideShortcutBar,
                         disableQuickType: disableQuickType,
                         onTextChange: { newText in
@@ -509,11 +509,11 @@ struct MarkdownEditor: View {
                         if isReadOnlyMode {
                             MarkdownReadOnlyView(
                                 text: content,
-                                fontSize: safeFontSize,
-                                lineSpacing: safeLineSpacing,
-                                paragraphSpacing: safeParagraphSpacing,
+                                fontSize: fontSize,
+                                lineSpacing: lineSpacing,
+                                paragraphSpacing: paragraphSpacing,
                                 fontFamily: fontFamily,
-                                editorMargins: safeEditorMargins
+                                editorMargins: editorMargins
                             )
                             .background(Color(.systemBackground))
                             .onTapGesture {
@@ -604,8 +604,8 @@ struct MarkdownEditor: View {
     }
     
     private func updatePreview() {
-        let preview = content.prefix(100)
-        sheet.preview = String(preview).trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        sheet.preview = trimmed.count <= 200 ? trimmed : String(trimmed.prefix(200)) + "..."
     }
     
     private func scheduleAutoSave() {
@@ -769,7 +769,7 @@ struct GlobalGoalDisplayView: View {
                             .font(.caption2)
                             .foregroundColor(.secondary)
                         
-                        if let deadline = goal.deadline {
+                        if let _ = goal.deadline {
                             Text(goal.formattedDeadline)
                                 .font(.caption2)
                                 .foregroundColor(goal.isOverdue ? .red : .secondary)
@@ -791,7 +791,7 @@ struct GlobalGoalDisplayView: View {
                     
                     Spacer()
                     
-                    if let deadline = goal.deadline {
+                    if let _ = goal.deadline {
                         Text(goal.formattedDeadline)
                             .font(.caption2)
                             .foregroundColor(goal.isOverdue ? .red : .secondary)

@@ -161,7 +161,7 @@ struct OverviewContent: View {
     @Environment(\.colorScheme) private var colorScheme
     
     private var statistics: SheetStatistics {
-        SheetStatistics(content: sheet.content ?? "")
+        SheetStatistics(content: sheet.unifiedContent)
     }
     
     private var averageWritingTime: String {
@@ -282,7 +282,7 @@ struct ProgressContent: View {
     @State private var editingGoal: Goal?
     
     private var statistics: SheetStatistics {
-        SheetStatistics(content: sheet.content ?? "")
+        SheetStatistics(content: sheet.unifiedContent)
     }
     
     private var allGoals: [Goal] {

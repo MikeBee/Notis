@@ -261,8 +261,8 @@ extension DatabaseMaintenance {
             for sheet in orphanedSheets {
                 issues.append(MaintenanceIssue(
                     type: .orphanedRecord,
-                    severity: .high,
-                    description: "Sheet '\(sheet.title ?? "Untitled")' has no group assignment",
+                    severity: .low,
+                    description: "Sheet '\(sheet.title ?? "Untitled")' is ungrouped (will be placed in Inbox)",
                     affectedEntity: "Sheet",
                     affectedID: sheet.id,
                     canAutoFix: true,
@@ -767,7 +767,7 @@ extension DatabaseMaintenance {
                 request.predicate = NSPredicate(format: "id == %@", sheetID as CVarArg)
                 
                 if let sheet = try context.fetch(request).first {
-                    let actualWordCount = calculateWordCount(sheet.content ?? "")
+                    let actualWordCount = calculateWordCount(sheet.unifiedContent)
                     sheet.wordCount = Int32(actualWordCount)
                     try context.save()
                     return true
@@ -786,8 +786,9 @@ extension DatabaseMaintenance {
                 request.predicate = NSPredicate(format: "id == %@", sheetID as CVarArg)
                 
                 if let sheet = try context.fetch(request).first {
-                    let content = sheet.content ?? ""
-                    sheet.preview = String(content.prefix(100)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let content = sheet.unifiedContent
+                    let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                    sheet.preview = trimmed.count <= 200 ? trimmed : String(trimmed.prefix(200)) + "..."
                     try context.save()
                     return true
                 }
@@ -1116,7 +1117,7 @@ extension DatabaseMaintenance {
             let sheets = try context.fetch(sheetRequest)
             
             for sheet in sheets {
-                let actualWordCount = calculateWordCount(sheet.content ?? "")
+                let actualWordCount = calculateWordCount(sheet.unifiedContent)
                 let storedWordCount = Int(sheet.wordCount)
                 
                 if actualWordCount != storedWordCount {
@@ -1156,9 +1157,10 @@ extension DatabaseMaintenance {
             let sheets = try context.fetch(sheetRequest)
             
             for sheet in sheets {
-                let content = sheet.content ?? ""
+                let content = sheet.unifiedContent
                 let storedPreview = sheet.preview ?? ""
-                let expectedPreview = String(content.prefix(100)).trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                let expectedPreview = trimmedContent.count <= 200 ? trimmedContent : String(trimmedContent.prefix(200)) + "..."
                 
                 if storedPreview != expectedPreview {
                     issues.append(MaintenanceIssue(
