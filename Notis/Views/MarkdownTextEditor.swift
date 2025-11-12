@@ -679,7 +679,9 @@ struct MarkdownTextEditor: View {
         }
         .onChange(of: text) { oldValue, newValue in
             // Skip list continuation if we're already handling it (prevents recursive updates)
-            Logger.shared.debug("[LIST] onChange triggered - flag: \(isHandlingListContinuation), oldLen: \(oldValue.count), newLen: \(newValue.count)", category: .ui)
+            let oldLast = oldValue.last?.unicodeScalars.first?.value ?? 0
+            let newLast = newValue.last?.unicodeScalars.first?.value ?? 0
+            Logger.shared.debug("[LIST] onChange triggered - flag: \(isHandlingListContinuation), oldLen: \(oldValue.count), newLen: \(newValue.count), oldLast: \(oldLast), newLast: \(newLast)", category: .ui)
 
             if !isHandlingListContinuation {
                 Logger.shared.debug("[LIST] Calling handleListContinuation", category: .ui)
@@ -777,11 +779,20 @@ struct MarkdownTextEditor: View {
 
     private func handleListContinuation(oldValue: String, newValue: String) {
         Logger.shared.debug("[LIST] handleListContinuation called", category: .ui)
+        Logger.shared.debug("[LIST] oldValue.count: \(oldValue.count), newValue.count: \(newValue.count)", category: .ui)
+
+        // Debug: Check what the last character actually is
+        if let lastChar = newValue.last {
+            let unicodeScalar = lastChar.unicodeScalars.first?.value ?? 0
+            Logger.shared.debug("[LIST] Last char: '\(lastChar)', Unicode: \(unicodeScalar), isNewline: \(lastChar.isNewline)", category: .ui)
+        } else {
+            Logger.shared.debug("[LIST] No last character found", category: .ui)
+        }
 
         // Check if a newline was just added
         guard newValue.count > oldValue.count,
               let lastChar = newValue.last,
-              lastChar == "\n" else {
+              lastChar.isNewline else {
             Logger.shared.debug("[LIST] No newline detected, returning early", category: .ui)
             return
         }
