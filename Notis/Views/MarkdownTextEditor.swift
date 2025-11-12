@@ -669,16 +669,20 @@ struct MarkdownTextEditor: View {
         .toolbar {
             if !hideShortcutBar {
                 ToolbarItemGroup(placement: .keyboard) {
-                    HStack(spacing: 8) {
-                        Button("**Bold**") { insertMarkdown("**", "**") }
-                            .font(.caption)
-                        Button("*Italic*") { insertMarkdown("*", "*") }
-                            .font(.caption)
-                        Button("# Header") { insertMarkdown("# ", "") }
-                            .font(.caption)
-                        Button("Hide") { isTextEditorFocused = false }
-                            .font(.caption)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            Button("**Bold**") { insertMarkdown("**", "**") }
+                                .font(.caption)
+                            Button("*Italic*") { insertMarkdown("*", "*") }
+                                .font(.caption)
+                            Button("# Header") { insertMarkdown("# ", "") }
+                                .font(.caption)
+                            Button("Hide") { isTextEditorFocused = false }
+                                .font(.caption)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
+                    .frame(minWidth: 0, maxWidth: .infinity)
                 }
             }
         }
@@ -870,27 +874,6 @@ struct MarkdownTextEditor: View {
                 textView.contentInsetAdjustmentBehavior = .never
                 textView.textContainer.widthTracksTextView = true
                 textView.textContainer.heightTracksTextView = false
-
-                // NOTE: Accessing layoutManager triggers TextKit 1 compatibility mode
-                // This is intentional - we need TextKit 1 APIs to control non-contiguous layout
-                // for optimal performance on large documents. TextKit 1 is stable and well-tested.
-                // The console warning "UITextView is switching to TextKit 1 compatibility mode"
-                // can be safely ignored as this is a deliberate performance optimization.
-
-                // PERFORMANCE: Enable non-contiguous layout for large documents
-                // Documents < 3000 lines: disable for stability (prevents text jumping)
-                // Documents >= 3000 lines: enable for performance (prevents lag)
-                let lineCount = text.components(separatedBy: .newlines).count
-                let isLargeDocument = lineCount >= 3000
-
-                if isLargeDocument {
-                    // Large document: prioritize performance over minor stability issues
-                    textView.layoutManager.allowsNonContiguousLayout = true
-                    Logger.shared.debug("Enabled non-contiguous layout for large document (\(lineCount) lines)", category: .ui)
-                } else {
-                    // Small document: prioritize stability
-                    textView.layoutManager.allowsNonContiguousLayout = false
-                }
 
                 return
             } else {
