@@ -386,7 +386,7 @@ struct MarkdownTextEditor: View {
     let hideShortcutBar: Bool
     let disableQuickType: Bool
     let onTextChange: (String) -> Void
-    
+
     @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
     @State private var currentLineIndex: Int = 0
     @State private var cursorPosition: Int = 0
@@ -394,6 +394,7 @@ struct MarkdownTextEditor: View {
     @State private var cursorPositionInLine: Int = 0
     @State private var lastTextLength: Int = 0
     @FocusState private var isTextEditorFocused: Bool
+    @AppStorage("showLineNumbers") private var showLineNumbers: Bool = false
     
     private var safeFontSize: CGFloat {
         guard fontSize.isFinite && !fontSize.isNaN && fontSize > 0 else { return 16 }
@@ -409,7 +410,18 @@ struct MarkdownTextEditor: View {
         guard paragraphSpacing.isFinite && !paragraphSpacing.isNaN && paragraphSpacing >= 0 else { return 8 }
         return max(0, min(24, paragraphSpacing))
     }
-    
+
+    private var lineNumberWidth: CGFloat {
+        let lineCount = paragraphs.count
+        let digits = String(lineCount).count
+        return CGFloat(digits * 10 + 12) // Approximate width per digit + padding
+    }
+
+    private var effectiveEditorMargins: CGFloat {
+        // Reduce left margin when line numbers are shown
+        return showLineNumbers ? max(8, editorMargins - lineNumberWidth) : editorMargins
+    }
+
     private func getFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
         switch fontFamily {
         case "serif":
@@ -483,100 +495,122 @@ struct MarkdownTextEditor: View {
     
     var body: some View {
         GeometryReader { geometry in
-            ZStack(alignment: .topLeading) {
-                ZStack {
-                    // Custom paragraph spacing background
-                    VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 0) {
+                // Line Numbers (if enabled)
+                if showLineNumbers {
+                    VStack(alignment: .trailing, spacing: 0) {
                         ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
-                            Text(paragraph.isEmpty ? " " : paragraph)
-                                .font(getFont(size: safeFontSize))
+                            Text("\(index + 1)")
+                                .font(getFont(size: safeFontSize * 0.85))
                                 .lineSpacing(safeLineSpacing)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .foregroundColor(.gray.opacity(0.5))
+                                .frame(height: safeFontSize * safeLineSpacing + (paragraph.isEmpty ? 0 : safeParagraphSpacing), alignment: .top)
                                 .padding(.bottom, paragraph.isEmpty ? 0 : safeParagraphSpacing)
-                                .opacity(0) // Invisible - just for spacing
                         }
                     }
-                    .padding(.horizontal, editorMargins)
+                    .frame(width: lineNumberWidth)
+                    .padding(.leading, 8)
                     .padding(.vertical, 8)
-                    
-                    // Actual TextEditor
-                    TextEditor(text: $text)
-                        .font(getFont(size: safeFontSize))
-                        .lineSpacing(safeLineSpacing + safeParagraphSpacing * 0.5) // Compensate for paragraph spacing
-                        .scrollContentBackground(.hidden)
-                        .background(Color.clear)
-                        .foregroundColor(.primary)
-                        .focused($isTextEditorFocused)
-                        .autocorrectionDisabled(disableQuickType)
-                        .padding(.horizontal, editorMargins)
+                    .padding(.top, isTypewriterMode ? geometry.size.height * 0.25 : 0)
+                    .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.75 : 0)
+                }
+
+                // Editor Content
+                ZStack(alignment: .topLeading) {
+                    ZStack {
+                        // Custom paragraph spacing background
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
+                                Text(paragraph.isEmpty ? " " : paragraph)
+                                    .font(getFont(size: safeFontSize))
+                                    .lineSpacing(safeLineSpacing)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.bottom, paragraph.isEmpty ? 0 : safeParagraphSpacing)
+                                    .opacity(0) // Invisible - just for spacing
+                            }
+                        }
+                        .padding(.horizontal, effectiveEditorMargins)
                         .padding(.vertical, 8)
-                        .padding(.top, isTypewriterMode ? geometry.size.height * 0.25 : 0)
-                        .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.75 : 0)
-                        .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidChangeNotification)) { notification in
-                            if let textView = notification.object as? UITextView, textView.isFirstResponder {
-                                // Reduce jumping by batching cursor updates
-                                DispatchQueue.main.async {
-                                    updateCursorPosition(textView.selectedRange)
+
+                        // Actual TextEditor
+                        TextEditor(text: $text)
+                            .font(getFont(size: safeFontSize))
+                            .lineSpacing(safeLineSpacing + safeParagraphSpacing * 0.5) // Compensate for paragraph spacing
+                            .scrollContentBackground(.hidden)
+                            .background(Color.clear)
+                            .foregroundColor(.primary)
+                            .focused($isTextEditorFocused)
+                            .autocorrectionDisabled(disableQuickType)
+                            .padding(.horizontal, effectiveEditorMargins)
+                            .padding(.vertical, 8)
+                            .padding(.top, isTypewriterMode ? geometry.size.height * 0.25 : 0)
+                            .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.75 : 0)
+                            .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidChangeNotification)) { notification in
+                                if let textView = notification.object as? UITextView, textView.isFirstResponder {
+                                    // Reduce jumping by batching cursor updates
+                                    DispatchQueue.main.async {
+                                        updateCursorPosition(textView.selectedRange)
+                                    }
                                 }
                             }
-                        }
-                        .onAppear {
-                            // Configure TextEditor for stability
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                configureTextViewForStability()
+                            .onAppear {
+                                // Configure TextEditor for stability
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    configureTextViewForStability()
+                                }
                             }
-                        }
-                }
-                // Focus Mode Overlay - Only active when not in typewriter mode
-                if isFocusMode && !isTypewriterMode {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
-                            // Create a view that exactly matches the spacing structure
-                            VStack(alignment: .leading, spacing: 0) {
-                                Rectangle()
-                                    .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.75))
-                                    .frame(height: safeFontSize * safeLineSpacing)
-                                
-                                // Add paragraph spacing if not empty
-                                if !paragraph.isEmpty {
+                    }
+                    // Focus Mode Overlay - Only active when not in typewriter mode
+                    if isFocusMode && !isTypewriterMode {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
+                                // Create a view that exactly matches the spacing structure
+                                VStack(alignment: .leading, spacing: 0) {
                                     Rectangle()
                                         .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.75))
-                                        .frame(height: safeParagraphSpacing)
+                                        .frame(height: safeFontSize * safeLineSpacing)
+
+                                    // Add paragraph spacing if not empty
+                                    if !paragraph.isEmpty {
+                                        Rectangle()
+                                            .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.75))
+                                            .frame(height: safeParagraphSpacing)
+                                    }
                                 }
+                                .animation(.easeInOut(duration: 0.2), value: currentLineIndex)
                             }
-                            .animation(.easeInOut(duration: 0.2), value: currentLineIndex)
                         }
+                        .allowsHitTesting(false)
+                        .padding(.horizontal, effectiveEditorMargins)
+                        .padding(.vertical, 8)
                     }
-                    .allowsHitTesting(false)
-                    .padding(.horizontal, editorMargins)
-                    .padding(.vertical, 8)
-                }
-                
-                // Typewriter Mode Overlay - dims all lines except current line
-                if isTypewriterMode {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
-                            // Create a view that exactly matches the spacing structure
-                            VStack(alignment: .leading, spacing: 0) {
-                                Rectangle()
-                                    .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.85))
-                                    .frame(height: safeFontSize * safeLineSpacing * 0.95) // Slightly smaller to prevent bleeding
-                                
-                                // Add paragraph spacing if not empty, but smaller
-                                if !paragraph.isEmpty {
+
+                    // Typewriter Mode Overlay - dims all lines except current line
+                    if isTypewriterMode {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
+                                // Create a view that exactly matches the spacing structure
+                                VStack(alignment: .leading, spacing: 0) {
                                     Rectangle()
                                         .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.85))
-                                        .frame(height: safeParagraphSpacing * 0.8) // Reduced to prevent overlap
+                                        .frame(height: safeFontSize * safeLineSpacing * 0.95) // Slightly smaller to prevent bleeding
+
+                                    // Add paragraph spacing if not empty, but smaller
+                                    if !paragraph.isEmpty {
+                                        Rectangle()
+                                            .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.85))
+                                            .frame(height: safeParagraphSpacing * 0.8) // Reduced to prevent overlap
+                                    }
                                 }
+                                .animation(.easeInOut(duration: 0.2), value: currentLineIndex)
                             }
-                            .animation(.easeInOut(duration: 0.2), value: currentLineIndex)
                         }
+                        .allowsHitTesting(false)
+                        .padding(.horizontal, effectiveEditorMargins)
+                        .padding(.vertical, 8)
+                        .padding(.top, geometry.size.height * 0.25)
+                        .padding(.bottom, geometry.size.height * 0.75)
                     }
-                    .allowsHitTesting(false)
-                    .padding(.horizontal, editorMargins)
-                    .padding(.vertical, 8)
-                    .padding(.top, geometry.size.height * 0.25)
-                    .padding(.bottom, geometry.size.height * 0.75)
                 }
             }
         }
