@@ -31,6 +31,10 @@ struct SettingsView: View {
     @AppStorage("h2SizeMultiplier") private var h2SizeMultiplier: Double = 1.3
     @AppStorage("h3SizeMultiplier") private var h3SizeMultiplier: Double = 1.1
 
+    // Markdown Styling
+    @AppStorage("annotationColor") private var annotationColor: String = "yellow"
+    @AppStorage("strikethroughColor") private var strikethroughColor: String = "gray"
+
     // Writing Settings
     @AppStorage("defaultGoalType") private var defaultGoalType: String = "words"
     @AppStorage("showWordCount") private var showWordCount: Bool = true
@@ -284,6 +288,87 @@ struct SettingsView: View {
                     }
                 } header: {
                     Label("Markdown Headers", systemImage: "textformat.size")
+                }
+
+                // MARK: - Markdown Styling
+                Section {
+                    // Annotation Color
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Annotation/Highlight Color")
+                            .font(.headline)
+
+                        HStack {
+                            Text("Color")
+                            Spacer()
+                            Menu {
+                                ForEach(headingColorOptions, id: \.name) { option in
+                                    Button(action: {
+                                        annotationColor = option.name
+                                    }) {
+                                        HStack {
+                                            Circle()
+                                                .fill(option.color)
+                                                .frame(width: 16, height: 16)
+                                            Text(option.name.capitalized)
+                                            if annotationColor == option.name {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Circle()
+                                        .fill(colorFromName(annotationColor))
+                                        .frame(width: 16, height: 16)
+                                    Text(annotationColor.capitalized)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    // Strikethrough Color
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Strikethrough Color")
+                            .font(.headline)
+
+                        HStack {
+                            Text("Color")
+                            Spacer()
+                            Menu {
+                                ForEach(headingColorOptions, id: \.name) { option in
+                                    Button(action: {
+                                        strikethroughColor = option.name
+                                    }) {
+                                        HStack {
+                                            Circle()
+                                                .fill(option.color)
+                                                .frame(width: 16, height: 16)
+                                            Text(option.name.capitalized)
+                                            if strikethroughColor == option.name {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Circle()
+                                        .fill(colorFromName(strikethroughColor))
+                                        .frame(width: 16, height: 16)
+                                    Text(strikethroughColor.capitalized)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Label("Markdown Styling", systemImage: "paintbrush")
                 }
 
                 // MARK: - Appearance
