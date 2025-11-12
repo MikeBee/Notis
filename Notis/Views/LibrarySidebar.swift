@@ -537,8 +537,7 @@ struct GroupRowView: View {
     @State private var editingName = ""
     @State private var isHovering = false
     @State private var isDraggedOver = false
-    @State private var showingIconPicker = false
-    @State private var showingColorPicker = false
+    @State private var showingIconColorPicker = false
     @State private var showingSubgroupDialog = false
     @State private var newSubgroupName = ""
     @State private var newSubgroupIcon = "folder"
@@ -712,8 +711,7 @@ struct GroupRowView: View {
             ))
             .contextMenu {
                 Button("Rename") { startEditing() }
-                Button("Change Icon") { showingIconPicker = true }
-                Button("Change Color") { showingColorPicker = true }
+                Button("Change Icon & Color") { showingIconColorPicker = true }
                 Button("Add Subgroup") { showingSubgroupDialog = true }
                 Divider()
                 Menu("Move") {
@@ -756,81 +754,80 @@ struct GroupRowView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingIconPicker) {
+        .sheet(isPresented: $showingIconColorPicker) {
             NavigationView {
                 ScrollView {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 16) {
-                        ForEach(availableIcons, id: \.self) { icon in
-                            Button {
-                                setGroupIcon(icon)
-                                showingIconPicker = false
-                            } label: {
-                                VStack(spacing: 8) {
-                                    Image(systemName: icon)
-                                        .font(.system(size: 24))
-                                        .foregroundColor(groupIcon == icon ? .accentColor : .primary)
-                                        .frame(width: 40, height: 40)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .fill(groupIcon == icon ? Color.accentColor.opacity(0.1) : Color.clear)
-                                        )
+                    VStack(alignment: .leading, spacing: 24) {
+                        // Icon Picker Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Choose Icon")
+                                .font(.headline)
 
-                                    Text(icon)
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(1)
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 16) {
+                                ForEach(availableIcons, id: \.self) { icon in
+                                    Button {
+                                        setGroupIcon(icon)
+                                    } label: {
+                                        VStack(spacing: 8) {
+                                            Image(systemName: icon)
+                                                .font(.system(size: 24))
+                                                .foregroundColor(groupIcon == icon ? .accentColor : .primary)
+                                                .frame(width: 40, height: 40)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .fill(groupIcon == icon ? Color.accentColor.opacity(0.1) : Color.clear)
+                                                )
+
+                                            Text(icon)
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
                                 }
                             }
-                            .buttonStyle(PlainButtonStyle())
                         }
-                    }
-                    .padding()
-                }
-                .navigationTitle("Choose Icon")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Cancel") {
-                            showingIconPicker = false
-                        }
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showingColorPicker) {
-            NavigationView {
-                ScrollView {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 20) {
-                        ForEach(availableColors, id: \.name) { colorItem in
-                            Button {
-                                setGroupColor(colorItem.name)
-                                showingColorPicker = false
-                            } label: {
-                                VStack(spacing: 8) {
-                                    Circle()
-                                        .fill(colorItem.color)
-                                        .frame(width: 50, height: 50)
-                                        .overlay(
+
+                        Divider()
+
+                        // Color Picker Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Choose Color")
+                                .font(.headline)
+
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 20) {
+                                ForEach(availableColors, id: \.name) { colorItem in
+                                    Button {
+                                        setGroupColor(colorItem.name)
+                                    } label: {
+                                        VStack(spacing: 8) {
                                             Circle()
-                                                .stroke(groupColor == colorItem.name ? Color.accentColor : Color.clear, lineWidth: 3)
-                                        )
+                                                .fill(colorItem.color)
+                                                .frame(width: 50, height: 50)
+                                                .overlay(
+                                                    Circle()
+                                                        .stroke(groupColor == colorItem.name ? Color.accentColor : Color.clear, lineWidth: 3)
+                                                )
 
-                                    Text(colorItem.name.capitalized)
-                                        .font(.caption)
-                                        .foregroundColor(.primary)
+                                            Text(colorItem.name.capitalized)
+                                                .font(.caption)
+                                                .foregroundColor(.primary)
+                                        }
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
                                 }
                             }
-                            .buttonStyle(PlainButtonStyle())
                         }
                     }
                     .padding()
                 }
-                .navigationTitle("Choose Color")
+                .navigationTitle("Customize Group")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Cancel") {
-                            showingColorPicker = false
+                        Button("Done") {
+                            showingIconColorPicker = false
                         }
                     }
                 }
