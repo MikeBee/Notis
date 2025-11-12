@@ -23,6 +23,14 @@ struct SettingsView: View {
     @AppStorage("disableQuickType") private var disableQuickType: Bool = false
     @AppStorage("showLineNumbers") private var showLineNumbers: Bool = false
 
+    // Heading Customization
+    @AppStorage("h1Color") private var h1Color: String = "default"
+    @AppStorage("h2Color") private var h2Color: String = "default"
+    @AppStorage("h3Color") private var h3Color: String = "default"
+    @AppStorage("h1SizeMultiplier") private var h1SizeMultiplier: Double = 1.5
+    @AppStorage("h2SizeMultiplier") private var h2SizeMultiplier: Double = 1.3
+    @AppStorage("h3SizeMultiplier") private var h3SizeMultiplier: Double = 1.1
+
     // Writing Settings
     @AppStorage("defaultGoalType") private var defaultGoalType: String = "words"
     @AppStorage("showWordCount") private var showWordCount: Bool = true
@@ -132,6 +140,150 @@ struct SettingsView: View {
 
                 } header: {
                     Label("Editor", systemImage: "pencil.line")
+                }
+
+                // MARK: - Markdown Headers
+                Section {
+                    // H1 Settings
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Heading 1 (H1)")
+                            .font(.headline)
+
+                        HStack {
+                            Text("Color")
+                            Spacer()
+                            Menu {
+                                ForEach(headingColorOptions, id: \.name) { option in
+                                    Button(action: {
+                                        h1Color = option.name
+                                    }) {
+                                        HStack {
+                                            Circle()
+                                                .fill(option.color)
+                                                .frame(width: 16, height: 16)
+                                            Text(option.name.capitalized)
+                                            if h1Color == option.name {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Circle()
+                                        .fill(colorFromName(h1Color))
+                                        .frame(width: 16, height: 16)
+                                    Text(h1Color.capitalized)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+
+                        HStack {
+                            Text("Size Multiplier")
+                            Spacer()
+                            Text(String(format: "%.1fx", h1SizeMultiplier))
+                                .foregroundColor(.secondary)
+                        }
+                        Slider(value: $h1SizeMultiplier, in: 1.0...3.0, step: 0.1)
+                    }
+
+                    Divider()
+
+                    // H2 Settings
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Heading 2 (H2)")
+                            .font(.headline)
+
+                        HStack {
+                            Text("Color")
+                            Spacer()
+                            Menu {
+                                ForEach(headingColorOptions, id: \.name) { option in
+                                    Button(action: {
+                                        h2Color = option.name
+                                    }) {
+                                        HStack {
+                                            Circle()
+                                                .fill(option.color)
+                                                .frame(width: 16, height: 16)
+                                            Text(option.name.capitalized)
+                                            if h2Color == option.name {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Circle()
+                                        .fill(colorFromName(h2Color))
+                                        .frame(width: 16, height: 16)
+                                    Text(h2Color.capitalized)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+
+                        HStack {
+                            Text("Size Multiplier")
+                            Spacer()
+                            Text(String(format: "%.1fx", h2SizeMultiplier))
+                                .foregroundColor(.secondary)
+                        }
+                        Slider(value: $h2SizeMultiplier, in: 1.0...2.5, step: 0.1)
+                    }
+
+                    Divider()
+
+                    // H3 Settings
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Heading 3 (H3)")
+                            .font(.headline)
+
+                        HStack {
+                            Text("Color")
+                            Spacer()
+                            Menu {
+                                ForEach(headingColorOptions, id: \.name) { option in
+                                    Button(action: {
+                                        h3Color = option.name
+                                    }) {
+                                        HStack {
+                                            Circle()
+                                                .fill(option.color)
+                                                .frame(width: 16, height: 16)
+                                            Text(option.name.capitalized)
+                                            if h3Color == option.name {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Circle()
+                                        .fill(colorFromName(h3Color))
+                                        .frame(width: 16, height: 16)
+                                    Text(h3Color.capitalized)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+
+                        HStack {
+                            Text("Size Multiplier")
+                            Spacer()
+                            Text(String(format: "%.1fx", h3SizeMultiplier))
+                                .foregroundColor(.secondary)
+                        }
+                        Slider(value: $h3SizeMultiplier, in: 1.0...2.0, step: 0.1)
+                    }
+                } header: {
+                    Label("Markdown Headers", systemImage: "textformat.size")
                 }
 
                 // MARK: - Appearance
@@ -587,6 +739,46 @@ struct SettingsView: View {
     private func selectObsidianVault() {
         ExportService.shared.selectObsidianVaultPath {
             // Vault path has been updated
+        }
+    }
+
+    // MARK: - Heading Color Helpers
+
+    private var headingColorOptions: [(name: String, color: Color)] {
+        [
+            ("default", .primary),
+            ("blue", .blue),
+            ("purple", .purple),
+            ("pink", .pink),
+            ("red", .red),
+            ("orange", .orange),
+            ("yellow", .yellow),
+            ("green", .green),
+            ("teal", .teal),
+            ("indigo", .indigo),
+            ("cyan", .cyan),
+            ("mint", .mint),
+            ("brown", .brown),
+            ("gray", .gray)
+        ]
+    }
+
+    private func colorFromName(_ name: String) -> Color {
+        switch name {
+        case "blue": return .blue
+        case "purple": return .purple
+        case "pink": return .pink
+        case "red": return .red
+        case "orange": return .orange
+        case "yellow": return .yellow
+        case "green": return .green
+        case "teal": return .teal
+        case "indigo": return .indigo
+        case "cyan": return .cyan
+        case "mint": return .mint
+        case "brown": return .brown
+        case "gray": return .gray
+        default: return .primary
         }
     }
 }

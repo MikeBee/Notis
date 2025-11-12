@@ -9,14 +9,21 @@ import SwiftUI
 
 struct MarkdownHighlightedText: View {
     @EnvironmentObject var appState: AppState
-    
+
     let text: String
     let fontSize: CGFloat
     let isCurrentParagraph: Bool
     let lineSpacing: CGFloat
     let paragraphSpacing: CGFloat
     let fontFamily: String
-    
+
+    @AppStorage("h1Color") private var h1Color: String = "default"
+    @AppStorage("h2Color") private var h2Color: String = "default"
+    @AppStorage("h3Color") private var h3Color: String = "default"
+    @AppStorage("h1SizeMultiplier") private var h1SizeMultiplier: Double = 1.5
+    @AppStorage("h2SizeMultiplier") private var h2SizeMultiplier: Double = 1.3
+    @AppStorage("h3SizeMultiplier") private var h3SizeMultiplier: Double = 1.1
+
     init(text: String, fontSize: CGFloat, isCurrentParagraph: Bool, lineSpacing: CGFloat = 1.4, paragraphSpacing: CGFloat = 8, fontFamily: String = "system") {
         self.text = text
         self.fontSize = fontSize
@@ -78,7 +85,44 @@ struct MarkdownHighlightedText: View {
     private var baseColor: Color {
         Color.primary
     }
-    
+
+    private func headingColorFromName(_ name: String) -> Color {
+        switch name {
+        case "blue": return .blue
+        case "purple": return .purple
+        case "pink": return .pink
+        case "red": return .red
+        case "orange": return .orange
+        case "yellow": return .yellow
+        case "green": return .green
+        case "teal": return .teal
+        case "indigo": return .indigo
+        case "cyan": return .cyan
+        case "mint": return .mint
+        case "brown": return .brown
+        case "gray": return .gray
+        default: return .primary
+        }
+    }
+
+    private func getHeaderMultiplier(for level: Int) -> CGFloat {
+        switch level {
+        case 1: return CGFloat(h1SizeMultiplier)
+        case 2: return CGFloat(h2SizeMultiplier)
+        case 3: return CGFloat(h3SizeMultiplier)
+        default: return 1.0
+        }
+    }
+
+    private func getHeaderColor(for level: Int) -> Color {
+        switch level {
+        case 1: return headingColorFromName(h1Color)
+        case 2: return headingColorFromName(h2Color)
+        case 3: return headingColorFromName(h3Color)
+        default: return .primary
+        }
+    }
+
     private func createHeaderAttributedString(text: String, headerLevel: Int, baseFontSize: CGFloat) -> AttributedString {
         let headerPrefixes = ["# ", "## ", "### "]
         guard headerLevel <= headerPrefixes.count else {
@@ -104,12 +148,12 @@ struct MarkdownHighlightedText: View {
             fullAttributed.append(prefixAttributed)
         }
         
-        // Add the header text with bold, large styling
+        // Add the header text with bold, large styling and custom color
         var contentAttributed = AttributedString(headerText)
-        let fontMultiplier: CGFloat = headerLevel == 1 ? 1.5 : (headerLevel == 2 ? 1.3 : 1.1)
+        let fontMultiplier: CGFloat = getHeaderMultiplier(for: headerLevel)
         contentAttributed.font = UIFont.boldSystemFont(ofSize: baseFontSize * fontMultiplier)
-        contentAttributed.foregroundColor = Color.primary
-        
+        contentAttributed.foregroundColor = getHeaderColor(for: headerLevel)
+
         fullAttributed.append(contentAttributed)
         
         // Apply paragraph style for outdenting if header symbols are shown
