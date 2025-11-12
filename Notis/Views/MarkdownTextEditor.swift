@@ -161,7 +161,8 @@ struct MarkdownHighlightedText: View {
             let paragraphStyle = NSMutableParagraphStyle()
             paragraphStyle.headIndent = 30 // Regular text indented to align with body
             paragraphStyle.firstLineHeadIndent = 0 // First line (with H1/H2/H3) starts at margin
-            fullAttributed.paragraphStyle = paragraphStyle
+            // Use nonisolated assignment to avoid Sendable conformance requirement
+            fullAttributed.paragraphStyle = paragraphStyle.copy() as? NSParagraphStyle
         }
         
         return fullAttributed
@@ -419,7 +420,6 @@ struct MarkdownReadOnlyView: View {
 
 struct MarkdownTextEditor: View {
     @EnvironmentObject var appState: AppState
-    @Environment(\.undoManager) private var undoManager
     @Binding var text: String
     @Binding var isTypewriterMode: Bool
     @Binding var isFocusMode: Bool
@@ -798,12 +798,6 @@ struct MarkdownTextEditor: View {
                 allLines[previousLineIndex] = ""
                 let updatedText = allLines.joined(separator: "\n")
 
-                // Register undo action
-                let oldText = currentText
-                undoManager?.registerUndo(withTarget: self) { target in
-                    target.text = oldText
-                }
-
                 self.text = updatedText
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -813,13 +807,6 @@ struct MarkdownTextEditor: View {
                 // Continue bullet list
                 isHandlingListContinuation = true
                 let updatedText = currentText + "- "
-
-                // Register undo action
-                let oldText = currentText
-                undoManager?.registerUndo(withTarget: self) { target in
-                    target.text = oldText
-                }
-
                 self.text = updatedText
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -848,12 +835,6 @@ struct MarkdownTextEditor: View {
                 allLines[previousLineIndex] = ""
                 let updatedText = allLines.joined(separator: "\n")
 
-                // Register undo action
-                let oldText = currentText
-                undoManager?.registerUndo(withTarget: self) { target in
-                    target.text = oldText
-                }
-
                 self.text = updatedText
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -865,13 +846,6 @@ struct MarkdownTextEditor: View {
                 isHandlingListContinuation = true
 
                 let updatedText = currentText + "\(nextNumber). "
-
-                // Register undo action
-                let oldText = currentText
-                undoManager?.registerUndo(withTarget: self) { target in
-                    target.text = oldText
-                }
-
                 self.text = updatedText
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
