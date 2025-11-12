@@ -68,67 +68,52 @@ struct SettingsView: View {
                 // MARK: - Editor
                 Section {
                     // Typography
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Font Family")
-                            Spacer()
-                            Picker("Font", selection: $fontFamily) {
-                                Text("System").tag("system")
-                                Text("Serif").tag("serif")
-                                Text("Monospace").tag("monospace")
-                                Text("Times").tag("times")
-                                Text("Helvetica").tag("helvetica")
-                                Text("Courier").tag("courier")
-                                Text("Avenir").tag("avenir")
-                                Text("Georgia").tag("georgia")
-                            }
-                            .pickerStyle(MenuPickerStyle())
+                    HStack {
+                        Text("Font Family")
+                        Spacer()
+                        Picker("Font", selection: $fontFamily) {
+                            Text("System").tag("system")
+                            Text("Serif").tag("serif")
+                            Text("Monospace").tag("monospace")
+                            Text("Times").tag("times")
+                            Text("Helvetica").tag("helvetica")
+                            Text("Courier").tag("courier")
+                            Text("Avenir").tag("avenir")
+                            Text("Georgia").tag("georgia")
                         }
+                        .pickerStyle(MenuPickerStyle())
                     }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Font Size")
-                            Spacer()
-                            Text("\(Int(fontSize))pt")
-                                .foregroundColor(.secondary)
-                        }
+                    HStack {
+                        Text("Font Size")
                         Slider(value: $fontSize, in: 10...32, step: 1)
+                        Text("\(Int(fontSize))pt")
+                            .foregroundColor(.secondary)
+                            .frame(width: 40)
                     }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Line Height")
-                            Spacer()
-                            Text(String(format: "%.1f", lineSpacing))
-                                .foregroundColor(.secondary)
-                        }
+                    HStack {
+                        Text("Line Height")
                         Slider(value: $lineSpacing, in: 1.0...3.0, step: 0.1)
+                        Text(String(format: "%.1f", lineSpacing))
+                            .foregroundColor(.secondary)
+                            .frame(width: 40)
                     }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Paragraph Spacing")
-                            Spacer()
-                            Text("\(Int(paragraphSpacing))pt")
-                                .foregroundColor(.secondary)
-                        }
+                    HStack {
+                        Text("Paragraph Spacing")
                         Slider(value: $paragraphSpacing, in: 0...24, step: 2)
+                        Text("\(Int(paragraphSpacing))pt")
+                            .foregroundColor(.secondary)
+                            .frame(width: 40)
                     }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Editor Margins")
-                            Spacer()
-                            if editorMargins == 0 {
-                                Text("No margin")
-                                    .foregroundColor(.secondary)
-                            } else {
-                                Text("\(Int(editorMargins))pt")
-                                    .foregroundColor(.secondary)
-                            }
-                        }
+                    HStack {
+                        Text("Editor Margins")
                         Slider(value: $editorMargins, in: 0...400, step: 5)
+                        Text(editorMargins == 0 ? "None" : "\(Int(editorMargins))pt")
+                            .foregroundColor(.secondary)
+                            .frame(width: 50)
                     }
 
                     // Behavior
@@ -149,142 +134,127 @@ struct SettingsView: View {
                 // MARK: - Markdown Headers
                 Section {
                     // H1 Settings
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Heading 1 (H1)")
-                            .font(.headline)
-
-                        HStack {
-                            Text("Color")
-                            Spacer()
-                            Menu {
-                                ForEach(headingColorOptions, id: \.name) { option in
-                                    Button(action: {
-                                        h1Color = option.name
-                                    }) {
-                                        HStack {
-                                            Circle()
-                                                .fill(option.color)
-                                                .frame(width: 16, height: 16)
-                                            Text(option.name.capitalized)
-                                            if h1Color == option.name {
-                                                Spacer()
-                                                Image(systemName: "checkmark")
-                                            }
+                    HStack {
+                        Text("H1 Color")
+                        Spacer()
+                        Menu {
+                            ForEach(headingColorOptions, id: \.name) { option in
+                                Button(action: {
+                                    h1Color = option.name
+                                }) {
+                                    HStack {
+                                        Circle()
+                                            .fill(option.color)
+                                            .frame(width: 16, height: 16)
+                                        Text(option.name.capitalized)
+                                        if h1Color == option.name {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
                                         }
                                     }
                                 }
-                            } label: {
-                                HStack {
-                                    Circle()
-                                        .fill(colorFromName(h1Color))
-                                        .frame(width: 16, height: 16)
-                                    Text(h1Color.capitalized)
-                                        .foregroundColor(.secondary)
-                                }
+                            }
+                        } label: {
+                            HStack {
+                                Circle()
+                                    .fill(colorFromName(h1Color))
+                                    .frame(width: 16, height: 16)
+                                Text(h1Color.capitalized)
+                                    .foregroundColor(.secondary)
                             }
                         }
+                    }
 
-                        HStack {
-                            Text("Size Multiplier")
-                            Spacer()
-                            Text(String(format: "%.1fx", h1SizeMultiplier))
-                                .foregroundColor(.secondary)
-                        }
+                    HStack {
+                        Text("H1 Size")
                         Slider(value: $h1SizeMultiplier, in: 1.0...3.0, step: 0.1)
+                        Text(String(format: "%.1fx", h1SizeMultiplier))
+                            .foregroundColor(.secondary)
+                            .frame(width: 40)
                     }
 
                     Divider()
 
                     // H2 Settings
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Heading 2 (H2)")
-                            .font(.headline)
-
-                        HStack {
-                            Text("Color")
-                            Spacer()
-                            Menu {
-                                ForEach(headingColorOptions, id: \.name) { option in
-                                    Button(action: {
-                                        h2Color = option.name
-                                    }) {
-                                        HStack {
-                                            Circle()
-                                                .fill(option.color)
-                                                .frame(width: 16, height: 16)
-                                            Text(option.name.capitalized)
-                                            if h2Color == option.name {
-                                                Spacer()
-                                                Image(systemName: "checkmark")
-                                            }
+                    HStack {
+                        Text("H2 Color")
+                        Spacer()
+                        Menu {
+                            ForEach(headingColorOptions, id: \.name) { option in
+                                Button(action: {
+                                    h2Color = option.name
+                                }) {
+                                    HStack {
+                                        Circle()
+                                            .fill(option.color)
+                                            .frame(width: 16, height: 16)
+                                        Text(option.name.capitalized)
+                                        if h2Color == option.name {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
                                         }
                                     }
                                 }
-                            } label: {
-                                HStack {
-                                    Circle()
-                                        .fill(colorFromName(h2Color))
-                                        .frame(width: 16, height: 16)
-                                    Text(h2Color.capitalized)
-                                        .foregroundColor(.secondary)
-                                }
+                            }
+                        } label: {
+                            HStack {
+                                Circle()
+                                    .fill(colorFromName(h2Color))
+                                    .frame(width: 16, height: 16)
+                                Text(h2Color.capitalized)
+                                    .foregroundColor(.secondary)
                             }
                         }
+                    }
 
-                        HStack {
-                            Text("Size Multiplier")
-                            Spacer()
-                            Text(String(format: "%.1fx", h2SizeMultiplier))
-                                .foregroundColor(.secondary)
-                        }
+                    HStack {
+                        Text("H2 Size")
                         Slider(value: $h2SizeMultiplier, in: 1.0...2.5, step: 0.1)
+                        Text(String(format: "%.1fx", h2SizeMultiplier))
+                            .foregroundColor(.secondary)
+                            .frame(width: 40)
                     }
 
                     Divider()
 
                     // H3 Settings
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Heading 3 (H3)")
-                            .font(.headline)
-
-                        HStack {
-                            Text("Color")
-                            Spacer()
-                            Menu {
-                                ForEach(headingColorOptions, id: \.name) { option in
-                                    Button(action: {
-                                        h3Color = option.name
-                                    }) {
-                                        HStack {
-                                            Circle()
-                                                .fill(option.color)
-                                                .frame(width: 16, height: 16)
-                                            Text(option.name.capitalized)
-                                            if h3Color == option.name {
-                                                Spacer()
-                                                Image(systemName: "checkmark")
-                                            }
+                    HStack {
+                        Text("H3 Color")
+                        Spacer()
+                        Menu {
+                            ForEach(headingColorOptions, id: \.name) { option in
+                                Button(action: {
+                                    h3Color = option.name
+                                }) {
+                                    HStack {
+                                        Circle()
+                                            .fill(option.color)
+                                            .frame(width: 16, height: 16)
+                                        Text(option.name.capitalized)
+                                        if h3Color == option.name {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
                                         }
                                     }
                                 }
-                            } label: {
-                                HStack {
-                                    Circle()
-                                        .fill(colorFromName(h3Color))
-                                        .frame(width: 16, height: 16)
-                                    Text(h3Color.capitalized)
-                                        .foregroundColor(.secondary)
-                                }
+                            }
+                        } label: {
+                            HStack {
+                                Circle()
+                                    .fill(colorFromName(h3Color))
+                                    .frame(width: 16, height: 16)
+                                Text(h3Color.capitalized)
+                                    .foregroundColor(.secondary)
                             }
                         }
+                    }
 
-                        HStack {
-                            Text("Size Multiplier")
-                            Spacer()
-                            Text(String(format: "%.1fx", h3SizeMultiplier))
-                                .foregroundColor(.secondary)
-                        }
+                    HStack {
+                        Text("H3 Size")
                         Slider(value: $h3SizeMultiplier, in: 1.0...2.0, step: 0.1)
+                        Text(String(format: "%.1fx", h3SizeMultiplier))
+                            .foregroundColor(.secondary)
+                            .frame(width: 40)
                     }
                 } header: {
                     Label("Markdown Headers", systemImage: "textformat.size")
@@ -292,78 +262,64 @@ struct SettingsView: View {
 
                 // MARK: - Markdown Styling
                 Section {
-                    // Annotation Color
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Annotation/Highlight Color")
-                            .font(.headline)
-
-                        HStack {
-                            Text("Color")
-                            Spacer()
-                            Menu {
-                                ForEach(headingColorOptions, id: \.name) { option in
-                                    Button(action: {
-                                        annotationColor = option.name
-                                    }) {
-                                        HStack {
-                                            Circle()
-                                                .fill(option.color)
-                                                .frame(width: 16, height: 16)
-                                            Text(option.name.capitalized)
-                                            if annotationColor == option.name {
-                                                Spacer()
-                                                Image(systemName: "checkmark")
-                                            }
+                    HStack {
+                        Text("Highlight Color")
+                        Spacer()
+                        Menu {
+                            ForEach(headingColorOptions, id: \.name) { option in
+                                Button(action: {
+                                    annotationColor = option.name
+                                }) {
+                                    HStack {
+                                        Circle()
+                                            .fill(option.color)
+                                            .frame(width: 16, height: 16)
+                                        Text(option.name.capitalized)
+                                        if annotationColor == option.name {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
                                         }
                                     }
                                 }
-                            } label: {
-                                HStack {
-                                    Circle()
-                                        .fill(colorFromName(annotationColor))
-                                        .frame(width: 16, height: 16)
-                                    Text(annotationColor.capitalized)
-                                        .foregroundColor(.secondary)
-                                }
+                            }
+                        } label: {
+                            HStack {
+                                Circle()
+                                    .fill(colorFromName(annotationColor))
+                                    .frame(width: 16, height: 16)
+                                Text(annotationColor.capitalized)
+                                    .foregroundColor(.secondary)
                             }
                         }
                     }
 
-                    Divider()
-
-                    // Strikethrough Color
-                    VStack(alignment: .leading, spacing: 8) {
+                    HStack {
                         Text("Strikethrough Color")
-                            .font(.headline)
-
-                        HStack {
-                            Text("Color")
-                            Spacer()
-                            Menu {
-                                ForEach(headingColorOptions, id: \.name) { option in
-                                    Button(action: {
-                                        strikethroughColor = option.name
-                                    }) {
-                                        HStack {
-                                            Circle()
-                                                .fill(option.color)
-                                                .frame(width: 16, height: 16)
-                                            Text(option.name.capitalized)
-                                            if strikethroughColor == option.name {
-                                                Spacer()
-                                                Image(systemName: "checkmark")
-                                            }
+                        Spacer()
+                        Menu {
+                            ForEach(headingColorOptions, id: \.name) { option in
+                                Button(action: {
+                                    strikethroughColor = option.name
+                                }) {
+                                    HStack {
+                                        Circle()
+                                            .fill(option.color)
+                                            .frame(width: 16, height: 16)
+                                        Text(option.name.capitalized)
+                                        if strikethroughColor == option.name {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
                                         }
                                     }
                                 }
-                            } label: {
-                                HStack {
-                                    Circle()
-                                        .fill(colorFromName(strikethroughColor))
-                                        .frame(width: 16, height: 16)
-                                    Text(strikethroughColor.capitalized)
-                                        .foregroundColor(.secondary)
-                                }
+                            }
+                        } label: {
+                            HStack {
+                                Circle()
+                                    .fill(colorFromName(strikethroughColor))
+                                    .frame(width: 16, height: 16)
+                                Text(strikethroughColor.capitalized)
+                                    .foregroundColor(.secondary)
                             }
                         }
                     }
