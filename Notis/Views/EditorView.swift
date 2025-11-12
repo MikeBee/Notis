@@ -14,7 +14,6 @@ struct EditorView: View {
     
     @State private var showStats = false
     @State private var isFullScreen = false
-    @State private var showEditorSettings = false
     @State private var showFindReplace = false
     @State private var isReadOnlyMode = false
     @AppStorage("fontSize") private var fontSize: Double = 16
@@ -147,12 +146,6 @@ struct EditorView: View {
                             Button("Share...") {
                                 shareSheet(selectedSheet)
                             }
-                            
-                            Divider()
-                            
-                            Button("Editor Settings") {
-                                showEditorSettings = true
-                            }
                         } label: {
                             Image(systemName: "ellipsis")
                                 .font(.system(size: 21, weight: .medium))
@@ -257,21 +250,6 @@ struct EditorView: View {
             }
         }
         .background(Color(.systemBackground))
-        .sheet(isPresented: $showEditorSettings) {
-            EditorSettingsView(
-                fontSize: $fontSize,
-                lineSpacing: $lineSpacing,
-                paragraphSpacing: $paragraphSpacing,
-                fontFamily: $fontFamily,
-                editorMargins: $editorMargins,
-                showWordCounter: $showWordCounter,
-                // hideShortcutBar: removed - now global setting,
-                disableQuickType: $disableQuickType,
-                theme: $appState.theme,
-                isTypewriterMode: $appState.isTypewriterMode,
-                isFocusMode: $appState.isFocusMode
-            )
-        }
         .sheet(isPresented: $showFindReplace) {
             if let selectedSheet = appState.selectedSheet {
                 FindReplaceView(text: Binding(
