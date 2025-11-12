@@ -603,27 +603,29 @@ struct MarkdownEditor: View {
     
     private func scheduleWordCount() {
         wordCountTimer?.invalidate()
-        wordCountTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
-            self?.updateWordCountAndPreview()
+        wordCountTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
+            updateWordCountAndPreview()
         }
     }
 
     private func updateWordCountAndPreview() {
-        // Perform word counting off the main thread to avoid blocking
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
+        // Capture values to avoid accessing self in background
+        let currentContent = content
+        let currentSheet = sheet
 
-            let words = self.content.components(separatedBy: .whitespacesAndNewlines)
+        // Perform word counting off the main thread to avoid blocking
+        DispatchQueue.global(qos: .userInitiated).async {
+            let words = currentContent.components(separatedBy: .whitespacesAndNewlines)
                 .filter { !$0.isEmpty }
             let wordCount = Int32(words.count)
 
-            let trimmed = self.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = currentContent.trimmingCharacters(in: .whitespacesAndNewlines)
             let preview = trimmed.count <= 200 ? trimmed : String(trimmed.prefix(200)) + "..."
 
             // Update Core Data on main thread
             DispatchQueue.main.async {
-                self.sheet.wordCount = wordCount
-                self.sheet.preview = preview
+                currentSheet.wordCount = wordCount
+                currentSheet.preview = preview
             }
         }
     }
@@ -637,8 +639,8 @@ struct MarkdownEditor: View {
     
     private func scheduleAnnotationProcessing(_ text: String) {
         annotationTimer?.invalidate()
-        annotationTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
-            self?.processAnnotations(text)
+        annotationTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { _ in
+            processAnnotations(text)
         }
     }
 
@@ -672,8 +674,8 @@ struct MarkdownEditor: View {
             backgroundContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
 
             do {
-                // Fetch the sheet in the background context
-                if let bgSheet = try? backgroundContext.existingObject(with: sheetID) as? Sheet {
+                // Verify the sheet exists in the background context before saving
+                if (try? backgroundContext.existingObject(with: sheetID)) != nil {
                     // The changes from the main context should already be merged
                     try backgroundContext.save()
                 }
