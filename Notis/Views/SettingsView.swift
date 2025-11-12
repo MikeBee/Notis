@@ -722,25 +722,76 @@ struct SettingsView: View {
 
     private func importSheets(_ exportedSheets: [ExportedSheet]) {
         var importedCount = 0
-
-        // Get or create Imported group
-        let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == nil", "Imported")
-
-        let targetGroup: Group
-        if let existingGroup = try? viewContext.fetch(fetchRequest).first {
-            targetGroup = existingGroup
-        } else {
-            let newGroup = Group(context: viewContext)
-            newGroup.id = UUID()
-            newGroup.name = "Imported"
-            newGroup.createdAt = Date()
-            newGroup.modifiedAt = Date()
-            newGroup.sortOrder = 0
-            targetGroup = newGroup
-        }
+        var groupCache: [String: Group] = [:] // Cache groups to avoid repeated fetches
+        var groupCounters: [String: Int32] = [:] // Track number of sheets added to each group
 
         for exportedSheet in exportedSheets {
+            // Find or create the target group
+            let targetGroupName: String
+            let targetGroup: Group
+
+            if let groupName = exportedSheet.groupName {
+                targetGroupName = groupName
+                // Try to find existing group in cache first
+                if let cachedGroup = groupCache[groupName] {
+                    targetGroup = cachedGroup
+                } else {
+                    // Search for existing group
+                    let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
+                    fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == nil", groupName)
+
+                    if let existingGroup = try? viewContext.fetch(fetchRequest).first {
+                        targetGroup = existingGroup
+                        groupCache[groupName] = existingGroup
+                    } else {
+                        // Create new group
+                        let newGroup = Group(context: viewContext)
+                        newGroup.id = UUID()
+                        newGroup.name = groupName
+                        newGroup.createdAt = Date()
+                        newGroup.modifiedAt = Date()
+                        newGroup.sortOrder = Int32(groupCache.count)
+                        targetGroup = newGroup
+                        groupCache[groupName] = newGroup
+                    }
+                }
+            } else {
+                // No group name - use "Imported" group
+                targetGroupName = "Imported"
+                if let cachedGroup = groupCache["Imported"] {
+                    targetGroup = cachedGroup
+                } else {
+                    let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
+                    fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == nil", "Imported")
+
+                    if let existingGroup = try? viewContext.fetch(fetchRequest).first {
+                        targetGroup = existingGroup
+                        groupCache["Imported"] = existingGroup
+                    } else {
+                        let newGroup = Group(context: viewContext)
+                        newGroup.id = UUID()
+                        newGroup.name = "Imported"
+                        newGroup.createdAt = Date()
+                        newGroup.modifiedAt = Date()
+                        newGroup.sortOrder = 0
+                        targetGroup = newGroup
+                        groupCache["Imported"] = newGroup
+                    }
+                }
+            }
+
+            // Find max sort order in target group (only once per group)
+            if groupCounters[targetGroupName] == nil {
+                let maxSortOrder: Int32
+                if let sheets = targetGroup.sheets as? Set<Sheet>, !sheets.isEmpty {
+                    maxSortOrder = sheets.map { $0.sortOrder }.max() ?? -1
+                } else {
+                    maxSortOrder = -1
+                }
+                groupCounters[targetGroupName] = maxSortOrder + 1
+            }
+
+            // Create new sheet
             let newSheet = Sheet(context: viewContext)
             newSheet.id = UUID(uuidString: exportedSheet.id) ?? UUID()
             newSheet.title = exportedSheet.title
@@ -753,15 +804,22 @@ struct SettingsView: View {
             newSheet.goalType = exportedSheet.goalType
             newSheet.isFavorite = exportedSheet.isFavorite
             newSheet.isInTrash = false
-            newSheet.preview = String(exportedSheet.content.prefix(100))
-            newSheet.sortOrder = Int32(importedCount)
+
+            // Generate proper preview (match app's preview generation logic)
+            let trimmed = exportedSheet.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            newSheet.preview = trimmed.count <= 200 ? trimmed : String(trimmed.prefix(200)) + "..."
+
+            // Set sort order to avoid duplicates (increment counter for this group)
+            newSheet.sortOrder = groupCounters[targetGroupName]!
+            groupCounters[targetGroupName]! += 1
 
             importedCount += 1
         }
 
         do {
             try viewContext.save()
-            alertMessage = "Successfully imported \(importedCount) sheets!"
+            let groupCount = groupCache.count
+            alertMessage = "Successfully imported \(importedCount) sheets into \(groupCount) group(s)!"
             showingAlert = true
         } catch {
             alertMessage = "Failed to save imported sheets: \(error.localizedDescription)"
