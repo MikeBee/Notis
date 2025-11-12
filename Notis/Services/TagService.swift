@@ -360,11 +360,18 @@ class TagService: ObservableObject {
     
     func processInlineTags(in content: String, for sheet: Sheet) {
         let tagPattern = #"#([a-zA-Z0-9_/-]+)"#
-        let regex = try! NSRegularExpression(pattern: tagPattern, options: [])
+
+        // Safely compile the regular expression
+        guard let regex = try? NSRegularExpression(pattern: tagPattern, options: []) else {
+            print("⚠️ Failed to compile tag regex pattern: \(tagPattern)")
+            // If regex compilation fails, we can't process tags, so return early
+            return
+        }
+
         let range = NSRange(content.startIndex..<content.endIndex, in: content)
-        
+
         var foundTags: Set<String> = []
-        
+
         regex.enumerateMatches(in: content, options: [], range: range) { match, _, _ in
             if let match = match,
                let range = Range(match.range(at: 1), in: content) {
