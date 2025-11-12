@@ -115,13 +115,13 @@ struct EditorView: View {
                         
                         // Full Screen Button
                         Button(action: toggleFullScreen) {
-                            Image(systemName: isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                            Image(systemName: appState.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                                 .font(.system(size: 18, weight: .medium))
                                 .foregroundColor(.secondary)
                         }
                         .buttonStyle(PlainButtonStyle())
                         .keyboardShortcut("f", modifiers: [.command, .control])
-                        .help(isFullScreen ? "Exit Full Screen" : "Enter Full Screen")
+                        .help(appState.isFullScreen ? "Exit Full Screen" : "Enter Full Screen")
                         
                         // Editor Options Menu
                         Menu {
