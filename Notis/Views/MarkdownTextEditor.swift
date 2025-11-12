@@ -420,6 +420,7 @@ struct MarkdownReadOnlyView: View {
 
 struct MarkdownTextEditor: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.undoManager) private var undoManager
     @Binding var text: String
     @Binding var isTypewriterMode: Bool
     @Binding var isFocusMode: Bool
@@ -722,6 +723,14 @@ struct MarkdownTextEditor: View {
             // Note: removeObserver with 'self' may not work correctly in SwiftUI
             // The notification observer will be cleaned up automatically when the closure is deallocated
         }
+        .background(
+            // Hidden button to handle Command+Y for redo
+            Button("") {
+                performRedo()
+            }
+            .keyboardShortcut("y", modifiers: .command)
+            .hidden()
+        )
     }
     
     private func updateCurrentLine() {
@@ -773,6 +782,13 @@ struct MarkdownTextEditor: View {
     
     private func insertTab() {
         text = text + "\t"
+    }
+
+    private func performRedo() {
+        // Trigger redo on the undo manager
+        if let undoManager = undoManager, undoManager.canRedo {
+            undoManager.redo()
+        }
     }
 
     private func handleListContinuationFromTextView(textView: UITextView, currentText: String) {
