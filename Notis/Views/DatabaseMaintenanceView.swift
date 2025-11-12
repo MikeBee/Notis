@@ -74,8 +74,19 @@ struct DatabaseMaintenanceView: View {
     }
 
     private func deleteAllData() {
-        // Delete all entities in Core Data
-        let entitiesToDelete = ["Sheet", "Tag", "Goal", "Annotation", "WritingSession", "TagAssociation"]
+        // Delete all entities in Core Data in dependency order
+        // Order matters: delete child entities before parents to avoid constraint violations
+        let entitiesToDelete = [
+            "GoalHistory",    // Child of Goal
+            "Goal",           // Related to Sheet and Tag
+            "SheetTag",       // Join table between Sheet and Tag
+            "Annotation",     // Child of Sheet
+            "Note",           // Child of Sheet
+            "Sheet",          // Main content entity
+            "Tag",            // Tag hierarchy
+            "Group"           // Folder hierarchy
+            // Template intentionally excluded - these are reusable templates
+        ]
 
         for entityName in entitiesToDelete {
             let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: entityName)
@@ -83,6 +94,7 @@ struct DatabaseMaintenanceView: View {
 
             do {
                 try viewContext.execute(batchDeleteRequest)
+                Logger.shared.debug("Deleted all \(entityName) entities", category: .coreData)
             } catch {
                 Logger.shared.error("Failed to delete \(entityName) entities", error: error, category: .coreData)
             }
