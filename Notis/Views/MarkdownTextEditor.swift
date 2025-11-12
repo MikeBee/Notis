@@ -857,7 +857,7 @@ struct MarkdownTextEditor: View {
                 let updatedText = allLines.joined(separator: "\n")
 
                 Logger.shared.debug("[LIST] About to update text (remove empty bullet)", category: .ui)
-                textView.text = updatedText
+                // Only update the SwiftUI binding - let it propagate to UITextView
                 self.text = updatedText
 
                 // Reset flag after a small delay
@@ -874,12 +874,9 @@ struct MarkdownTextEditor: View {
                 let updatedText = currentText + "- "
                 Logger.shared.debug("[LIST] About to update text: adding '- '", category: .ui)
 
-                textView.text = updatedText
+                // Only update the SwiftUI binding - let it propagate to UITextView
+                // Updating both causes race conditions
                 self.text = updatedText
-
-                // Move cursor to end
-                let newPosition = updatedText.count
-                textView.selectedRange = NSRange(location: newPosition, length: 0)
 
                 // Reset flag after a small delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -917,7 +914,7 @@ struct MarkdownTextEditor: View {
                     let updatedText = allLines.joined(separator: "\n")
 
                     Logger.shared.debug("[LIST] About to update text (remove empty numbered item)", category: .ui)
-                    textView.text = updatedText
+                    // Only update the SwiftUI binding - let it propagate to UITextView
                     self.text = updatedText
 
                     // Reset flag after a small delay
@@ -935,12 +932,8 @@ struct MarkdownTextEditor: View {
                     let updatedText = currentText + "\(nextNumber). "
                     Logger.shared.debug("[LIST] About to update text: adding '\(nextNumber). '", category: .ui)
 
-                    textView.text = updatedText
+                    // Only update the SwiftUI binding - let it propagate to UITextView
                     self.text = updatedText
-
-                    // Move cursor to end
-                    let newPosition = updatedText.count
-                    textView.selectedRange = NSRange(location: newPosition, length: 0)
 
                     // Reset flag after a small delay
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {

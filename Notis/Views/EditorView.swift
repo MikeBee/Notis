@@ -11,9 +11,8 @@ import CoreData
 struct EditorView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject var appState: AppState
-    
+
     @State private var showStats = false
-    @State private var isFullScreen = false
     @State private var showFindReplace = false
     @State private var isReadOnlyMode = false
     @AppStorage("fontSize") private var fontSize: Double = 16
@@ -52,7 +51,7 @@ struct EditorView: View {
             if let selectedSheet = appState.selectedSheet {
                 VStack(spacing: 0) {
                     // Editor Header (hidden in full screen)
-                    if !isFullScreen {
+                    if !appState.isFullScreen {
                         HStack {
                         // Navigation Buttons
                         HStack(spacing: 8) {
@@ -161,7 +160,7 @@ struct EditorView: View {
                     }
 
                     // Stats Overlay (shown when pulled down, hidden in full screen)
-                    if showStats && !isFullScreen {
+                    if showStats && !appState.isFullScreen {
                         StatsOverlay(sheet: selectedSheet)
                             .transition(.move(edge: .top))
                     }
@@ -187,7 +186,7 @@ struct EditorView: View {
                             editorMargins: Binding(
                                 get: {
                                     // Only override margins in 3-pane view AND not in full screen
-                                    if appState.viewMode == .threePane && !isFullScreen {
+                                    if appState.viewMode == .threePane && !appState.isFullScreen {
                                         return 20
                                     } else {
                                         return CGFloat(safeEditorMargins)
@@ -205,17 +204,17 @@ struct EditorView: View {
                         )
 
                         // Word Counter at bottom if enabled (hidden in full screen)
-                        if showWordCounter && !isFullScreen {
+                        if showWordCounter && !appState.isFullScreen {
                             WordCounterView(sheet: selectedSheet)
-                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : CGFloat(safeEditorMargins))
+                                .padding(.horizontal, (appState.viewMode == .threePane && !appState.isFullScreen) ? 20 : CGFloat(safeEditorMargins))
                                 .padding(.bottom, 8)
                                 .background(Color(.systemBackground))
                         }
 
                         // Tag Editor (hidden in full screen)
-                        if showTagsPane && !isFullScreen {
+                        if showTagsPane && !appState.isFullScreen {
                             TagEditorView(sheet: selectedSheet)
-                                .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : CGFloat(safeEditorMargins))
+                                .padding(.horizontal, (appState.viewMode == .threePane && !appState.isFullScreen) ? 20 : CGFloat(safeEditorMargins))
                                 .padding(.vertical, 12)
                                 .background(Color(.systemBackground))
                                 .overlay(
@@ -227,14 +226,14 @@ struct EditorView: View {
                         }
 
                         // Bottom Sheet Navigation (hidden in full screen)
-                        if appState.showSheetNavigation && !isFullScreen {
+                        if appState.showSheetNavigation && !appState.isFullScreen {
                             SheetNavigationView(selectedSheet: selectedSheet, appState: appState)
                         }
                     }
                 }
 
                 // Full Screen Exit Button (floating in top-right corner)
-                if isFullScreen {
+                if appState.isFullScreen {
                     VStack {
                         HStack {
                             Spacer()
@@ -287,7 +286,7 @@ struct EditorView: View {
                 ))
             }
         }
-        .onChange(of: isFullScreen) { _, newValue in
+        .onChange(of: appState.isFullScreen) { _, newValue in
             if !newValue {
                 // Restore panes when exiting full screen
                 appState.showLibrary = true
@@ -310,8 +309,8 @@ struct EditorView: View {
     
     private func toggleFullScreen() {
         withAnimation(.easeInOut(duration: 0.25)) {
-            isFullScreen.toggle()
-            if isFullScreen {
+            appState.isFullScreen.toggle()
+            if appState.isFullScreen {
                 appState.showLibrary = false
                 appState.showSheetList = false
             }
