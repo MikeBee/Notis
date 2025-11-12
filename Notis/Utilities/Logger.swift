@@ -138,8 +138,9 @@ class Logger {
     }
 
     private func showToast(_ message: String, type: ToastType) {
+        // Use ExportService's toastManager instance
         DispatchQueue.main.async {
-            ToastManager.shared.show(message, type: type)
+            ExportService.shared.toastManager.show(message)
         }
     }
 }
@@ -161,21 +162,4 @@ enum ToastType {
     case info
     case warning
     case error
-}
-
-extension ToastManager {
-    func show(_ message: String, type: ToastType) {
-        let icon: String
-        switch type {
-        case .success:
-            icon = "checkmark.circle.fill"
-        case .info:
-            icon = "info.circle.fill"
-        case .warning:
-            icon = "exclamationmark.triangle.fill"
-        case .error:
-            icon = "xmark.circle.fill"
-        }
-        show(message, icon: icon)
-    }
 }
