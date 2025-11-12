@@ -591,22 +591,34 @@ struct MarkdownTextEditor: View {
                             .padding(.top, isTypewriterMode ? geometry.size.height * 0.25 : 0)
                             .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.75 : 0)
                             .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidChangeNotification)) { notification in
-                                if let textView = notification.object as? UITextView, textView.isFirstResponder {
-                                    Logger.shared.debug("[LIST] UITextView.textDidChangeNotification received", category: .ui)
+                                Logger.shared.debug("[LIST] NOTIFICATION FIRED - checking object type", category: .ui)
 
-                                    // Handle list continuation from the actual UITextView text
-                                    let currentText = textView.text ?? ""
-                                    Logger.shared.debug("[LIST] TextView text length: \(currentText.count)", category: .ui)
+                                if let textView = notification.object as? UITextView {
+                                    Logger.shared.debug("[LIST] Got UITextView, isFirstResponder: \(textView.isFirstResponder)", category: .ui)
 
-                                    // Check if we should handle list continuation
-                                    if !isHandlingListContinuation {
-                                        handleListContinuationFromTextView(textView: textView, currentText: currentText)
+                                    if textView.isFirstResponder {
+                                        Logger.shared.debug("[LIST] UITextView is first responder - proceeding", category: .ui)
+
+                                        // Handle list continuation from the actual UITextView text
+                                        let currentText = textView.text ?? ""
+                                        Logger.shared.debug("[LIST] TextView text length: \(currentText.count)", category: .ui)
+
+                                        // Check if we should handle list continuation
+                                        if !isHandlingListContinuation {
+                                            handleListContinuationFromTextView(textView: textView, currentText: currentText)
+                                        } else {
+                                            Logger.shared.debug("[LIST] Skipping - flag is true", category: .ui)
+                                        }
+
+                                        // Reduce jumping by batching cursor updates
+                                        DispatchQueue.main.async {
+                                            updateCursorPosition(textView.selectedRange)
+                                        }
+                                    } else {
+                                        Logger.shared.debug("[LIST] UITextView NOT first responder - skipping", category: .ui)
                                     }
-
-                                    // Reduce jumping by batching cursor updates
-                                    DispatchQueue.main.async {
-                                        updateCursorPosition(textView.selectedRange)
-                                    }
+                                } else {
+                                    Logger.shared.debug("[LIST] Notification object is NOT UITextView: \(type(of: notification.object))", category: .ui)
                                 }
                             }
                             .onAppear {
