@@ -51,8 +51,9 @@ struct EditorView: View {
         ZStack {
             if let selectedSheet = appState.selectedSheet {
                 VStack(spacing: 0) {
-                    // Editor Header
-                    HStack {
+                    // Editor Header (hidden in full screen)
+                    if !isFullScreen {
+                        HStack {
                         // Navigation Buttons
                         HStack(spacing: 8) {
                             Button(action: {
@@ -154,12 +155,13 @@ struct EditorView: View {
                         .buttonStyle(PlainButtonStyle())
                         .menuStyle(BorderlessButtonMenuStyle())
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(Color.clear)
-                    
-                    // Stats Overlay (shown when pulled down)
-                    if showStats {
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.clear)
+                    }
+
+                    // Stats Overlay (shown when pulled down, hidden in full screen)
+                    if showStats && !isFullScreen {
                         StatsOverlay(sheet: selectedSheet)
                             .transition(.move(edge: .top))
                     }
@@ -201,17 +203,17 @@ struct EditorView: View {
                             showStats: $showStats,
                             isReadOnlyMode: $isReadOnlyMode
                         )
-                        
-                        // Word Counter at bottom if enabled
-                        if showWordCounter {
+
+                        // Word Counter at bottom if enabled (hidden in full screen)
+                        if showWordCounter && !isFullScreen {
                             WordCounterView(sheet: selectedSheet)
                                 .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : CGFloat(safeEditorMargins))
                                 .padding(.bottom, 8)
                                 .background(Color(.systemBackground))
                         }
-                        
-                        // Tag Editor
-                        if showTagsPane {
+
+                        // Tag Editor (hidden in full screen)
+                        if showTagsPane && !isFullScreen {
                             TagEditorView(sheet: selectedSheet)
                                 .padding(.horizontal, (appState.viewMode == .threePane && !isFullScreen) ? 20 : CGFloat(safeEditorMargins))
                                 .padding(.vertical, 12)
@@ -223,11 +225,35 @@ struct EditorView: View {
                                     alignment: .top
                                 )
                         }
-                        
-                        // Bottom Sheet Navigation
-                        if appState.showSheetNavigation {
+
+                        // Bottom Sheet Navigation (hidden in full screen)
+                        if appState.showSheetNavigation && !isFullScreen {
                             SheetNavigationView(selectedSheet: selectedSheet, appState: appState)
                         }
+                    }
+                }
+
+                // Full Screen Exit Button (floating in top-right corner)
+                if isFullScreen {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button(action: toggleFullScreen) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(.secondary.opacity(0.7))
+                                    .background(
+                                        Circle()
+                                            .fill(Color(.systemBackground).opacity(0.95))
+                                            .frame(width: 32, height: 32)
+                                    )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .keyboardShortcut("f", modifiers: [.command, .control])
+                            .help("Exit Full Screen (⌃⌘F)")
+                            .padding(20)
+                        }
+                        Spacer()
                     }
                 }
             } else {
