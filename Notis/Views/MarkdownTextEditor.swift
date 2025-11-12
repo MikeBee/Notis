@@ -230,7 +230,7 @@ struct MarkdownHighlightedText: View {
                 var annotatedAttributed = AttributedString(annotatedText)
                 annotatedAttributed.font = UIFont.systemFont(ofSize: baseFontSize)
                 annotatedAttributed.foregroundColor = Color.primary
-                annotatedAttributed.backgroundColor = Color.yellow.opacity(0.3) // Highlight color
+                annotatedAttributed.backgroundColor = headingColorFromName(annotationColor).opacity(0.3)
                 fullAttributed.append(annotatedAttributed)
             }
 
@@ -253,7 +253,8 @@ struct MarkdownHighlightedText: View {
     private func parseInlineMarkdown(_ text: String, baseFontSize: CGFloat) -> AttributedString {
         // Parse inline markdown: **bold**, *italic*, __bold__, _italic_, ==highlight==, ~~strike~~, %%comment%%
         // Pattern matches all supported inline markdown formats
-        let pattern = #"(\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|==([^=]+)==|%%([^%]+)%%|\*([^*]+)\*|_([^_]+)_)"#
+        // Order matters: match longer patterns first to avoid conflicts
+        let pattern = #"(==([^=]+)==|~~([^~]+)~~|%%([^%]+)%%|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_)"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
             var attributed = AttributedString(text)
             attributed.font = UIFont.systemFont(ofSize: baseFontSize)
@@ -275,12 +276,12 @@ struct MarkdownHighlightedText: View {
         for match in matches {
             let fullRange = match.range
 
-            // Capture groups:
-            // 2: **bold**
-            // 3: __bold__
-            // 4: ~~strikethrough~~
-            // 5: ==highlight==
-            // 6: %%comment%%
+            // Capture groups (reordered for priority):
+            // 2: ==highlight==
+            // 3: ~~strikethrough~~
+            // 4: %%comment%%
+            // 5: **bold**
+            // 6: __bold__
             // 7: *italic*
             // 8: _italic_
 
@@ -294,44 +295,44 @@ struct MarkdownHighlightedText: View {
                 fullAttributed.append(beforeAttributed)
             }
 
-            // Check which type of formatting it is
+            // Check which type of formatting it is (order matches pattern priority)
             if match.range(at: 2).location != NSNotFound {
-                // **bold**
-                let boldText = nsText.substring(with: match.range(at: 2))
-                var boldAttributed = AttributedString(boldText)
-                boldAttributed.font = UIFont.boldSystemFont(ofSize: baseFontSize)
-                boldAttributed.foregroundColor = Color.primary
-                fullAttributed.append(boldAttributed)
-            }
-            else if match.range(at: 3).location != NSNotFound {
-                // __bold__
-                let boldText = nsText.substring(with: match.range(at: 3))
-                var boldAttributed = AttributedString(boldText)
-                boldAttributed.font = UIFont.boldSystemFont(ofSize: baseFontSize)
-                boldAttributed.foregroundColor = Color.primary
-                fullAttributed.append(boldAttributed)
-            }
-            else if match.range(at: 4).location != NSNotFound {
-                // ~~strikethrough~~
-                let strikeText = nsText.substring(with: match.range(at: 4))
-                var strikeAttributed = AttributedString(strikeText)
-                strikeAttributed.font = UIFont.systemFont(ofSize: baseFontSize)
-                strikeAttributed.foregroundColor = headingColorFromName(strikethroughColor)
-                strikeAttributed.strikethroughStyle = .single
-                fullAttributed.append(strikeAttributed)
-            }
-            else if match.range(at: 5).location != NSNotFound {
                 // ==highlight==
-                let highlightText = nsText.substring(with: match.range(at: 5))
+                let highlightText = nsText.substring(with: match.range(at: 2))
                 var highlightAttributed = AttributedString(highlightText)
                 highlightAttributed.font = UIFont.systemFont(ofSize: baseFontSize)
                 highlightAttributed.foregroundColor = Color.primary
                 highlightAttributed.backgroundColor = headingColorFromName(annotationColor).opacity(0.3)
                 fullAttributed.append(highlightAttributed)
             }
-            else if match.range(at: 6).location != NSNotFound {
+            else if match.range(at: 3).location != NSNotFound {
+                // ~~strikethrough~~
+                let strikeText = nsText.substring(with: match.range(at: 3))
+                var strikeAttributed = AttributedString(strikeText)
+                strikeAttributed.font = UIFont.systemFont(ofSize: baseFontSize)
+                strikeAttributed.foregroundColor = headingColorFromName(strikethroughColor)
+                strikeAttributed.strikethroughStyle = .single
+                fullAttributed.append(strikeAttributed)
+            }
+            else if match.range(at: 4).location != NSNotFound {
                 // %%comment%% - skip rendering (comments are hidden)
                 // Don't add anything to the attributed string
+            }
+            else if match.range(at: 5).location != NSNotFound {
+                // **bold**
+                let boldText = nsText.substring(with: match.range(at: 5))
+                var boldAttributed = AttributedString(boldText)
+                boldAttributed.font = UIFont.boldSystemFont(ofSize: baseFontSize)
+                boldAttributed.foregroundColor = Color.primary
+                fullAttributed.append(boldAttributed)
+            }
+            else if match.range(at: 6).location != NSNotFound {
+                // __bold__
+                let boldText = nsText.substring(with: match.range(at: 6))
+                var boldAttributed = AttributedString(boldText)
+                boldAttributed.font = UIFont.boldSystemFont(ofSize: baseFontSize)
+                boldAttributed.foregroundColor = Color.primary
+                fullAttributed.append(boldAttributed)
             }
             else if match.range(at: 7).location != NSNotFound {
                 // *italic*
