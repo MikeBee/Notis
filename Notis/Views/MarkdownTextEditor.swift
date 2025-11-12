@@ -23,6 +23,8 @@ struct MarkdownHighlightedText: View {
     @AppStorage("h1SizeMultiplier") private var h1SizeMultiplier: Double = 1.5
     @AppStorage("h2SizeMultiplier") private var h2SizeMultiplier: Double = 1.3
     @AppStorage("h3SizeMultiplier") private var h3SizeMultiplier: Double = 1.1
+    @AppStorage("annotationColor") private var annotationColor: String = "yellow"
+    @AppStorage("strikethroughColor") private var strikethroughColor: String = "gray"
 
     init(text: String, fontSize: CGFloat, isCurrentParagraph: Bool, lineSpacing: CGFloat = 1.4, paragraphSpacing: CGFloat = 8, fontFamily: String = "system") {
         self.text = text
@@ -249,9 +251,9 @@ struct MarkdownHighlightedText: View {
     }
 
     private func parseInlineMarkdown(_ text: String, baseFontSize: CGFloat) -> AttributedString {
-        // Parse inline bold (**text**) and italic (*text*) within a paragraph
-        // Pattern matches **bold** or *italic* but not *** (which would be bold+italic marker)
-        let pattern = #"(\*\*([^*]+)\*\*|\*([^*]+)\*)"#
+        // Parse inline markdown: **bold**, *italic*, __bold__, _italic_, ==highlight==, ~~strike~~, %%comment%%
+        // Pattern matches all supported inline markdown formats
+        let pattern = #"(\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|==([^=]+)==|%%([^%]+)%%|\*([^*]+)\*|_([^_]+)_)"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
             var attributed = AttributedString(text)
             attributed.font = UIFont.systemFont(ofSize: baseFontSize)
@@ -272,8 +274,15 @@ struct MarkdownHighlightedText: View {
 
         for match in matches {
             let fullRange = match.range
-            let boldTextRange = match.range(at: 2) // Capture group 2 - text inside **
-            let italicTextRange = match.range(at: 3) // Capture group 3 - text inside *
+
+            // Capture groups:
+            // 2: **bold**
+            // 3: __bold__
+            // 4: ~~strikethrough~~
+            // 5: ==highlight==
+            // 6: %%comment%%
+            // 7: *italic*
+            // 8: _italic_
 
             // Add text before the formatted section
             if fullRange.location > lastLocation {
@@ -285,17 +294,56 @@ struct MarkdownHighlightedText: View {
                 fullAttributed.append(beforeAttributed)
             }
 
-            // Check if it's bold text (**text**)
-            if boldTextRange.location != NSNotFound {
-                let boldText = nsText.substring(with: boldTextRange)
+            // Check which type of formatting it is
+            if match.range(at: 2).location != NSNotFound {
+                // **bold**
+                let boldText = nsText.substring(with: match.range(at: 2))
                 var boldAttributed = AttributedString(boldText)
                 boldAttributed.font = UIFont.boldSystemFont(ofSize: baseFontSize)
                 boldAttributed.foregroundColor = Color.primary
                 fullAttributed.append(boldAttributed)
             }
-            // Check if it's italic text (*text*)
-            else if italicTextRange.location != NSNotFound {
-                let italicText = nsText.substring(with: italicTextRange)
+            else if match.range(at: 3).location != NSNotFound {
+                // __bold__
+                let boldText = nsText.substring(with: match.range(at: 3))
+                var boldAttributed = AttributedString(boldText)
+                boldAttributed.font = UIFont.boldSystemFont(ofSize: baseFontSize)
+                boldAttributed.foregroundColor = Color.primary
+                fullAttributed.append(boldAttributed)
+            }
+            else if match.range(at: 4).location != NSNotFound {
+                // ~~strikethrough~~
+                let strikeText = nsText.substring(with: match.range(at: 4))
+                var strikeAttributed = AttributedString(strikeText)
+                strikeAttributed.font = UIFont.systemFont(ofSize: baseFontSize)
+                strikeAttributed.foregroundColor = headingColorFromName(strikethroughColor)
+                strikeAttributed.strikethroughStyle = .single
+                fullAttributed.append(strikeAttributed)
+            }
+            else if match.range(at: 5).location != NSNotFound {
+                // ==highlight==
+                let highlightText = nsText.substring(with: match.range(at: 5))
+                var highlightAttributed = AttributedString(highlightText)
+                highlightAttributed.font = UIFont.systemFont(ofSize: baseFontSize)
+                highlightAttributed.foregroundColor = Color.primary
+                highlightAttributed.backgroundColor = headingColorFromName(annotationColor).opacity(0.3)
+                fullAttributed.append(highlightAttributed)
+            }
+            else if match.range(at: 6).location != NSNotFound {
+                // %%comment%% - skip rendering (comments are hidden)
+                // Don't add anything to the attributed string
+            }
+            else if match.range(at: 7).location != NSNotFound {
+                // *italic*
+                let italicText = nsText.substring(with: match.range(at: 7))
+                var italicAttributed = AttributedString(italicText)
+                italicAttributed.font = UIFont.italicSystemFont(ofSize: baseFontSize)
+                italicAttributed.foregroundColor = Color.primary
+                fullAttributed.append(italicAttributed)
+            }
+            else if match.range(at: 8).location != NSNotFound {
+                // _italic_
+                let italicText = nsText.substring(with: match.range(at: 8))
                 var italicAttributed = AttributedString(italicText)
                 italicAttributed.font = UIFont.italicSystemFont(ofSize: baseFontSize)
                 italicAttributed.foregroundColor = Color.primary
@@ -346,8 +394,8 @@ struct MarkdownHighlightedText: View {
                 return annotationResult.attributedString
             }
 
-            // Check for inline bold/italic formatting
-            if text.contains("*") {
+            // Check for inline markdown formatting (bold, italic, highlight, strikethrough, comments)
+            if text.contains("*") || text.contains("_") || text.contains("~") || text.contains("=") || text.contains("%") {
                 return parseInlineMarkdown(text, baseFontSize: safeFontSize)
             }
         }
