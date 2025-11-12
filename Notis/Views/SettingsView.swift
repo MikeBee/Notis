@@ -32,6 +32,7 @@ struct SettingsView: View {
     @AppStorage("h3SizeMultiplier") private var h3SizeMultiplier: Double = 1.1
 
     // Markdown Styling
+    @AppStorage("highlightColor") private var highlightColor: String = "yellow"
     @AppStorage("annotationColor") private var annotationColor: String = "yellow"
     @AppStorage("strikethroughColor") private var strikethroughColor: String = "gray"
 
@@ -235,7 +236,34 @@ struct SettingsView: View {
                 // MARK: - Markdown Styling
                 Section {
                     HStack {
-                        Text("Highlight")
+                        Text("Highlight ==")
+                        Spacer()
+                        Menu {
+                            ForEach(headingColorOptions, id: \.name) { option in
+                                Button(action: {
+                                    highlightColor = option.name
+                                }) {
+                                    HStack {
+                                        Circle()
+                                            .fill(option.color)
+                                            .frame(width: 16, height: 16)
+                                        Text(option.name.capitalized)
+                                        if highlightColor == option.name {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            Circle()
+                                .fill(colorFromName(highlightColor))
+                                .frame(width: 20, height: 20)
+                        }
+                    }
+
+                    HStack {
+                        Text("Annotation {}")
                         Spacer()
                         Menu {
                             ForEach(headingColorOptions, id: \.name) { option in

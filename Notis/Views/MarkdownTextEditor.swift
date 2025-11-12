@@ -23,6 +23,7 @@ struct MarkdownHighlightedText: View {
     @AppStorage("h1SizeMultiplier") private var h1SizeMultiplier: Double = 1.5
     @AppStorage("h2SizeMultiplier") private var h2SizeMultiplier: Double = 1.3
     @AppStorage("h3SizeMultiplier") private var h3SizeMultiplier: Double = 1.1
+    @AppStorage("highlightColor") private var highlightColor: String = "yellow"
     @AppStorage("annotationColor") private var annotationColor: String = "yellow"
     @AppStorage("strikethroughColor") private var strikethroughColor: String = "gray"
 
@@ -302,7 +303,7 @@ struct MarkdownHighlightedText: View {
                 var highlightAttributed = AttributedString(highlightText)
                 highlightAttributed.font = UIFont.systemFont(ofSize: baseFontSize)
                 highlightAttributed.foregroundColor = Color.primary
-                highlightAttributed.backgroundColor = headingColorFromName(annotationColor).opacity(0.3)
+                highlightAttributed.backgroundColor = headingColorFromName(highlightColor).opacity(0.3)
                 fullAttributed.append(highlightAttributed)
             }
             else if match.range(at: 3).location != NSNotFound {
