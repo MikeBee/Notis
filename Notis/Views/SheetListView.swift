@@ -544,16 +544,25 @@ struct SheetsListContent: View {
 }
 
 struct SubgroupRowView: View {
+    @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject var subgroup: Group
     @ObservedObject var appState: AppState
-    
+
+    @State private var showingRenameDialog = false
+    @State private var showingDeleteAlert = false
+    @State private var newName = ""
+
     private var groupIcon: String {
         if let groupId = subgroup.id?.uuidString {
             return UserDefaults.standard.string(forKey: "group_icon_\(groupId)") ?? "folder"
         }
         return "folder"
     }
-    
+
+    private var sheetsCount: Int {
+        subgroup.sheets?.count ?? 0
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             // Folder Icon
@@ -561,16 +570,16 @@ struct SubgroupRowView: View {
                 .font(.system(size: 20, weight: .medium))
                 .foregroundColor(.accentColor)
                 .frame(width: 24)
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 // Group Name
                 Text(subgroup.name ?? "Untitled")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.primary)
                     .lineLimit(1)
-                
+
                 // Sheet Count
-                if let sheetsCount = subgroup.sheets?.count, sheetsCount > 0 {
+                if sheetsCount > 0 {
                     Text("\(sheetsCount) sheet\(sheetsCount == 1 ? "" : "s")")
                         .font(.system(size: 13))
                         .foregroundColor(.secondary)
@@ -580,9 +589,9 @@ struct SubgroupRowView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            
+
             Spacer()
-            
+
             // Chevron
             Image(systemName: "chevron.right")
                 .font(.system(size: 14, weight: .medium))
@@ -601,10 +610,76 @@ struct SubgroupRowView: View {
         }
         .contextMenu {
             Button("Rename") {
-                // TODO: Add rename functionality
+                newName = subgroup.name ?? ""
+                showingRenameDialog = true
             }
             Button("Delete", role: .destructive) {
-                // TODO: Add delete functionality
+                showingDeleteAlert = true
+            }
+        }
+        .alert("Rename Group", isPresented: $showingRenameDialog) {
+            TextField("Group Name", text: $newName)
+            Button("Cancel", role: .cancel) { }
+            Button("Rename") {
+                renameGroup()
+            }
+        } message: {
+            Text("Enter a new name for this group")
+        }
+        .alert("Delete Group", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteGroup()
+            }
+        } message: {
+            if sheetsCount > 0 {
+                Text("This group contains \(sheetsCount) sheet\(sheetsCount == 1 ? "" : "s"). Deleting the group will move \(sheetsCount == 1 ? "it" : "them") to Inbox. This action cannot be undone.")
+            } else {
+                Text("Are you sure you want to delete this group? This action cannot be undone.")
+            }
+        }
+    }
+
+    private func renameGroup() {
+        let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        withAnimation {
+            subgroup.name = trimmedName
+            subgroup.modifiedAt = Date()
+
+            do {
+                try viewContext.save()
+                Logger.shared.info("Renamed group to '\(trimmedName)'", category: .general)
+            } catch {
+                Logger.shared.error("Failed to rename group", error: error, category: .general, userMessage: "Could not rename group")
+            }
+        }
+    }
+
+    private func deleteGroup() {
+        withAnimation {
+            // Move all sheets to inbox (ungrouped)
+            if let sheets = subgroup.sheets?.allObjects as? [Sheet] {
+                for sheet in sheets {
+                    sheet.group = nil
+                }
+            }
+
+            // If this group is selected, clear selection
+            if appState.selectedGroup == subgroup {
+                appState.selectedGroup = nil
+                appState.selectedSheet = nil
+            }
+
+            // Delete the group
+            viewContext.delete(subgroup)
+
+            do {
+                try viewContext.save()
+                Logger.shared.info("Deleted group '\(subgroup.name ?? "Untitled")'", category: .general)
+            } catch {
+                Logger.shared.error("Failed to delete group", error: error, category: .general, userMessage: "Could not delete group")
             }
         }
     }
