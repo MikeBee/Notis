@@ -83,6 +83,7 @@ struct FolderPickerView: View {
                             FolderPickerRow(
                                 name: group.name ?? "Untitled",
                                 icon: groupIcon(for: group),
+                                color: groupColor(for: group),
                                 level: 0,
                                 isSelected: selectedFolderName == group.name,
                                 breadcrumb: breadcrumbPath(for: group),
@@ -143,7 +144,14 @@ struct FolderPickerView: View {
         }
         return "folder"
     }
-    
+
+    private func groupColor(for group: Group) -> String {
+        if let groupId = group.id?.uuidString {
+            return UserDefaults.standard.string(forKey: "group_color_\(groupId)") ?? "default"
+        }
+        return "default"
+    }
+
     private func breadcrumbPath(for group: Group) -> String {
         var path: [String] = []
         var currentGroup: Group? = group.parent
@@ -200,13 +208,21 @@ struct FolderHierarchyView: View {
         }
         return "folder"
     }
-    
+
+    private func groupColor(for group: Group) -> String {
+        if let groupId = group.id?.uuidString {
+            return UserDefaults.standard.string(forKey: "group_color_\(groupId)") ?? "default"
+        }
+        return "default"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Group row
             FolderPickerRow(
                 name: group.name ?? "Untitled",
                 icon: groupIcon(for: group),
+                color: groupColor(for: group),
                 level: groupLevel(group),
                 isSelected: selectedFolderName == group.name,
                 hasSubgroups: hasSubgroups,
@@ -257,6 +273,7 @@ struct FolderHierarchyView: View {
 struct FolderPickerRow: View {
     let name: String
     let icon: String
+    let color: String
     let level: Int
     let isSelected: Bool
     let breadcrumb: String?
@@ -264,13 +281,14 @@ struct FolderPickerRow: View {
     let isExpanded: Bool
     let onSelect: () -> Void
     let onToggleExpansion: (() -> Void)?
-    
+
     @Environment(\.colorScheme) private var colorScheme
     @State private var isHovering = false
-    
+
     init(
         name: String,
         icon: String,
+        color: String = "default",
         level: Int,
         isSelected: Bool,
         breadcrumb: String? = nil,
@@ -281,6 +299,7 @@ struct FolderPickerRow: View {
     ) {
         self.name = name
         self.icon = icon
+        self.color = color
         self.level = level
         self.isSelected = isSelected
         self.breadcrumb = breadcrumb
@@ -288,6 +307,25 @@ struct FolderPickerRow: View {
         self.isExpanded = isExpanded
         self.onSelect = onSelect
         self.onToggleExpansion = onToggleExpansion
+    }
+
+    private func colorFromName(_ name: String) -> Color {
+        switch name {
+        case "red": return .red
+        case "orange": return .orange
+        case "yellow": return .yellow
+        case "green": return .green
+        case "mint": return .mint
+        case "teal": return .teal
+        case "cyan": return .cyan
+        case "blue": return .blue
+        case "indigo": return .indigo
+        case "purple": return .purple
+        case "pink": return .pink
+        case "brown": return .brown
+        case "gray": return .gray
+        default: return isSelected ? .accentColor : .secondary
+        }
     }
     
     var body: some View {
@@ -314,10 +352,10 @@ struct FolderPickerRow: View {
                     .frame(width: 12, height: 12)
             }
             
-            // Icon
+            // Icon with custom color
             Image(systemName: icon)
                 .font(.system(size: 14))
-                .foregroundColor(isSelected ? .accentColor : .secondary)
+                .foregroundColor(colorFromName(color))
                 .frame(width: 16)
             
             // Content

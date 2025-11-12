@@ -584,16 +584,42 @@ struct SubgroupRowView: View {
         return "folder"
     }
 
+    private var groupColor: String {
+        if let groupId = subgroup.id?.uuidString {
+            return UserDefaults.standard.string(forKey: "group_color_\(groupId)") ?? "default"
+        }
+        return "default"
+    }
+
+    private func colorFromName(_ name: String) -> Color {
+        switch name {
+        case "red": return .red
+        case "orange": return .orange
+        case "yellow": return .yellow
+        case "green": return .green
+        case "mint": return .mint
+        case "teal": return .teal
+        case "cyan": return .cyan
+        case "blue": return .blue
+        case "indigo": return .indigo
+        case "purple": return .purple
+        case "pink": return .pink
+        case "brown": return .brown
+        case "gray": return .gray
+        default: return .accentColor
+        }
+    }
+
     private var sheetsCount: Int {
         subgroup.sheets?.count ?? 0
     }
 
     var body: some View {
         HStack(spacing: 12) {
-            // Folder Icon
+            // Folder Icon with custom color
             Image(systemName: groupIcon)
                 .font(.system(size: 20, weight: .medium))
-                .foregroundColor(.accentColor)
+                .foregroundColor(colorFromName(groupColor))
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 2) {
