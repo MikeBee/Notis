@@ -419,6 +419,7 @@ struct MarkdownReadOnlyView: View {
 
 struct MarkdownTextEditor: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.undoManager) private var undoManager
     @Binding var text: String
     @Binding var isTypewriterMode: Bool
     @Binding var isFocusMode: Bool
@@ -797,6 +798,12 @@ struct MarkdownTextEditor: View {
                 allLines[previousLineIndex] = ""
                 let updatedText = allLines.joined(separator: "\n")
 
+                // Register undo action
+                let oldText = currentText
+                undoManager?.registerUndo(withTarget: self) { target in
+                    target.text = oldText
+                }
+
                 self.text = updatedText
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -806,6 +813,13 @@ struct MarkdownTextEditor: View {
                 // Continue bullet list
                 isHandlingListContinuation = true
                 let updatedText = currentText + "- "
+
+                // Register undo action
+                let oldText = currentText
+                undoManager?.registerUndo(withTarget: self) { target in
+                    target.text = oldText
+                }
+
                 self.text = updatedText
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -834,6 +848,12 @@ struct MarkdownTextEditor: View {
                 allLines[previousLineIndex] = ""
                 let updatedText = allLines.joined(separator: "\n")
 
+                // Register undo action
+                let oldText = currentText
+                undoManager?.registerUndo(withTarget: self) { target in
+                    target.text = oldText
+                }
+
                 self.text = updatedText
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -845,6 +865,13 @@ struct MarkdownTextEditor: View {
                 isHandlingListContinuation = true
 
                 let updatedText = currentText + "\(nextNumber). "
+
+                // Register undo action
+                let oldText = currentText
+                undoManager?.registerUndo(withTarget: self) { target in
+                    target.text = oldText
+                }
+
                 self.text = updatedText
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
