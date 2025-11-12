@@ -790,13 +790,17 @@ struct MarkdownTextEditor: View {
             // If the previous line is just "- " with no content, remove it and don't continue
             if contentAfterBullet.trimmingCharacters(in: .whitespaces).isEmpty {
                 // Remove the empty bullet point
-                let newText = newValue.dropLast() // Remove the newline we just added
-                var allLines = newText.components(separatedBy: .newlines)
-                allLines[previousLineIndex] = "" // Clear the bullet line
-                text = allLines.joined(separator: "\n")
+                DispatchQueue.main.async {
+                    let newText = newValue.dropLast() // Remove the newline we just added
+                    var allLines = newText.components(separatedBy: .newlines)
+                    allLines[previousLineIndex] = "" // Clear the bullet line
+                    self.text = allLines.joined(separator: "\n")
+                }
             } else {
                 // Continue the bullet list
-                text = newValue + "- "
+                DispatchQueue.main.async {
+                    self.text = newValue + "- "
+                }
             }
             return
         }
@@ -816,14 +820,18 @@ struct MarkdownTextEditor: View {
 
                 if contentAfterNumber.trimmingCharacters(in: .whitespaces).isEmpty {
                     // Empty numbered item, remove it and stop the list
-                    let newText = newValue.dropLast() // Remove the newline
-                    var allLines = newText.components(separatedBy: .newlines)
-                    allLines[previousLineIndex] = "" // Clear the numbered line
-                    text = allLines.joined(separator: "\n")
+                    DispatchQueue.main.async {
+                        let newText = newValue.dropLast() // Remove the newline
+                        var allLines = newText.components(separatedBy: .newlines)
+                        allLines[previousLineIndex] = "" // Clear the numbered line
+                        self.text = allLines.joined(separator: "\n")
+                    }
                 } else if let number = Int(numberString) {
                     // Continue with next number
                     let nextNumber = number + 1
-                    text = newValue + "\(nextNumber). "
+                    DispatchQueue.main.async {
+                        self.text = newValue + "\(nextNumber). "
+                    }
                 }
             }
             return
