@@ -192,7 +192,8 @@ class MarkdownFileService {
     /// Read a markdown file and parse metadata
     func readFile(at url: URL) -> (metadata: NoteMetadata, content: String)? {
         guard fileManager.fileExists(atPath: url.path) else {
-            print("❌ File doesn't exist: \(url.lastPathComponent)")
+            // File not existing is normal (e.g., for new notes), so don't log as error
+            Logger.shared.debug("File doesn't exist: \(url.lastPathComponent)", category: .fileSystem)
             return nil
         }
 
@@ -201,7 +202,7 @@ class MarkdownFileService {
 
             // Parse frontmatter
             guard let parsed = yamlService.parse(markdown) else {
-                print("❌ Failed to parse frontmatter in: \(url.lastPathComponent)")
+                Logger.shared.warning("Failed to parse frontmatter in: \(url.lastPathComponent)", category: .fileSystem)
                 return nil
             }
 
@@ -213,7 +214,7 @@ class MarkdownFileService {
 
             return (metadata, parsed.content)
         } catch {
-            print("❌ Failed to read file: \(error)")
+            Logger.shared.error("Failed to read file", error: error, category: .fileSystem)
             return nil
         }
     }
@@ -227,7 +228,7 @@ class MarkdownFileService {
     /// Update an existing markdown file
     func updateFile(metadata: NoteMetadata, content: String) -> Bool {
         guard let path = metadata.path else {
-            print("❌ Metadata has no path")
+            Logger.shared.error("Metadata has no path", category: .fileSystem)
             return false
         }
 
@@ -245,7 +246,7 @@ class MarkdownFileService {
             try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
             return true
         } catch {
-            print("❌ Failed to update file: \(error)")
+            Logger.shared.error("Failed to update file", error: error, category: .fileSystem, userMessage: "Could not save note changes")
             return false
         }
     }
@@ -264,7 +265,7 @@ class MarkdownFileService {
 
             return true
         } catch {
-            print("❌ Failed to delete file: \(error)")
+            Logger.shared.error("Failed to delete file", error: error, category: .fileSystem, userMessage: "Could not delete note")
             return false
         }
     }
@@ -278,7 +279,7 @@ class MarkdownFileService {
     /// Move or rename a file
     func moveFile(from oldURL: URL, to newURL: URL) -> Bool {
         guard fileManager.fileExists(atPath: oldURL.path) else {
-            print("❌ Source file doesn't exist")
+            Logger.shared.warning("Source file doesn't exist for move operation", category: .fileSystem)
             return false
         }
 
@@ -288,7 +289,7 @@ class MarkdownFileService {
             do {
                 try fileManager.createDirectory(at: newDirectory, withIntermediateDirectories: true)
             } catch {
-                print("❌ Failed to create destination directory: \(error)")
+                Logger.shared.error("Failed to create destination directory", error: error, category: .fileSystem)
                 return false
             }
         }
@@ -311,7 +312,7 @@ class MarkdownFileService {
     /// Returns: (success, trashURL) - the URL where the file was moved in trash
     func moveFileToTrash(at url: URL) -> (success: Bool, trashURL: URL?) {
         guard fileManager.fileExists(atPath: url.path) else {
-            print("❌ Source file doesn't exist")
+            Logger.shared.warning("Source file doesn't exist for trash operation", category: .fileSystem)
             return (false, nil)
         }
 
@@ -338,7 +339,7 @@ class MarkdownFileService {
 
             return (true, trashURL)
         } catch {
-            print("❌ Failed to move '\(filename)' to trash: \(error)")
+            Logger.shared.error("Failed to move '\(filename)' to trash", error: error, category: .fileSystem, userMessage: "Could not move note to trash")
             return (false, nil)
         }
     }
@@ -346,7 +347,7 @@ class MarkdownFileService {
     /// Move a file from trash back to notes directory
     func restoreFileFromTrash(trashURL: URL, toPath relativePath: String) -> Bool {
         guard fileManager.fileExists(atPath: trashURL.path) else {
-            print("❌ File doesn't exist in trash")
+            Logger.shared.warning("File doesn't exist in trash", category: .fileSystem)
             return false
         }
 
@@ -358,14 +359,14 @@ class MarkdownFileService {
             do {
                 try fileManager.createDirectory(at: restoreDirectory, withIntermediateDirectories: true)
             } catch {
-                print("❌ Failed to create restore directory: \(error)")
+                Logger.shared.error("Failed to create restore directory", error: error, category: .fileSystem)
                 return false
             }
         }
 
         // Check for conflicts
         if fileManager.fileExists(atPath: restoreURL.path) {
-            print("⚠️ File already exists at restore location: \(relativePath)")
+            Logger.shared.warning("File already exists at restore location: \(relativePath)", category: .fileSystem, userMessage: "A file with that name already exists")
             return false
         }
 

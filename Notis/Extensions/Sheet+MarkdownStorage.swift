@@ -46,7 +46,7 @@ extension Sheet {
         set {
             // Don't save to filesystem if sheet is in trash
             if isInTrash {
-                print("⊘ Skipping save for trashed sheet: \(title ?? "Untitled")")
+                Logger.shared.debug("Skipping save for trashed sheet: \(title ?? "Untitled")", category: .fileSystem)
                 // Just update in-memory content, don't persist to file
                 return
             }
@@ -68,7 +68,7 @@ extension Sheet {
     private func migrateToMarkdownStorage(content newContent: String) {
         // Don't migrate if sheet is in trash
         if isInTrash {
-            print("⊘ Skipping migration for trashed sheet: \(title ?? "Untitled")")
+            Logger.shared.debug("Skipping migration for trashed sheet: \(title ?? "Untitled")", category: .fileSystem)
             return
         }
 
@@ -76,14 +76,14 @@ extension Sheet {
         let trimmedContent = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else {
             // Keep empty content in CoreData
-            print("⊘ Sheet has no content, keeping in CoreData: \(title ?? "Untitled")")
+            Logger.shared.debug("Sheet has no content, keeping in CoreData: \(title ?? "Untitled")", category: .fileSystem)
             content = newContent
             updateMetadata(with: newContent)
             return
         }
 
         guard let uuid = id?.uuidString else {
-            print("❌ Cannot migrate sheet without UUID")
+            Logger.shared.error("Cannot migrate sheet without UUID", category: .fileSystem)
             return
         }
 
@@ -111,7 +111,7 @@ extension Sheet {
         )
 
         guard result.success, let finalMetadata = result.metadata, let createdURL = result.url else {
-            print("❌ Failed to create markdown file for: \(title ?? "Untitled")")
+            Logger.shared.error("Failed to create markdown file for: \(title ?? "Untitled")", category: .fileSystem, userMessage: "Could not save note to file. Data saved in database.")
             // Fall back to CoreData storage
             content = newContent
             updateMetadata(with: newContent)
@@ -177,7 +177,7 @@ extension Sheet {
                 // Update fileURL in CoreData to point to renamed file
                 self.fileURL = newURL.path
             } else {
-                print("❌ Failed to rename file, keeping original path")
+                Logger.shared.warning("Failed to rename file from '\(existingMetadata.title)' to '\(newTitle)', keeping original path", category: .fileSystem)
             }
         }
 
@@ -189,7 +189,7 @@ extension Sheet {
             // Update CoreData metadata
             updateMetadata(with: newContent)
         } else {
-            print("❌ Failed to update markdown file: \(title ?? "Untitled")")
+            Logger.shared.error("Failed to update markdown file: \(title ?? "Untitled")", category: .fileSystem, userMessage: "Could not save note changes")
         }
     }
 
@@ -201,7 +201,7 @@ extension Sheet {
         do {
             try context.save()
         } catch {
-            print("❌ Failed to save context: \(error)")
+            Logger.shared.error("Failed to save context", error: error, category: .coreData, userMessage: "Could not save note metadata")
         }
     }
 
