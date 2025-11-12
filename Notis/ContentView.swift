@@ -34,8 +34,10 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
-                // Navigation Bar
-                NavigationBar(appState: appState)
+                // Navigation Bar (hidden in full screen)
+                if !appState.isFullScreen {
+                    NavigationBar(appState: appState)
+                }
                 
                 // Main Content
                 GeometryReader { geometry in
@@ -421,7 +423,8 @@ class AppState: ObservableObject {
     @AppStorage("showMarkdownHeaderSymbols") var showMarkdownHeaderSymbols: Bool = true
     @AppStorage("hideShortcutBar") var hideShortcutBar: Bool = false
     @AppStorage("showSheetNavigation") var showSheetNavigation: Bool = true
-    
+    @Published var isFullScreen: Bool = false
+
     // Last opened sheet for restoration
     @AppStorage("lastOpenedSheetID") private var lastOpenedSheetID: String = ""
     
