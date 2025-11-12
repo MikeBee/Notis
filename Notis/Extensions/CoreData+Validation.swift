@@ -7,6 +7,10 @@
 
 import Foundation
 import CoreData
+import CloudKit
+#if os(iOS)
+import UIKit
+#endif
 
 /// Data validation and protection helpers for Core Data operations
 extension NSManagedObjectContext {
@@ -167,6 +171,7 @@ enum ValidationError: LocalizedError {
     case missingDates
     case invalidDates
     case circularReference
+    case duplicateSortOrder
     case invalidData(String)
 
     var errorDescription: String? {
@@ -179,8 +184,110 @@ enum ValidationError: LocalizedError {
             return "Modified date cannot be before created date"
         case .circularReference:
             return "Circular reference detected in group hierarchy"
+        case .duplicateSortOrder:
+            return "Duplicate sort order detected"
         case .invalidData(let message):
             return "Invalid data: \(message)"
+        }
+    }
+}
+
+// MARK: - Data Integrity Helpers
+
+extension NSManagedObjectContext {
+
+    /// Fix duplicate sort orders in groups
+    func fixDuplicateSortOrders() -> Int {
+        var fixedCount = 0
+
+        // Fix root groups
+        let rootRequest: NSFetchRequest<Group> = Group.fetchRequest()
+        rootRequest.predicate = NSPredicate(format: "parent == nil")
+        rootRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Group.sortOrder, ascending: true),
+                                        NSSortDescriptor(keyPath: \Group.createdAt, ascending: true)]
+
+        if let rootGroups = try? fetch(rootRequest) {
+            var sortOrderMap: [Int32: [Group]] = [:]
+
+            // Find duplicates
+            for group in rootGroups {
+                sortOrderMap[group.sortOrder, default: []].append(group)
+            }
+
+            // Fix groups with duplicate sort orders
+            for groups in sortOrderMap.values where groups.count > 1 {
+                Logger.shared.warning("Found \(groups.count) root groups with duplicate sort order", category: .coreData)
+                // Reassign sort orders based on creation date
+                for (index, group) in groups.enumerated() {
+                    let newSortOrder = (sortOrderMap.keys.max() ?? 0) + Int32(index) + 1
+                    group.sortOrder = newSortOrder
+                    fixedCount += 1
+                }
+            }
+        }
+
+        // Fix subgroups for each parent
+        let allGroupsRequest: NSFetchRequest<Group> = Group.fetchRequest()
+        if let allGroups = try? fetch(allGroupsRequest) {
+            let groupsWithChildren = allGroups.filter { ($0.subgroups?.count ?? 0) > 0 }
+
+            for parentGroup in groupsWithChildren {
+                guard let subgroups = parentGroup.subgroups?.allObjects as? [Group] else { continue }
+
+                let sortedSubgroups = subgroups.sorted { g1, g2 in
+                    if g1.sortOrder == g2.sortOrder {
+                        return (g1.createdAt ?? Date()) < (g2.createdAt ?? Date())
+                    }
+                    return g1.sortOrder < g2.sortOrder
+                }
+
+                var sortOrderMap: [Int32: [Group]] = [:]
+                for group in sortedSubgroups {
+                    sortOrderMap[group.sortOrder, default: []].append(group)
+                }
+
+                for groups in sortOrderMap.values where groups.count > 1 {
+                    Logger.shared.warning("Found \(groups.count) subgroups with duplicate sort order in parent '\(parentGroup.name ?? "Untitled")'", category: .coreData)
+                    for (index, group) in groups.enumerated() {
+                        let newSortOrder = (sortOrderMap.keys.max() ?? 0) + Int32(index) + 1
+                        group.sortOrder = newSortOrder
+                        fixedCount += 1
+                    }
+                }
+            }
+        }
+
+        if fixedCount > 0 {
+            Logger.shared.info("Fixed \(fixedCount) duplicate sort orders", category: .coreData)
+            _ = safeSave(operation: "fix duplicate sort orders")
+        }
+
+        return fixedCount
+    }
+
+    /// Ensure unique sort order for a group within its parent or root level
+    func ensureUniqueSortOrder(for group: Group) {
+        let siblings: [Group]
+
+        if let parent = group.parent {
+            siblings = (parent.subgroups?.allObjects as? [Group]) ?? []
+        } else {
+            // Root level groups
+            let request: NSFetchRequest<Group> = Group.fetchRequest()
+            request.predicate = NSPredicate(format: "parent == nil AND self != %@", group)
+            siblings = (try? fetch(request)) ?? []
+        }
+
+        let usedSortOrders = Set(siblings.map { $0.sortOrder })
+
+        // If current sort order is already in use, find next available
+        if usedSortOrders.contains(group.sortOrder) {
+            var newSortOrder = group.sortOrder
+            while usedSortOrders.contains(newSortOrder) {
+                newSortOrder += 1
+            }
+            group.sortOrder = newSortOrder
+            Logger.shared.debug("Adjusted sort order to \(newSortOrder) to avoid duplicate", category: .coreData)
         }
     }
 }
