@@ -676,7 +676,10 @@ struct MarkdownTextEditor: View {
                 }
             }
         }
-        .onChange(of: text) { _, newValue in
+        .onChange(of: text) { oldValue, newValue in
+            // Handle list continuation before calling onTextChange
+            handleListContinuation(oldValue: oldValue, newValue: newValue)
+
             onTextChange(newValue)
             // Don't update cursor position here - let the UIKit notifications handle it
             lastTextLength = newValue.count
@@ -763,7 +766,70 @@ struct MarkdownTextEditor: View {
     private func insertTab() {
         text = text + "\t"
     }
-    
+
+    private func handleListContinuation(oldValue: String, newValue: String) {
+        // Check if a newline was just added
+        guard newValue.count > oldValue.count,
+              let lastChar = newValue.last,
+              lastChar == "\n" else {
+            return
+        }
+
+        // Get the lines
+        let lines = newValue.components(separatedBy: .newlines)
+        guard lines.count >= 2 else { return }
+
+        // Get the previous line (second to last, since last is empty after newline)
+        let previousLineIndex = lines.count - 2
+        let previousLine = lines[previousLineIndex]
+
+        // Check for bullet list (- )
+        if previousLine.hasPrefix("- ") {
+            let contentAfterBullet = previousLine.dropFirst(2)
+
+            // If the previous line is just "- " with no content, remove it and don't continue
+            if contentAfterBullet.trimmingCharacters(in: .whitespaces).isEmpty {
+                // Remove the empty bullet point
+                let newText = newValue.dropLast() // Remove the newline we just added
+                var allLines = newText.components(separatedBy: .newlines)
+                allLines[previousLineIndex] = "" // Clear the bullet line
+                text = allLines.joined(separator: "\n")
+            } else {
+                // Continue the bullet list
+                text = newValue + "- "
+            }
+            return
+        }
+
+        // Check for numbered list (1. , 2. , etc.)
+        let numberedListPattern = #"^(\d+)\.\s"#
+        if let regex = try? NSRegularExpression(pattern: numberedListPattern),
+           let match = regex.firstMatch(in: previousLine, range: NSRange(previousLine.startIndex..., in: previousLine)) {
+
+            // Extract the number
+            if let numberRange = Range(match.range(at: 1), in: previousLine) {
+                let numberString = String(previousLine[numberRange])
+
+                // Check if line has content after the number
+                let contentStart = previousLine.index(previousLine.startIndex, offsetBy: match.range.length)
+                let contentAfterNumber = previousLine[contentStart...]
+
+                if contentAfterNumber.trimmingCharacters(in: .whitespaces).isEmpty {
+                    // Empty numbered item, remove it and stop the list
+                    let newText = newValue.dropLast() // Remove the newline
+                    var allLines = newText.components(separatedBy: .newlines)
+                    allLines[previousLineIndex] = "" // Clear the numbered line
+                    text = allLines.joined(separator: "\n")
+                } else if let number = Int(numberString) {
+                    // Continue with next number
+                    let nextNumber = number + 1
+                    text = newValue + "\(nextNumber). "
+                }
+            }
+            return
+        }
+    }
+
     private func configureTextViewForStability() {
         // Find the UITextView and configure it for better stability
         DispatchQueue.main.async {
