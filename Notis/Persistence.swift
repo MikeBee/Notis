@@ -134,6 +134,17 @@ struct PersistenceController {
                 print("   App should present error to user and offer recovery options.")
             }
         })
+
+        // MARK: - Auto-save Conflict Resolution
+
+        // Configure merge policy for automatic conflict resolution
+        // NSMergeByPropertyObjectTrumpMergePolicy: In-memory changes win over persistent store
+        // This prevents save failures when there are conflicts from iCloud sync
         container.viewContext.automaticallyMergesChangesFromParent = true
+        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+
+        // Configure context for optimal performance
+        container.viewContext.undoManager = nil // Disable undo for performance
+        container.viewContext.shouldDeleteInaccessibleFaults = true
     }
 }

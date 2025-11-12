@@ -287,14 +287,14 @@ struct LibrarySidebar: View {
                 // Create the actual filesystem folder
                 let folderPath = newGroup.folderPath()
                 if !MarkdownFileService.shared.createFolder(path: folderPath) {
-                    print("⚠️ Failed to create folder: \(folderPath)")
+                    Logger.shared.warning("Failed to create folder: \(folderPath)", category: .fileSystem)
                 }
 
                 // Reset dialog state
                 newGroupName = ""
                 newGroupIcon = "folder"
             } catch {
-                print("Failed to create group: \(error)")
+                Logger.shared.error("Failed to create group", error: error, category: .general, userMessage: "Could not create group")
             }
         }
     }
@@ -303,7 +303,7 @@ struct LibrarySidebar: View {
         withAnimation {
             // Ensure all objects are in the context and not deleted
             guard !droppedGroup.isDeleted && !targetGroup.isDeleted else {
-                print("⚠️ Attempted to reorder deleted groups")
+                Logger.shared.warning("Attempted to reorder deleted groups", category: .general)
                 return
             }
             
@@ -334,7 +334,7 @@ struct LibrarySidebar: View {
                 
                 try viewContext.save()
             } catch {
-                print("❌ Failed to reorder groups: \(error)")
+                Logger.shared.error("Failed to reorder groups", error: error, category: .general)
                 // Rollback to avoid corrupt state
                 viewContext.rollback()
             }
@@ -842,57 +842,67 @@ struct GroupRowView: View {
     }
     
     private func deleteGroup() {
-        withAnimation {
-            // Get all sheets in this group (recursively including subgroups)
-            let sheetsToTrash = getAllSheetsInGroup(group)
+        // Get all sheets count for backup description
+        let sheetsToTrash = getAllSheetsInGroup(group)
+        let groupName = group.name ?? "Untitled"
 
-            // Move all sheets to trash
-            let fileService = MarkdownFileService.shared
-            var movedCount = 0
-            for sheet in sheetsToTrash {
-                // Physically move the file to .Trash folder
-                if let fileURLString = sheet.fileURL, !fileURLString.isEmpty {
-                    let fileURL = URL(fileURLWithPath: fileURLString)
+        // Create safety backup before destructive operation
+        Task { @MainActor in
+            let backupSuccess = await BackupService.shared.createSafetyBackup(for: "Delete Group '\(groupName)' - \(sheetsToTrash.count) sheets")
 
-                    let (success, trashURL) = fileService.moveFileToTrash(at: fileURL)
-                    if success, let trashURL = trashURL {
-                        // Update fileURL to point to trash location
-                        sheet.fileURL = trashURL.path
-
-                        // Update SQLite index with new trash location
-                        if let uuid = sheet.id?.uuidString,
-                           var metadata = NotesIndexService.shared.getNote(uuid: uuid),
-                           let relativePath = fileService.relativePath(for: trashURL) {
-                            metadata.path = relativePath
-                            _ = NotesIndexService.shared.upsertNote(metadata)
-                        }
-
-                        movedCount += 1
-                    } else {
-                        print("⚠️ Failed to move '\(sheet.title ?? "Untitled")' to trash")
-                    }
-                } else {
-                    print("⚠️ Sheet '\(sheet.title ?? "Untitled")' has no fileURL")
-                }
-
-                // Mark sheet as trashed
-                sheet.isInTrash = true
-                sheet.deletedAt = Date()
-                sheet.modifiedAt = Date()
-                // Clear group reference BEFORE deleting the group to prevent cascade deletion
-                sheet.group = nil
+            if !backupSuccess {
+                Logger.shared.warning("Safety backup failed before deleting group - proceeding anyway", category: .backup)
             }
 
-            // Delete the group folder from filesystem (including subgroups)
-            deleteGroupFolderRecursively(group)
+            withAnimation {
+                // Move all sheets to trash
+                let fileService = MarkdownFileService.shared
+                var movedCount = 0
+                for sheet in sheetsToTrash {
+                    // Physically move the file to .Trash folder
+                    if let fileURLString = sheet.fileURL, !fileURLString.isEmpty {
+                        let fileURL = URL(fileURLWithPath: fileURLString)
 
-            // Delete the group from CoreData (sheets remain in trash)
-            viewContext.delete(group)
+                        let (success, trashURL) = fileService.moveFileToTrash(at: fileURL)
+                        if success, let trashURL = trashURL {
+                            // Update fileURL to point to trash location
+                            sheet.fileURL = trashURL.path
 
-            do {
-                try viewContext.save()
-            } catch {
-                print("Failed to delete group: \(error)")
+                            // Update SQLite index with new trash location
+                            if let uuid = sheet.id?.uuidString,
+                               var metadata = NotesIndexService.shared.getNote(uuid: uuid),
+                               let relativePath = fileService.relativePath(for: trashURL) {
+                                metadata.path = relativePath
+                                _ = NotesIndexService.shared.upsertNote(metadata)
+                            }
+
+                            movedCount += 1
+                        } else {
+                            Logger.shared.warning("Failed to move '\(sheet.title ?? "Untitled")' to trash", category: .fileSystem)
+                        }
+                    } else {
+                        Logger.shared.warning("Sheet '\(sheet.title ?? "Untitled")' has no fileURL", category: .fileSystem)
+                    }
+
+                    // Mark sheet as trashed
+                    sheet.isInTrash = true
+                    sheet.deletedAt = Date()
+                    sheet.modifiedAt = Date()
+                    // Clear group reference BEFORE deleting the group to prevent cascade deletion
+                    sheet.group = nil
+                }
+
+                // Delete the group folder from filesystem (including subgroups)
+                deleteGroupFolderRecursively(group)
+
+                // Delete the group from CoreData (sheets remain in trash)
+                viewContext.delete(group)
+
+                do {
+                    try viewContext.save()
+                } catch {
+                    Logger.shared.error("Failed to delete group", error: error, category: .general, userMessage: "Could not delete group")
+                }
             }
         }
     }
@@ -912,8 +922,9 @@ struct GroupRowView: View {
         // Delete the folder and all its contents
         do {
             try FileManager.default.removeItem(at: folderURL)
+            Logger.shared.debug("Deleted group folder: \(folderPath)", category: .fileSystem)
         } catch {
-            print("❌ Failed to delete folder '\(folderPath)': \(error)")
+            Logger.shared.error("Failed to delete folder '\(folderPath)'", error: error, category: .fileSystem)
         }
     }
 

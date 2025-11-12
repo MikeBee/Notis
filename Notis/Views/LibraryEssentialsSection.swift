@@ -171,16 +171,24 @@ struct LibraryEssentialsSection: View {
     }
     
     private func permanentlyDeleteAllTrashedSheets() {
-        withAnimation {
-            // Clear the selected sheet if it's in trash
-            if let selectedSheet = appState.selectedSheet, selectedSheet.isInTrash {
-                appState.selectedSheet = nil
+        // Create safety backup before destructive operation
+        Task { @MainActor in
+            let backupSuccess = await BackupService.shared.createSafetyBackup(for: "Empty Trash - \(trashedSheets.count) items")
+
+            if !backupSuccess {
+                Logger.shared.warning("Safety backup failed before emptying trash - proceeding anyway", category: .backup)
             }
 
-            let fileService = MarkdownFileService.shared
+            withAnimation {
+                // Clear the selected sheet if it's in trash
+                if let selectedSheet = appState.selectedSheet, selectedSheet.isInTrash {
+                    appState.selectedSheet = nil
+                }
 
-            // Delete all trashed sheets
-            for sheet in trashedSheets {
+                let fileService = MarkdownFileService.shared
+
+                // Delete all trashed sheets
+                for sheet in trashedSheets {
                 let sheetTitle = sheet.title ?? "Untitled"
 
                 // Physically delete the file from trash
@@ -211,16 +219,17 @@ struct LibraryEssentialsSection: View {
                     print("⚠️ No fileURL for trashed sheet: \(sheetTitle)")
                 }
 
-                viewContext.delete(sheet)
-            }
+                    viewContext.delete(sheet)
+                }
 
-            do {
-                try viewContext.save()
-                HapticService.shared.itemDeleted()
-                // Update counts after emptying trash
-                updateCounts()
-            } catch {
-                Logger.shared.error("Failed to empty trash", error: error, category: .general, userMessage: "Could not empty trash")
+                do {
+                    try viewContext.save()
+                    HapticService.shared.itemDeleted()
+                    // Update counts after emptying trash
+                    updateCounts()
+                } catch {
+                    Logger.shared.error("Failed to empty trash", error: error, category: .general, userMessage: "Could not empty trash")
+                }
             }
         }
     }
