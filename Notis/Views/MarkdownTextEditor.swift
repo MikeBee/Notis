@@ -785,6 +785,12 @@ struct MarkdownTextEditor: View {
                 textView.textContainer.widthTracksTextView = true
                 textView.textContainer.heightTracksTextView = false
 
+                // NOTE: Accessing layoutManager triggers TextKit 1 compatibility mode
+                // This is intentional - we need TextKit 1 APIs to control non-contiguous layout
+                // for optimal performance on large documents. TextKit 1 is stable and well-tested.
+                // The console warning "UITextView is switching to TextKit 1 compatibility mode"
+                // can be safely ignored as this is a deliberate performance optimization.
+
                 // PERFORMANCE: Enable non-contiguous layout for large documents
                 // Documents < 3000 lines: disable for stability (prevents text jumping)
                 // Documents >= 3000 lines: enable for performance (prevents lag)
