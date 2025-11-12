@@ -25,6 +25,7 @@ struct LibrarySidebar: View {
     @State private var showingNewGroupDialog = false
     @State private var newGroupName = ""
     @State private var newGroupIcon = "folder"
+    @State private var newGroupColor = "default"
     @State private var selectedTab: LibraryTab = .groups
     
     enum LibraryTab: String, CaseIterable {
@@ -249,6 +250,7 @@ struct LibrarySidebar: View {
             NewGroupDialog(
                 groupName: $newGroupName,
                 groupIcon: $newGroupIcon,
+                groupColor: $newGroupColor,
                 isPresented: $showingNewGroupDialog,
                 onCreate: createNewGroupWithDetails
             )
@@ -278,9 +280,10 @@ struct LibrarySidebar: View {
             // Ensure unique sort order to prevent duplicates
             viewContext.ensureUniqueSortOrder(for: newGroup)
 
-            // Set the icon
+            // Set the icon and color
             if let groupId = newGroup.id?.uuidString {
                 UserDefaults.standard.set(newGroupIcon, forKey: "group_icon_\(groupId)")
+                UserDefaults.standard.set(newGroupColor, forKey: "group_color_\(groupId)")
             }
 
             do {
@@ -296,6 +299,7 @@ struct LibrarySidebar: View {
                 // Reset dialog state
                 newGroupName = ""
                 newGroupIcon = "folder"
+                newGroupColor = "default"
             } catch {
                 Logger.shared.error("Failed to create group", error: error, category: .general, userMessage: "Could not create group")
             }
@@ -534,9 +538,11 @@ struct GroupRowView: View {
     @State private var isHovering = false
     @State private var isDraggedOver = false
     @State private var showingIconPicker = false
+    @State private var showingColorPicker = false
     @State private var showingSubgroupDialog = false
     @State private var newSubgroupName = ""
     @State private var newSubgroupIcon = "folder"
+    @State private var newSubgroupColor = "blue"
     @State private var isPerformingOperation = false
     @FocusState private var isTextFieldFocused: Bool
     
@@ -552,12 +558,63 @@ struct GroupRowView: View {
             UserDefaults.standard.set(icon, forKey: "group_icon_\(groupId)")
         }
     }
-    
+
+    private var groupColor: String {
+        if let groupId = group.id?.uuidString {
+            return UserDefaults.standard.string(forKey: "group_color_\(groupId)") ?? "default"
+        }
+        return "default"
+    }
+
+    private func setGroupColor(_ colorName: String) {
+        if let groupId = group.id?.uuidString {
+            UserDefaults.standard.set(colorName, forKey: "group_color_\(groupId)")
+        }
+    }
+
+    private func colorFromName(_ name: String) -> Color {
+        switch name {
+        case "red": return .red
+        case "orange": return .orange
+        case "yellow": return .yellow
+        case "green": return .green
+        case "mint": return .mint
+        case "teal": return .teal
+        case "cyan": return .cyan
+        case "blue": return .blue
+        case "indigo": return .indigo
+        case "purple": return .purple
+        case "pink": return .pink
+        case "brown": return .brown
+        case "gray": return .gray
+        default: return appState.selectedGroup == group
+            ? UlyssesDesign.Colors.accent
+            : UlyssesDesign.Colors.secondary(for: colorScheme)
+        }
+    }
+
     private let availableIcons = [
         "folder", "folder.fill", "doc.text", "book", "book.fill", "briefcase", "briefcase.fill",
         "heart", "heart.fill", "star", "star.fill", "flag", "flag.fill", "tag", "tag.fill",
         "bookmark", "bookmark.fill", "gear", "paperplane", "paperplane.fill", "house", "house.fill",
         "person", "person.fill", "globe", "globe.americas", "camera", "camera.fill", "photo", "photo.fill"
+    ]
+
+    private let availableColors: [(name: String, color: Color)] = [
+        ("default", .gray),
+        ("red", .red),
+        ("orange", .orange),
+        ("yellow", .yellow),
+        ("green", .green),
+        ("mint", .mint),
+        ("teal", .teal),
+        ("cyan", .cyan),
+        ("blue", .blue),
+        ("indigo", .indigo),
+        ("purple", .purple),
+        ("pink", .pink),
+        ("brown", .brown),
+        ("gray", .gray)
     ]
     
     var body: some View {
@@ -589,14 +646,10 @@ struct GroupRowView: View {
                             .frame(width: 18)
                     }
                     
-                    // Folder Icon
+                    // Folder Icon with custom color
                     Image(systemName: groupIcon)
                         .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(
-                            appState.selectedGroup == group 
-                                ? UlyssesDesign.Colors.accent 
-                                : UlyssesDesign.Colors.secondary(for: colorScheme)
-                        )
+                        .foregroundColor(colorFromName(groupColor))
                 }
                 
                 // Group Name
@@ -660,6 +713,7 @@ struct GroupRowView: View {
             .contextMenu {
                 Button("Rename") { startEditing() }
                 Button("Change Icon") { showingIconPicker = true }
+                Button("Change Color") { showingColorPicker = true }
                 Button("Add Subgroup") { showingSubgroupDialog = true }
                 Divider()
                 Menu("Move") {
@@ -720,7 +774,7 @@ struct GroupRowView: View {
                                             RoundedRectangle(cornerRadius: 8)
                                                 .fill(groupIcon == icon ? Color.accentColor.opacity(0.1) : Color.clear)
                                         )
-                                    
+
                                     Text(icon)
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
@@ -743,10 +797,50 @@ struct GroupRowView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingColorPicker) {
+            NavigationView {
+                ScrollView {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 20) {
+                        ForEach(availableColors, id: \.name) { colorItem in
+                            Button {
+                                setGroupColor(colorItem.name)
+                                showingColorPicker = false
+                            } label: {
+                                VStack(spacing: 8) {
+                                    Circle()
+                                        .fill(colorItem.color)
+                                        .frame(width: 50, height: 50)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(groupColor == colorItem.name ? Color.accentColor : Color.clear, lineWidth: 3)
+                                        )
+
+                                    Text(colorItem.name.capitalized)
+                                        .font(.caption)
+                                        .foregroundColor(.primary)
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                    .padding()
+                }
+                .navigationTitle("Choose Color")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Cancel") {
+                            showingColorPicker = false
+                        }
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showingSubgroupDialog) {
             NewGroupDialog(
                 groupName: $newSubgroupName,
                 groupIcon: $newSubgroupIcon,
+                groupColor: $newSubgroupColor,
                 isPresented: $showingSubgroupDialog,
                 onCreate: createSubgroupWithDetails,
                 title: "New Subgroup"
@@ -823,9 +917,10 @@ struct GroupRowView: View {
             // Ensure unique sort order to prevent duplicates
             viewContext.ensureUniqueSortOrder(for: subgroup)
 
-            // Set the icon
+            // Set the icon and color
             if let subgroupId = subgroup.id?.uuidString {
                 UserDefaults.standard.set(newSubgroupIcon, forKey: "group_icon_\(subgroupId)")
+                UserDefaults.standard.set(newSubgroupColor, forKey: "group_color_\(subgroupId)")
             }
 
             do {
@@ -841,6 +936,7 @@ struct GroupRowView: View {
                 // Reset dialog state
                 newSubgroupName = ""
                 newSubgroupIcon = "folder"
+                newSubgroupColor = "default"
             } catch {
                 print("Failed to create subgroup: \(error)")
             }
@@ -1033,17 +1129,35 @@ struct GroupParentDropDelegate: DropDelegate {
 struct NewGroupDialog: View {
     @Binding var groupName: String
     @Binding var groupIcon: String
+    @Binding var groupColor: String
     @Binding var isPresented: Bool
     let onCreate: () -> Void
     var title: String = "New Group"
-    
+
     @FocusState private var isTextFieldFocused: Bool
-    
+
     private let availableIcons = [
         "folder", "folder.fill", "doc.text", "book", "book.fill", "briefcase", "briefcase.fill",
         "heart", "heart.fill", "star", "star.fill", "flag", "flag.fill", "tag", "tag.fill",
         "bookmark", "bookmark.fill", "gear", "paperplane", "paperplane.fill", "house", "house.fill",
         "person", "person.fill", "globe", "globe.americas", "camera", "camera.fill", "photo", "photo.fill"
+    ]
+
+    private let availableColors: [(name: String, color: Color)] = [
+        ("default", .gray),
+        ("red", .red),
+        ("orange", .orange),
+        ("yellow", .yellow),
+        ("green", .green),
+        ("mint", .mint),
+        ("teal", .teal),
+        ("cyan", .cyan),
+        ("blue", .blue),
+        ("indigo", .indigo),
+        ("purple", .purple),
+        ("pink", .pink),
+        ("brown", .brown),
+        ("gray", .gray)
     ]
     
     var body: some View {
@@ -1061,7 +1175,7 @@ struct NewGroupDialog: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Choose Icon")
                         .font(.headline)
-                    
+
                     ScrollView {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 16) {
                             ForEach(availableIcons, id: \.self) { icon in
@@ -1081,9 +1195,31 @@ struct NewGroupDialog: View {
                             }
                         }
                     }
-                    .frame(height: 200)
+                    .frame(height: 150)
                 }
-                
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Choose Color")
+                        .font(.headline)
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 12) {
+                        ForEach(availableColors, id: \.name) { colorItem in
+                            Button {
+                                groupColor = colorItem.name
+                            } label: {
+                                Circle()
+                                    .fill(colorItem.color)
+                                    .frame(width: 32, height: 32)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(groupColor == colorItem.name ? Color.accentColor : Color.clear, lineWidth: 2)
+                                    )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+
                 Spacer()
             }
             .padding()
@@ -1095,6 +1231,7 @@ struct NewGroupDialog: View {
                         isPresented = false
                         groupName = ""
                         groupIcon = "folder"
+                        groupColor = "default"
                     }
                 }
                 
