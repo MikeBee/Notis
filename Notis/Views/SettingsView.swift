@@ -13,18 +13,26 @@ struct SettingsView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject var appState: AppState
     @Binding var isPresented: Bool
+
+    // Editor Settings (Global)
     @AppStorage("fontSize") private var fontSize: Double = 16
     @AppStorage("lineSpacing") private var lineSpacing: Double = 1.4
     @AppStorage("paragraphSpacing") private var paragraphSpacing: Double = 8
     @AppStorage("fontFamily") private var fontFamily: String = "system"
     @AppStorage("editorMargins") private var editorMargins: Double = 40
+    @AppStorage("disableQuickType") private var disableQuickType: Bool = false
+
+    // Writing Settings
     @AppStorage("defaultGoalType") private var defaultGoalType: String = "words"
     @AppStorage("showWordCount") private var showWordCount: Bool = true
     @AppStorage("showCharacterCount") private var showCharacterCount: Bool = true
     @AppStorage("showReadingTime") private var showReadingTime: Bool = true
+
+    // Interface Settings
     @AppStorage("enableHapticFeedback") private var enableHapticFeedback: Bool = true
     @AppStorage("showTagsPane") private var showTagsPane: Bool = true
-    
+
+    // Export/Import State
     @State private var showingExportFilePicker = false
     @State private var showingImportFilePicker = false
     @State private var exportFormat: SettingsExportFormat = .json
@@ -33,31 +41,20 @@ struct SettingsView: View {
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @StateObject private var backupService = BackupService.shared
-    
+
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-    
+
     var body: some View {
         NavigationView {
             Form {
-                Section("Appearance") {
-                    HStack {
-                        Text("Theme")
-                        Spacer()
-                        Picker("Theme", selection: $appState.theme) {
-                            ForEach(AppState.AppTheme.allCases, id: \.self) { theme in
-                                Text(theme.rawValue).tag(theme)
-                            }
-                        }
-                        .pickerStyle(SegmentedPickerStyle())
-                    }
-                }
-                
-                Section("Typography") {
+                // MARK: - Editor
+                Section {
+                    // Typography
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Font Family")
@@ -75,7 +72,7 @@ struct SettingsView: View {
                             .pickerStyle(MenuPickerStyle())
                         }
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Font Size")
@@ -85,7 +82,7 @@ struct SettingsView: View {
                         }
                         Slider(value: $fontSize, in: 10...32, step: 1)
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Line Height")
@@ -95,7 +92,7 @@ struct SettingsView: View {
                         }
                         Slider(value: $lineSpacing, in: 1.0...3.0, step: 0.1)
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Paragraph Spacing")
@@ -105,7 +102,7 @@ struct SettingsView: View {
                         }
                         Slider(value: $paragraphSpacing, in: 0...24, step: 2)
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Editor Margins")
@@ -120,14 +117,45 @@ struct SettingsView: View {
                         }
                         Slider(value: $editorMargins, in: 0...400, step: 5)
                     }
-                }
-                
-                Section("Editor Behavior") {
+
+                    // Behavior
                     Toggle("Typewriter Mode", isOn: $appState.isTypewriterMode)
                     Toggle("Focus Mode", isOn: $appState.isFocusMode)
                     Toggle("Show Markdown Header Symbols", isOn: $appState.showMarkdownHeaderSymbols)
+
+                    // Keyboard
+                    Toggle("Disable QuickType", isOn: $disableQuickType)
+                        .help("Turn off predictive text and autocomplete suggestions")
                     Toggle("Hide Shortcut Bar", isOn: $appState.hideShortcutBar)
-                    
+
+                } header: {
+                    Label("Editor", systemImage: "pencil.line")
+                }
+
+                // MARK: - Appearance
+                Section {
+                    HStack {
+                        Text("Theme")
+                        Spacer()
+                        Picker("Theme", selection: $appState.theme) {
+                            ForEach(AppState.AppTheme.allCases, id: \.self) { theme in
+                                Text(theme.rawValue).tag(theme)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                    }
+
+                    Toggle("Library Sidebar", isOn: $appState.showLibrary)
+                    Toggle("Sheet List", isOn: $appState.showSheetList)
+                    Toggle("Sheet Navigation Bar", isOn: $appState.showSheetNavigation)
+                    Toggle("Tags Pane", isOn: $showTagsPane)
+
+                } header: {
+                    Label("Appearance", systemImage: "paintbrush.fill")
+                }
+
+                // MARK: - Writing
+                Section {
                     HStack {
                         Text("Default Goal Type")
                         Spacer()
@@ -137,25 +165,19 @@ struct SettingsView: View {
                         }
                         .pickerStyle(SegmentedPickerStyle())
                     }
-                }
-                
-                Section("Statistics") {
+
                     Toggle("Show Word Count", isOn: $showWordCount)
                     Toggle("Show Character Count", isOn: $showCharacterCount)
                     Toggle("Show Reading Time", isOn: $showReadingTime)
+
+                } header: {
+                    Label("Writing & Statistics", systemImage: "chart.bar.fill")
                 }
-                
-                Section("Interface") {
-                    Toggle("Library Sidebar", isOn: $appState.showLibrary)
-                    Toggle("Sheet List", isOn: $appState.showSheetList)
-                    Toggle("Tags Pane", isOn: $showTagsPane)
-                    Toggle("Sheet Navigation Bar", isOn: $appState.showSheetNavigation)
-                    Toggle("Haptic Feedback", isOn: $enableHapticFeedback)
-                }
-                
-                Section("Tag Management") {
+
+                // MARK: - Tags
+                Section {
                     HStack {
-                        Text("Default Tag Sort")
+                        Text("Default Sort Order")
                         Spacer()
                         Menu {
                             ForEach(TagSortOrder.allCases, id: \.self) { sortOrder in
@@ -181,16 +203,25 @@ struct SettingsView: View {
                             }
                         }
                     }
+                } header: {
+                    Label("Tag Management", systemImage: "tag.fill")
                 }
-                
-                
-                Section("Obsidian Integration") {
+
+                // MARK: - System
+                Section {
+                    Toggle("Haptic Feedback", isOn: $enableHapticFeedback)
+                } header: {
+                    Label("System", systemImage: "gearshape.fill")
+                }
+
+                // MARK: - Integrations
+                Section {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Vault Path")
+                            Text("Obsidian Vault Path")
                             Spacer()
                         }
-                        
+
                         if ExportService.shared.obsidianVaultPath.isEmpty {
                             Text("No vault selected")
                                 .foregroundColor(.secondary)
@@ -201,15 +232,19 @@ struct SettingsView: View {
                                 .font(.caption)
                                 .lineLimit(2)
                         }
-                        
-                        Button("Change Obsidian Vault Path") {
+
+                        Button("Change Vault Path") {
                             selectObsidianVault()
                         }
                         .foregroundColor(.accentColor)
                     }
+                } header: {
+                    Label("Obsidian Integration", systemImage: "link.circle.fill")
                 }
-                
-                Section("Data Management") {
+
+                // MARK: - Data & Backup
+                Section {
+                    // Export
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Export Format")
@@ -220,23 +255,25 @@ struct SettingsView: View {
                             }
                             .pickerStyle(SegmentedPickerStyle())
                         }
-                        
+
                         Button("Export All Sheets") {
                             exportSheets()
                         }
                         .foregroundColor(.accentColor)
                     }
-                    
+
+                    // Import
                     Button("Import from JSON") {
                         showingImportFilePicker = true
                     }
                     .foregroundColor(.accentColor)
-                    
+
+                    // Backup
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Automatic Backups")
                                 .font(.body)
-                            
+
                             if backupService.isBackupEnabled {
                                 if let lastBackup = backupService.lastBackupDate {
                                     Text("Last backup: \(lastBackup, formatter: dateFormatter)")
@@ -253,9 +290,9 @@ struct SettingsView: View {
                                     .foregroundColor(.red)
                             }
                         }
-                        
+
                         Spacer()
-                        
+
                         if backupService.isBackingUp {
                             ProgressView()
                                 .scaleEffect(0.8)
@@ -263,7 +300,7 @@ struct SettingsView: View {
                             Toggle("", isOn: $backupService.isBackupEnabled)
                         }
                     }
-                    
+
                     NavigationLink(destination: BackupSettingsView()) {
                         HStack {
                             Image(systemName: "icloud.and.arrow.up.fill")
@@ -272,7 +309,7 @@ struct SettingsView: View {
                             Spacer()
                         }
                     }
-                    
+
                     NavigationLink(destination: DatabaseMaintenanceView(context: viewContext)) {
                         HStack {
                             Image(systemName: "wrench.and.screwdriver")
@@ -281,7 +318,7 @@ struct SettingsView: View {
                             Spacer()
                         }
                     }
-                    
+
                     NavigationLink(destination: DatabaseHealthDashboard(context: viewContext)) {
                         HStack {
                             Image(systemName: "heart.text.square")
@@ -290,10 +327,12 @@ struct SettingsView: View {
                             Spacer()
                         }
                     }
-
+                } header: {
+                    Label("Data & Backup", systemImage: "externaldrive.fill")
                 }
 
-                Section("Markdown File Browser") {
+                // MARK: - Browse Tools
+                Section {
                     NavigationLink(destination: FolderBrowserView()) {
                         HStack {
                             Image(systemName: "folder.fill")
@@ -320,10 +359,12 @@ struct SettingsView: View {
                             Spacer()
                         }
                     }
+                } header: {
+                    Label("Browse Tools", systemImage: "doc.text.magnifyingglass")
                 }
 
-
-                Section("About") {
+                // MARK: - About
+                Section {
                     HStack {
                         Text("Version")
                         Spacer()
@@ -334,10 +375,12 @@ struct SettingsView: View {
                     HStack {
                         Text("Build")
                         Spacer()
-                        Text("Phase 5: File Browser & Search UI")
+                        Text("Phase 5: Robustness & Polish")
                             .foregroundColor(.secondary)
                             .font(.caption)
                     }
+                } header: {
+                    Label("About", systemImage: "info.circle.fill")
                 }
             }
             .navigationTitle("Settings")
@@ -378,15 +421,17 @@ struct SettingsView: View {
             }
         }
     }
-    
+
+    // MARK: - Export Functions
+
     private func exportSheets() {
         let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "isInTrash == NO")
         fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Sheet.modifiedAt, ascending: false)]
-        
+
         do {
             let sheets = try viewContext.fetch(fetchRequest)
-            
+
             switch exportFormat {
             case .json:
                 exportAsJSON(sheets: sheets)
@@ -398,13 +443,13 @@ struct SettingsView: View {
             showingAlert = true
         }
     }
-    
+
     private func exportAsJSON(sheets: [Sheet]) {
         let exportData = sheets.map { sheet in
             ExportedSheet(
                 id: sheet.id?.uuidString ?? UUID().uuidString,
                 title: sheet.title ?? "Untitled",
-                content: sheet.content ?? "",
+                content: sheet.unifiedContent,
                 createdAt: sheet.createdAt ?? Date(),
                 modifiedAt: sheet.modifiedAt ?? Date(),
                 groupName: sheet.group?.name,
@@ -414,7 +459,7 @@ struct SettingsView: View {
                 isFavorite: sheet.isFavorite
             )
         }
-        
+
         do {
             let jsonData = try JSONEncoder().encode(exportData)
             self.exportData = jsonData
@@ -425,36 +470,36 @@ struct SettingsView: View {
             showingAlert = true
         }
     }
-    
+
     private func exportAsMarkdownFiles(sheets: [Sheet]) {
-        // Export as a single combined markdown file for simplicity
         var combinedMarkdown = "# Notis Export\n\n"
         combinedMarkdown += "Exported on: \(DateFormatter.readableFormatter.string(from: Date()))\n\n"
         combinedMarkdown += "---\n\n"
-        
+
         for (index, sheet) in sheets.enumerated() {
             if index > 0 {
                 combinedMarkdown += "\n\n---\n\n"
             }
-            
+
             combinedMarkdown += "# \(sheet.title ?? "Untitled")\n\n"
-            
-            if let content = sheet.content, !content.isEmpty {
+
+            let content = sheet.unifiedContent
+            if !content.isEmpty {
                 combinedMarkdown += content
             } else {
                 combinedMarkdown += "*No content*"
             }
-            
+
             combinedMarkdown += "\n\n"
             combinedMarkdown += "*Created: \(DateFormatter.readableFormatter.string(from: sheet.createdAt ?? Date()))*  \n"
             combinedMarkdown += "*Modified: \(DateFormatter.readableFormatter.string(from: sheet.modifiedAt ?? Date()))*  \n"
             combinedMarkdown += "*Words: \(sheet.wordCount)*"
-            
+
             if sheet.isFavorite {
                 combinedMarkdown += " ⭐"
             }
         }
-        
+
         do {
             let markdownData = combinedMarkdown.data(using: .utf8) ?? Data()
             self.exportData = markdownData
@@ -465,16 +510,18 @@ struct SettingsView: View {
             showingAlert = true
         }
     }
-    
+
+    // MARK: - Import Functions
+
     private func handleImport(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
-            
+
             do {
                 let data = try Data(contentsOf: url)
                 let sheets = try JSONDecoder().decode([ExportedSheet].self, from: data)
-                
+
                 importSheets(sheets)
             } catch {
                 alertMessage = "Failed to import: \(error.localizedDescription)"
@@ -485,14 +532,14 @@ struct SettingsView: View {
             showingAlert = true
         }
     }
-    
+
     private func importSheets(_ exportedSheets: [ExportedSheet]) {
         var importedCount = 0
-        
-        // Get or create default Inbox group
+
+        // Get or create Imported group
         let fetchRequest: NSFetchRequest<Group> = Group.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "name == %@ AND parent == nil", "Imported")
-        
+
         let targetGroup: Group
         if let existingGroup = try? viewContext.fetch(fetchRequest).first {
             targetGroup = existingGroup
@@ -505,7 +552,7 @@ struct SettingsView: View {
             newGroup.sortOrder = 0
             targetGroup = newGroup
         }
-        
+
         for exportedSheet in exportedSheets {
             let newSheet = Sheet(context: viewContext)
             newSheet.id = UUID(uuidString: exportedSheet.id) ?? UUID()
@@ -521,10 +568,10 @@ struct SettingsView: View {
             newSheet.isInTrash = false
             newSheet.preview = String(exportedSheet.content.prefix(100))
             newSheet.sortOrder = Int32(importedCount)
-            
+
             importedCount += 1
         }
-        
+
         do {
             try viewContext.save()
             alertMessage = "Successfully imported \(importedCount) sheets!"
@@ -534,20 +581,15 @@ struct SettingsView: View {
             showingAlert = true
         }
     }
-    
-    private func sanitizeFilename(_ filename: String) -> String {
-        let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
-        return filename.components(separatedBy: invalidChars).joined(separator: "-")
-    }
-    
+
     private func selectObsidianVault() {
-        // Trigger the vault selection from ExportService
         ExportService.shared.selectObsidianVaultPath {
             // Vault path has been updated
         }
     }
-    
 }
+
+// MARK: - Supporting Types
 
 enum SettingsExportFormat: CaseIterable {
     case json
@@ -569,20 +611,20 @@ struct ExportedSheet: Codable {
 
 struct ExportDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json, .plainText] }
-    
+
     let data: Data
     let filename: String
-    
+
     init(data: Data, filename: String) {
         self.data = data
         self.filename = filename
     }
-    
+
     init(configuration: ReadConfiguration) throws {
         self.data = configuration.file.regularFileContents ?? Data()
         self.filename = "export"
     }
-    
+
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         return FileWrapper(regularFileWithContents: data)
     }
@@ -594,7 +636,7 @@ extension DateFormatter {
         formatter.dateFormat = "yyyy-MM-dd-HHmmss"
         return formatter
     }()
-    
+
     static let readableFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -603,9 +645,8 @@ extension DateFormatter {
     }()
 }
 
-
 #Preview {
     @Previewable @State var isPresented = true
-    
+
     return SettingsView(appState: AppState(), isPresented: $isPresented)
 }
