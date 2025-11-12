@@ -445,7 +445,11 @@ struct SheetsListContent: View {
     let searchText: String
     let previewLines: Int
     let isEditingOrder: Bool
-    
+
+    // Performance optimization: Cache filtered results
+    @State private var cachedFilteredSheets: [Sheet] = []
+    @State private var lastSearchText: String = ""
+
     var subgroups: [Group] {
         guard let selectedGroup = appState.selectedGroup,
               let subgroups = selectedGroup.subgroups?.allObjects as? [Group] else {
@@ -453,17 +457,31 @@ struct SheetsListContent: View {
         }
         return subgroups.sorted { $0.sortOrder < $1.sortOrder }
     }
-    
+
     var filteredSheets: [Sheet] {
+        // If search hasn't changed, return cached results
+        if searchText == lastSearchText && !cachedFilteredSheets.isEmpty {
+            return cachedFilteredSheets
+        }
+
         let sheets = Array(fetchRequest.wrappedValue)
-        
+
         if searchText.isEmpty {
             return sheets
         }
-        return sheets.filter { sheet in
-            (sheet.title?.localizedCaseInsensitiveContains(searchText) ?? false) ||
-            (sheet.content?.localizedCaseInsensitiveContains(searchText) ?? false)
+
+        // Performance optimization: Use FTS5 search for better performance
+        // Search using NotesIndexService which has FTS5 indexing
+        let searchResults = NotesIndexService.shared.search(query: searchText, limit: 500)
+        let searchResultUUIDs = Set(searchResults.compactMap { UUID(uuidString: $0.uuid) })
+
+        // Filter sheets to only those in search results
+        let filtered = sheets.filter { sheet in
+            guard let sheetID = sheet.id else { return false }
+            return searchResultUUIDs.contains(sheetID)
         }
+
+        return filtered
     }
     
     var body: some View {
@@ -473,7 +491,7 @@ struct SheetsListContent: View {
                 ForEach(subgroups, id: \.self) { subgroup in
                     SubgroupRowView(subgroup: subgroup, appState: appState)
                 }
-                
+
                 // Add separator if we have both subgroups and sheets
                 if !subgroups.isEmpty && !filteredSheets.isEmpty {
                     Rectangle()
@@ -482,12 +500,12 @@ struct SheetsListContent: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                 }
-                
+
                 // Then show direct sheets
                 ForEach(filteredSheets, id: \.self) { sheet in
                     SheetRowView(
-                        sheet: sheet, 
-                        appState: appState, 
+                        sheet: sheet,
+                        appState: appState,
                         previewLines: previewLines,
                         isEditingOrder: isEditingOrder
                     )
@@ -505,6 +523,13 @@ struct SheetsListContent: View {
             // Subtle background change when in edit mode
             isEditingOrder ? Color.accentColor.opacity(0.02) : Color.clear
         )
+        .onChange(of: searchText) { oldValue, newValue in
+            // Update cache when search changes
+            DispatchQueue.main.async {
+                lastSearchText = newValue
+                cachedFilteredSheets = filteredSheets
+            }
+        }
     }
     
     private func reorderSheets(draggedSheet: Sheet, targetSheet: Sheet) {

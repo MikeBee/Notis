@@ -695,7 +695,7 @@ struct MarkdownTextEditor: View {
             }
         }
     }
-    
+
     private func findAndConfigureTextView(in view: UIView) {
         for subview in view.subviews {
             if let textView = subview as? UITextView {
@@ -706,7 +706,22 @@ struct MarkdownTextEditor: View {
                 textView.contentInsetAdjustmentBehavior = .never
                 textView.textContainer.widthTracksTextView = true
                 textView.textContainer.heightTracksTextView = false
-                textView.layoutManager.allowsNonContiguousLayout = false
+
+                // PERFORMANCE: Enable non-contiguous layout for large documents
+                // Documents < 3000 lines: disable for stability (prevents text jumping)
+                // Documents >= 3000 lines: enable for performance (prevents lag)
+                let lineCount = text.components(separatedBy: .newlines).count
+                let isLargeDocument = lineCount >= 3000
+
+                if isLargeDocument {
+                    // Large document: prioritize performance over minor stability issues
+                    textView.layoutManager.allowsNonContiguousLayout = true
+                    Logger.shared.debug("Enabled non-contiguous layout for large document (\(lineCount) lines)", category: .ui)
+                } else {
+                    // Small document: prioritize stability
+                    textView.layoutManager.allowsNonContiguousLayout = false
+                }
+
                 return
             } else {
                 findAndConfigureTextView(in: subview)

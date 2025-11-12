@@ -12,28 +12,16 @@ struct LibraryEssentialsSection: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var appState: AppState
-    
+
     @State private var showingEmptyTrashConfirmation = false
-    
-    
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Sheet.modifiedAt, ascending: false)],
-        predicate: NSPredicate(format: "isInTrash == NO"),
-        animation: .default
-    )
-    private var allSheets: FetchedResults<Sheet>
-    
-    private static var sevenDaysAgo: Date {
-        Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
-    }
-    
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Sheet.modifiedAt, ascending: false)],
-        predicate: NSPredicate(format: "modifiedAt >= %@ AND isInTrash == NO", sevenDaysAgo as NSDate),
-        animation: .default
-    )
-    private var recentSheets: FetchedResults<Sheet>
-    
+
+    // Performance optimization: Use cached counts instead of multiple FetchRequests
+    @State private var allSheetsCount: Int = 0
+    @State private var recentSheetsCount: Int = 0
+    @State private var trashedSheetsCount: Int = 0
+    @State private var ungroupedSheetsCount: Int = 0
+
+    // Single fetch request for trash operations (only when needed)
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Sheet.deletedAt, ascending: false)],
         predicate: NSPredicate(format: "isInTrash == YES"),
@@ -41,12 +29,9 @@ struct LibraryEssentialsSection: View {
     )
     private var trashedSheets: FetchedResults<Sheet>
 
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Sheet.modifiedAt, ascending: false)],
-        predicate: NSPredicate(format: "group == nil AND isInTrash == NO"),
-        animation: .default
-    )
-    private var ungroupedSheets: FetchedResults<Sheet>
+    private static var sevenDaysAgo: Date {
+        Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+    }
 
 
 
@@ -56,16 +41,16 @@ struct LibraryEssentialsSection: View {
             LibraryEssentialRow(
                 icon: "doc.text",
                 title: "All",
-                count: allSheets.count,
+                count: allSheetsCount,
                 isSelected: appState.selectedEssential == "all" && appState.selectedGroup == nil,
                 appState: appState,
                 action: { selectAllSheets() }
             )
-            
+
             LibraryEssentialRow(
                 icon: "clock",
                 title: "Last 7 Days",
-                count: recentSheets.count,
+                count: recentSheetsCount,
                 isSelected: appState.selectedEssential == "recent" && appState.selectedGroup == nil,
                 appState: appState,
                 action: { selectRecentSheets() }
@@ -74,7 +59,7 @@ struct LibraryEssentialsSection: View {
             LibraryEssentialRow(
                 icon: "tray",
                 title: "Inbox",
-                count: ungroupedSheets.count,
+                count: ungroupedSheetsCount,
                 isSelected: appState.selectedEssential == "inbox" && appState.selectedGroup == nil,
                 appState: appState,
                 action: { selectInbox() }
@@ -83,11 +68,11 @@ struct LibraryEssentialsSection: View {
             LibraryEssentialRow(
                 icon: "trash",
                 title: "Trash",
-                count: trashedSheets.count,
+                count: trashedSheetsCount,
                 isSelected: appState.selectedEssential == "trash" && appState.selectedGroup == nil,
                 appState: appState,
                 action: { selectTrash() },
-                onEmptyTrash: trashedSheets.count > 0 ? { emptyTrash() } : nil
+                onEmptyTrash: trashedSheetsCount > 0 ? { emptyTrash() } : nil
             )
             
             
@@ -98,13 +83,62 @@ struct LibraryEssentialsSection: View {
                 appState.selectedEssential = nil
             }
         }
+        .onAppear {
+            // Initialize counts on appear
+            updateCounts()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in
+            // Update counts when Core Data changes (debounced)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                updateCounts()
+            }
+        }
         .alert("Empty Trash", isPresented: $showingEmptyTrashConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Empty Trash", role: .destructive) {
                 permanentlyDeleteAllTrashedSheets()
             }
         } message: {
-            Text("Are you sure you want to permanently delete all \(trashedSheets.count) item\(trashedSheets.count == 1 ? "" : "s") in the trash? This action cannot be undone.")
+            Text("Are you sure you want to permanently delete all \(trashedSheetsCount) item\(trashedSheetsCount == 1 ? "" : "s") in the trash? This action cannot be undone.")
+        }
+    }
+
+    // MARK: - Performance Optimization
+
+    /// Update all counts efficiently using count-only fetch requests
+    private func updateCounts() {
+        let context = viewContext
+
+        // Execute on background to avoid blocking UI
+        DispatchQueue.global(qos: .userInitiated).async {
+            // All sheets count
+            let allRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+            allRequest.predicate = NSPredicate(format: "isInTrash == NO")
+            let newAllCount = (try? context.count(for: allRequest)) ?? 0
+
+            // Recent sheets count (last 7 days)
+            let recentRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+            let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+            recentRequest.predicate = NSPredicate(format: "modifiedAt >= %@ AND isInTrash == NO", sevenDaysAgo as NSDate)
+            let newRecentCount = (try? context.count(for: recentRequest)) ?? 0
+
+            // Trashed sheets count
+            let trashedRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+            trashedRequest.predicate = NSPredicate(format: "isInTrash == YES")
+            let newTrashedCount = (try? context.count(for: trashedRequest)) ?? 0
+
+            // Ungrouped sheets count
+            let ungroupedRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+            ungroupedRequest.predicate = NSPredicate(format: "group == nil AND isInTrash == NO")
+            let newUngroupedCount = (try? context.count(for: ungroupedRequest)) ?? 0
+
+            // Update UI on main thread
+            DispatchQueue.main.async {
+                self.allSheetsCount = newAllCount
+                self.recentSheetsCount = newRecentCount
+                self.trashedSheetsCount = newTrashedCount
+                self.ungroupedSheetsCount = newUngroupedCount
+            }
         }
     }
     
@@ -183,8 +217,10 @@ struct LibraryEssentialsSection: View {
             do {
                 try viewContext.save()
                 HapticService.shared.itemDeleted()
+                // Update counts after emptying trash
+                updateCounts()
             } catch {
-                print("Failed to empty trash: \(error)")
+                Logger.shared.error("Failed to empty trash", error: error, category: .general, userMessage: "Could not empty trash")
             }
         }
     }
