@@ -746,7 +746,7 @@ Some regular content here with more text to test the editor.
         hideShortcutBar: false,
         disableQuickType: false,
         onTextChange: { newText in
-            print("Text changed: \(newText.count) characters")
+            Logger.shared.debug("Text changed: \(newText.count) characters", category: .ui)
         }
     )
     .environmentObject(AppState())
