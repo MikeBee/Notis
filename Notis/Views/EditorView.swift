@@ -483,7 +483,7 @@ struct MarkdownEditor: View {
                         }
                     }
                     .padding(.horizontal, editorMargins)
-                    .padding(.top, 40)
+                    .padding(.top, appState.isFullScreen ? 20 : 12)
                     .padding(.bottom, paragraphSpacing + 12)
 
                     // Content Editor
@@ -507,7 +507,6 @@ struct MarkdownEditor: View {
                         }
                     )
                     .focused($contentFocused)
-                    .frame(minHeight: geometry.size.height - 120)
                     .id(sheet.id ?? UUID())
                     .overlay(alignment: .topLeading) {
                         if isReadOnlyMode {
@@ -526,10 +525,6 @@ struct MarkdownEditor: View {
                             }
                         }
                     }
-
-                    // Scrollable whitespace to keep cursor visible above keyboard and bottom UI
-                    Color.clear
-                        .frame(height: appState.isFullScreen ? 300 : 400)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

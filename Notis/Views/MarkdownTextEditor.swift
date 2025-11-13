@@ -720,7 +720,6 @@ struct MarkdownTextEditor: View {
                 }
             }
         }
-        .frame(minHeight: 200) // Minimum height to prevent jumping
         .clipped() // Prevent content from overflowing
         .toolbar {
             if !hideShortcutBar {
@@ -997,13 +996,12 @@ struct MarkdownTextEditor: View {
     private func findAndConfigureTextView(in view: UIView) {
         for subview in view.subviews {
             if let textView = subview as? UITextView {
-                // Configure for reduced jumping
-                textView.isScrollEnabled = true
+                // Disable internal scrolling - let parent ScrollView handle it
+                textView.isScrollEnabled = false
                 textView.showsVerticalScrollIndicator = false
                 textView.showsHorizontalScrollIndicator = false
-                textView.contentInsetAdjustmentBehavior = .never
                 textView.textContainer.widthTracksTextView = true
-                textView.textContainer.heightTracksTextView = false
+                textView.textContainer.heightTracksTextView = true
 
                 return
             } else {
