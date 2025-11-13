@@ -496,6 +496,7 @@ struct MarkdownTextEditor: View {
     @State private var isHandlingListContinuation = false
     @FocusState private var isTextEditorFocused: Bool
     @AppStorage("showLineNumbers") private var showLineNumbers: Bool = false
+    @State private var hasConfiguredTextView = false
     
     private var safeFontSize: CGFloat {
         guard fontSize.isFinite && !fontSize.isNaN && fontSize > 0 else { return 16 }
@@ -658,11 +659,12 @@ struct MarkdownTextEditor: View {
                                         updateCursorPosition(textView.selectedRange)
                                     }
                                 }
-                            }
                             .onAppear {
-                                // Configure TextEditor for stability
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    configureTextViewForStability()
+                                // Configure TextEditor for stability (only once)
+                                if !hasConfiguredTextView {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        configureTextViewForStability()
+                                    }
                                 }
                             }
                     }
@@ -794,12 +796,15 @@ struct MarkdownTextEditor: View {
             // Initialize tracking variables
             lastTextLength = text.count
             cursorPosition = text.count
-            
+
+            // Reset configuration flag for new instances
+            hasConfiguredTextView = false
+
             // Initialize cursor position tracking
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 updateCurrentLine()
             }
-            
+
         }
         .onDisappear {
             // Note: removeObserver with 'self' may not work correctly in SwiftUI
@@ -985,7 +990,9 @@ struct MarkdownTextEditor: View {
     }
 
     private func configureTextViewForStability() {
-        // Find the UITextView and configure it for better stability
+        // Find the UITextView and configure it for better stability (only once)
+        guard !hasConfiguredTextView else { return }
+
         DispatchQueue.main.async {
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                let window = windowScene.windows.first {
@@ -1007,6 +1014,9 @@ struct MarkdownTextEditor: View {
 
                 // Add bottom padding to ensure text is visible when typing at bottom
                 textView.textContainerInset = UIEdgeInsets(top: 0, left: 0, bottom: 200, right: 0)
+
+                // Mark as configured to prevent repeated configuration
+                hasConfiguredTextView = true
 
                 return
             } else {
