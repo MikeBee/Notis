@@ -277,9 +277,14 @@ struct ProgressContent: View {
     @ObservedObject var sheet: Sheet
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var goalsService = GoalsService.shared
+    @StateObject private var sessionService = SessionManagementService.shared
     @State private var showingGoalEditor = false
     @State private var showingFullHistory = false
     @State private var editingGoal: Goal?
+    @State private var showingSessionDialog = false
+    @State private var showingEndSessionDialog = false
+    @State private var saveSessionAsPreset = false
+    @State private var sessionPresetName = ""
     
     private var statistics: SheetStatistics {
         SheetStatistics(content: sheet.unifiedContent)
@@ -291,12 +296,44 @@ struct ProgressContent: View {
     
     var body: some View {
         VStack(spacing: UlyssesDesign.Spacing.lg) {
+            // Active Session Banner
+            if sessionService.isSessionActive {
+                ActiveSessionBanner(
+                    session: sessionService.activeSession,
+                    sessionGoals: sessionService.sessionGoals,
+                    onEndSession: {
+                        showingEndSessionDialog = true
+                    }
+                )
+            }
+
+            // Start Session Button (only show when no active session)
+            if !sessionService.isSessionActive {
+                Button(action: {
+                    showingSessionDialog = true
+                }) {
+                    HStack {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 16, weight: .medium))
+                        Text("Start Writing Session")
+                            .font(UlyssesDesign.Typography.sheetMeta)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, UlyssesDesign.Spacing.sm)
+                    .background(UlyssesDesign.Colors.accent)
+                    .cornerRadius(UlyssesDesign.CornerRadius.medium)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+
             // Goals Section
             VStack(spacing: UlyssesDesign.Spacing.md) {
                 HStack {
-                    Text("🎯 Daily Goals")
-                        .font(UlyssesDesign.Typography.editorTitle)
-                        .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
+                    Text(sessionService.isSessionActive ? "📊 Daily Progress" : "🎯 Daily Goals")
+                        .font(sessionService.isSessionActive ? UlyssesDesign.Typography.sheetMeta : UlyssesDesign.Typography.editorTitle)
+                        .foregroundColor(sessionService.isSessionActive ? UlyssesDesign.Colors.secondary(for: colorScheme) : UlyssesDesign.Colors.primary(for: colorScheme))
 
                     Spacer()
 
@@ -455,7 +492,33 @@ struct ProgressContent: View {
         .sheet(isPresented: $showingFullHistory) {
             GoalHistoryView()
         }
-        
+
+        .sheet(isPresented: $showingSessionDialog) {
+            SessionStartDialog(
+                presets: sessionService.availablePresets,
+                recentPresets: sessionService.getRecentPresets(),
+                onStartWithPreset: { preset in
+                    sessionService.startSession(withPreset: preset)
+                    showingSessionDialog = false
+                },
+                onStartCustom: { goals in
+                    sessionService.startSessionWithCustomGoals(name: "Custom Session", goals: goals)
+                    showingSessionDialog = false
+                }
+            )
+        }
+
+        .alert("End Writing Session", isPresented: $showingEndSessionDialog) {
+            Button("Cancel", role: .cancel) { }
+            Button("End Session") {
+                sessionService.endSession(saveAsPreset: saveSessionAsPreset, presetName: sessionPresetName.isEmpty ? nil : sessionPresetName)
+                saveSessionAsPreset = false
+                sessionPresetName = ""
+            }
+        } message: {
+            Text("Do you want to end your writing session?")
+        }
+
         .onReceive(NotificationCenter.default.publisher(for: .goalCompleted)) { notification in
             if let goal = notification.object as? Goal, goal.sheet == sheet {
                 // Could show celebration animation here
@@ -1727,17 +1790,234 @@ struct DailyGoalListRow: View {
                 .frame(width: 16)
             
             // Goal progress text
-            Text("\(history.completedCount) of \(history.targetCount) \(goal.typeEnum.unit)")
+            Text("\(history.completedCount)/\(history.targetCount) \(goal.typeEnum.unit)")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
-            
+
             Spacer()
         }
-        .padding(.horizontal, UlyssesDesign.Spacing.md)
-        .padding(.vertical, UlyssesDesign.Spacing.sm)
+        .padding(.horizontal, UlyssesDesign.Spacing.sm)
+        .padding(.vertical, UlyssesDesign.Spacing.xs)
         .background(
             RoundedRectangle(cornerRadius: UlyssesDesign.CornerRadius.small)
                 .fill(UlyssesDesign.Colors.hover.opacity(0.2))
         )
+    }
+}
+
+// MARK: - Writing Session Components
+
+struct ActiveSessionBanner: View {
+    let session: WritingSession?
+    let sessionGoals: [SessionGoal]
+    let onEndSession: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var elapsedTime: String = "0:00"
+    @State private var timer: Timer?
+
+    var body: some View {
+        VStack(spacing: UlyssesDesign.Spacing.sm) {
+            // Header
+            HStack {
+                Image(systemName: "timer")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                Text(session?.presetName ?? "Writing Session")
+                    .font(UlyssesDesign.Typography.sheetMeta)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                
+                Spacer()
+                
+                Text(elapsedTime)
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+            }
+            
+            // Session Goals Progress
+            if !sessionGoals.isEmpty {
+                ForEach(sessionGoals, id: \.id) { goal in
+                    SessionGoalProgressRow(goal: goal)
+                }
+            }
+            
+            // End Session Button
+            Button(action: onEndSession) {
+                HStack {
+                    Image(systemName: "stop.circle")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("End Session")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .foregroundColor(UlyssesDesign.Colors.accent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color.white)
+                .cornerRadius(6)
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(UlyssesDesign.Spacing.md)
+        .background(
+            LinearGradient(
+                colors: [UlyssesDesign.Colors.accent, UlyssesDesign.Colors.accent.opacity(0.8)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .cornerRadius(UlyssesDesign.CornerRadius.medium)
+        .onAppear {
+            updateElapsedTime()
+            timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                updateElapsedTime()
+            }
+        }
+        .onDisappear {
+            timer?.invalidate()
+        }
+    }
+    
+    private func updateElapsedTime() {
+        guard let startTime = session?.startTime else { return }
+        let elapsed = Date().timeIntervalSince(startTime)
+        let minutes = Int(elapsed / 60)
+        let seconds = Int(elapsed.truncatingRemainder(dividingBy: 60))
+        elapsedTime = String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+struct SessionGoalProgressRow: View {
+    let goal: SessionGoal
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var progress: Double {
+        guard goal.targetCount > 0 else { return 0 }
+        return Double(goal.currentCount) / Double(goal.targetCount)
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(goal.goalType?.capitalized ?? "Goal")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.9))
+                Spacer()
+                Text("\(goal.currentCount)/\(goal.targetCount)")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+            }
+            
+            ProgressView(value: progress)
+                .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                .scaleEffect(x: 1, y: 0.5, anchor: .center)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct SessionStartDialog: View {
+    let presets: [SessionGoalPreset]
+    let recentPresets: [SessionGoalPreset]
+    let onStartWithPreset: (SessionGoalPreset) -> Void
+    let onStartCustom: ([(type: GoalType, target: Int32)]) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: UlyssesDesign.Spacing.lg) {
+                    // Recent Presets
+                    if !recentPresets.isEmpty {
+                        VStack(alignment: .leading, spacing: UlyssesDesign.Spacing.sm) {
+                            Text("Recent")
+                                .font(UlyssesDesign.Typography.sheetMeta)
+                                .fontWeight(.semibold)
+                                .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                            
+                            ForEach(recentPresets, id: \.id) { preset in
+                                PresetCard(preset: preset) {
+                                    onStartWithPreset(preset)
+                                }
+                            }
+                        }
+                    }
+                    
+                    // All Presets
+                    VStack(alignment: .leading, spacing: UlyssesDesign.Spacing.sm) {
+                        Text("All Presets")
+                            .font(UlyssesDesign.Typography.sheetMeta)
+                            .fontWeight(.semibold)
+                            .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                        
+                        ForEach(presets, id: \.id) { preset in
+                            PresetCard(preset: preset) {
+                                onStartWithPreset(preset)
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Start Writing Session")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct PresetCard: View {
+    let preset: SessionGoalPreset
+    let onSelect: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var goalsDescription: String {
+        guard let goals = preset.templateGoals as? Set<SessionGoal> else { return "" }
+        return goals.map { goal in
+            "\(goal.targetCount) \(goal.goalType ?? "words")"
+        }.joined(separator: " • ")
+    }
+    
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(preset.name ?? "Untitled")
+                        .font(UlyssesDesign.Typography.sheetTitle)
+                        .fontWeight(.semibold)
+                        .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
+                    
+                    Spacer()
+                    
+                    if preset.isBuiltIn {
+                        Text("Built-in")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(UlyssesDesign.Colors.accent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(UlyssesDesign.Colors.accent.opacity(0.1))
+                            .cornerRadius(4)
+                    }
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(UlyssesDesign.Colors.tertiary(for: colorScheme))
+                }
+                
+                Text(goalsDescription)
+                    .font(.system(size: 13))
+                    .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+            }
+            .padding(UlyssesDesign.Spacing.md)
+            .background(UlyssesDesign.Colors.hover.opacity(0.2))
+            .cornerRadius(UlyssesDesign.CornerRadius.medium)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
