@@ -26,6 +26,7 @@
         <attribute name="sortOrder" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
         <attribute name="title" optional="YES" attributeType="String"/>
         <attribute name="wordCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="baselineWordCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
         <relationship name="annotations" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Annotation" inverseName="sheet" inverseEntity="Annotation"/>
         <relationship name="goals" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Goal" inverseName="sheet" inverseEntity="Goal"/>
         <relationship name="group" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Group" inverseName="sheets" inverseEntity="Group"/>
@@ -111,15 +112,44 @@
         <attribute name="wasCompleted" optional="YES" attributeType="Boolean" defaultValue="NO" usesScalarValueType="YES"/>
         <relationship name="goal" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Goal" inverseName="history" inverseEntity="Goal"/>
     </entity>
+    <entity name="WritingSession" representedClassName="WritingSession" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="startTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="duration" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="wordsWritten" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="presetName" optional="YES" attributeType="String"/>
+        <relationship name="sessionGoals" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="SessionGoal" inverseName="session" inverseEntity="SessionGoal"/>
+    </entity>
+    <entity name="SessionGoal" representedClassName="SessionGoal" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="goalType" optional="YES" attributeType="String" defaultValue="words"/>
+        <attribute name="targetCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="currentCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="isCompleted" optional="YES" attributeType="Boolean" defaultValue="NO" usesScalarValueType="YES"/>
+        <relationship name="session" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WritingSession" inverseName="sessionGoals" inverseEntity="WritingSession"/>
+        <relationship name="preset" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="SessionGoalPreset" inverseName="templateGoals" inverseEntity="SessionGoalPreset"/>
+    </entity>
+    <entity name="SessionGoalPreset" representedClassName="SessionGoalPreset" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="lastUsedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="isBuiltIn" optional="YES" attributeType="Boolean" defaultValue="NO" usesScalarValueType="YES"/>
+        <relationship name="templateGoals" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="SessionGoal" inverseName="preset" inverseEntity="SessionGoal"/>
+    </entity>
     <elements>
         <element name="Annotation" positionX="556" positionY="-18" width="128" height="149"/>
         <element name="Goal" positionX="1132" positionY="-18" width="128" height="299"/>
         <element name="GoalHistory" positionX="1276" positionY="-18" width="128" height="134"/>
         <element name="Group" positionX="-63" positionY="-18" width="128" height="164"/>
         <element name="Note" positionX="700" positionY="-18" width="128" height="149"/>
-        <element name="Sheet" positionX="144" positionY="-18" width="128" height="239"/>
+        <element name="SessionGoal" positionX="1420" positionY="200" width="128" height="149"/>
+        <element name="SessionGoalPreset" positionX="1564" positionY="200" width="128" height="134"/>
+        <element name="Sheet" positionX="144" positionY="-18" width="128" height="254"/>
         <element name="SheetTag" positionX="844" positionY="-18" width="128" height="119"/>
         <element name="Tag" positionX="988" positionY="-18" width="128" height="224"/>
         <element name="Template" positionX="350" positionY="-18" width="128" height="209"/>
+        <element name="WritingSession" positionX="1276" positionY="200" width="128" height="149"/>
     </elements>
 </model>
