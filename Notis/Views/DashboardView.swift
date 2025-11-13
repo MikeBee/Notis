@@ -496,14 +496,13 @@ struct ProgressContent: View {
 
         .sheet(isPresented: $showingSessionDialog) {
             SessionStartDialog(
-                presets: sessionService.availablePresets,
-                recentPresets: sessionService.getRecentPresets(),
+                sessionService: sessionService,
                 onStartWithPreset: { preset in
                     sessionService.startSession(withPreset: preset)
                     showingSessionDialog = false
                 },
-                onStartCustom: { goals in
-                    sessionService.startSessionWithCustomGoals(name: "Custom Session", goals: goals)
+                onStartCustom: { name, goals in
+                    sessionService.startSessionWithCustomGoals(name: name, goals: goals)
                     showingSessionDialog = false
                 }
             )
@@ -1927,13 +1926,22 @@ struct SessionGoalProgressRow: View {
 }
 
 struct SessionStartDialog: View {
-    let presets: [SessionGoalPreset]
-    let recentPresets: [SessionGoalPreset]
+    @ObservedObject var sessionService: SessionManagementService
     let onStartWithPreset: (SessionGoalPreset) -> Void
-    let onStartCustom: ([(type: GoalType, target: Int32)]) -> Void
+    let onStartCustom: (String, [(type: GoalType, target: Int32)]) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @State private var showingCustomSession = false
+    @State private var editingPreset: SessionGoalPreset?
+    @State private var showingEditDialog = false
+
+    private var presets: [SessionGoalPreset] {
+        sessionService.availablePresets
+    }
+
+    private var recentPresets: [SessionGoalPreset] {
+        sessionService.getRecentPresets()
+    }
     
     var body: some View {
         NavigationView {
@@ -1948,9 +1956,19 @@ struct SessionStartDialog: View {
                                 .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
                             
                             ForEach(recentPresets, id: \.id) { preset in
-                                PresetCard(preset: preset) {
-                                    onStartWithPreset(preset)
-                                }
+                                PresetCard(
+                                    preset: preset,
+                                    onSelect: {
+                                        onStartWithPreset(preset)
+                                    },
+                                    onEdit: {
+                                        editingPreset = preset
+                                        showingEditDialog = true
+                                    },
+                                    onDelete: preset.isBuiltIn ? nil : {
+                                        deletePreset(preset)
+                                    }
+                                )
                             }
                         }
                     }
@@ -1963,9 +1981,19 @@ struct SessionStartDialog: View {
                             .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
 
                         ForEach(presets, id: \.id) { preset in
-                            PresetCard(preset: preset) {
-                                onStartWithPreset(preset)
-                            }
+                            PresetCard(
+                                preset: preset,
+                                onSelect: {
+                                    onStartWithPreset(preset)
+                                },
+                                onEdit: {
+                                    editingPreset = preset
+                                    showingEditDialog = true
+                                },
+                                onDelete: preset.isBuiltIn ? nil : {
+                                    deletePreset(preset)
+                                }
+                            )
                         }
                     }
 
@@ -2012,19 +2040,37 @@ struct SessionStartDialog: View {
                 }
             }
             .sheet(isPresented: $showingCustomSession) {
-                CustomSessionCreationDialog(onStart: { goals in
-                    onStartCustom(goals)
+                CustomSessionCreationDialog(onStart: { name, goals in
+                    onStartCustom(name, goals)
                     showingCustomSession = false
                     dismiss()
                 })
             }
+            .sheet(isPresented: $showingEditDialog) {
+                if let preset = editingPreset {
+                    EditPresetDialog(
+                        preset: preset,
+                        sessionService: sessionService,
+                        onSave: {
+                            showingEditDialog = false
+                            editingPreset = nil
+                        }
+                    )
+                }
+            }
         }
+    }
+
+    private func deletePreset(_ preset: SessionGoalPreset) {
+        sessionService.deletePreset(preset)
     }
 }
 
 struct PresetCard: View {
     let preset: SessionGoalPreset
     let onSelect: () -> Void
+    let onEdit: (() -> Void)?
+    let onDelete: (() -> Void)?
     @Environment(\.colorScheme) private var colorScheme
     
     private var goalsDescription: String {
@@ -2069,14 +2115,36 @@ struct PresetCard: View {
             .cornerRadius(UlyssesDesign.CornerRadius.medium)
         }
         .buttonStyle(PlainButtonStyle())
+        .contextMenu {
+            if preset.isBuiltIn {
+                Button {
+                    onEdit?()
+                } label: {
+                    Label("Duplicate and Edit", systemImage: "doc.on.doc")
+                }
+            } else {
+                Button {
+                    onEdit?()
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+
+                Button(role: .destructive) {
+                    onDelete?()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
     }
 }
 
 struct CustomSessionCreationDialog: View {
-    let onStart: ([(type: GoalType, target: Int32)]) -> Void
+    let onStart: (String, [(type: GoalType, target: Int32)]) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
+    @State private var sessionName = ""
     @State private var wordGoalEnabled = true
     @State private var wordGoalTarget = "500"
     @State private var timeGoalEnabled = false
@@ -2087,6 +2155,11 @@ struct CustomSessionCreationDialog: View {
     var body: some View {
         NavigationView {
             Form {
+                Section(header: Text("Session Name")) {
+                    TextField("My Writing Session", text: $sessionName)
+                        .autocapitalization(.words)
+                }
+
                 Section(header: Text("Session Goals")) {
                     // Words Goal
                     Toggle(isOn: $wordGoalEnabled) {
@@ -2171,9 +2244,10 @@ struct CustomSessionCreationDialog: View {
     }
 
     private var hasValidGoal: Bool {
-        (wordGoalEnabled && Int32(wordGoalTarget) ?? 0 > 0) ||
-        (timeGoalEnabled && Int32(timeGoalTarget) ?? 0 > 0) ||
-        (characterGoalEnabled && Int32(characterGoalTarget) ?? 0 > 0)
+        !sessionName.trimmingCharacters(in: .whitespaces).isEmpty &&
+        ((wordGoalEnabled && Int32(wordGoalTarget) ?? 0 > 0) ||
+         (timeGoalEnabled && Int32(timeGoalTarget) ?? 0 > 0) ||
+         (characterGoalEnabled && Int32(characterGoalTarget) ?? 0 > 0))
     }
 
     private func startSession() {
@@ -2192,6 +2266,176 @@ struct CustomSessionCreationDialog: View {
         }
 
         guard !goals.isEmpty else { return }
-        onStart(goals)
+        let name = sessionName.trimmingCharacters(in: .whitespaces)
+        onStart(name, goals)
+    }
+}
+
+struct EditPresetDialog: View {
+    let preset: SessionGoalPreset
+    @ObservedObject var sessionService: SessionManagementService
+    let onSave: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var presetName = ""
+    @State private var wordGoalEnabled = false
+    @State private var wordGoalTarget = "500"
+    @State private var timeGoalEnabled = false
+    @State private var timeGoalTarget = "30"
+    @State private var characterGoalEnabled = false
+    @State private var characterGoalTarget = "2000"
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Preset Name")) {
+                    TextField("My Writing Preset", text: $presetName)
+                        .autocapitalization(.words)
+                }
+
+                Section(header: Text("Goals")) {
+                    // Words Goal
+                    Toggle(isOn: $wordGoalEnabled) {
+                        HStack {
+                            Image(systemName: "textformat")
+                                .foregroundColor(UlyssesDesign.Colors.accent)
+                            Text("Words")
+                        }
+                    }
+
+                    if wordGoalEnabled {
+                        HStack {
+                            Text("Target")
+                                .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                            TextField("500", text: $wordGoalTarget)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+
+                    // Time Goal
+                    Toggle(isOn: $timeGoalEnabled) {
+                        HStack {
+                            Image(systemName: "clock")
+                                .foregroundColor(UlyssesDesign.Colors.accent)
+                            Text("Time (minutes)")
+                        }
+                    }
+
+                    if timeGoalEnabled {
+                        HStack {
+                            Text("Target")
+                                .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                            TextField("30", text: $timeGoalTarget)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+
+                    // Characters Goal
+                    Toggle(isOn: $characterGoalEnabled) {
+                        HStack {
+                            Image(systemName: "character")
+                                .foregroundColor(UlyssesDesign.Colors.accent)
+                            Text("Characters")
+                        }
+                    }
+
+                    if characterGoalEnabled {
+                        HStack {
+                            Text("Target")
+                                .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                            TextField("2000", text: $characterGoalTarget)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+
+                Section {
+                    Button(action: savePreset) {
+                        HStack {
+                            Spacer()
+                            Text(preset.isBuiltIn ? "Duplicate and Save" : "Save Changes")
+                                .fontWeight(.semibold)
+                            Spacer()
+                        }
+                    }
+                    .disabled(!hasValidGoal)
+                }
+            }
+            .navigationTitle(preset.isBuiltIn ? "Duplicate Preset" : "Edit Preset")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                loadPresetData()
+            }
+        }
+    }
+
+    private var hasValidGoal: Bool {
+        !presetName.trimmingCharacters(in: .whitespaces).isEmpty &&
+        ((wordGoalEnabled && Int32(wordGoalTarget) ?? 0 > 0) ||
+         (timeGoalEnabled && Int32(timeGoalTarget) ?? 0 > 0) ||
+         (characterGoalEnabled && Int32(characterGoalTarget) ?? 0 > 0))
+    }
+
+    private func loadPresetData() {
+        presetName = preset.name ?? ""
+
+        if let goals = preset.templateGoals as? Set<SessionGoal> {
+            for goal in goals {
+                guard let goalType = GoalType(rawValue: goal.goalType ?? "") else { continue }
+
+                switch goalType {
+                case .words:
+                    wordGoalEnabled = true
+                    wordGoalTarget = String(goal.targetCount)
+                case .time:
+                    timeGoalEnabled = true
+                    timeGoalTarget = String(goal.targetCount)
+                case .characters:
+                    characterGoalEnabled = true
+                    characterGoalTarget = String(goal.targetCount)
+                }
+            }
+        }
+    }
+
+    private func savePreset() {
+        var goals: [(type: GoalType, target: Int32)] = []
+
+        if wordGoalEnabled, let target = Int32(wordGoalTarget), target > 0 {
+            goals.append((.words, target))
+        }
+
+        if timeGoalEnabled, let target = Int32(timeGoalTarget), target > 0 {
+            goals.append((.time, target))
+        }
+
+        if characterGoalEnabled, let target = Int32(characterGoalTarget), target > 0 {
+            goals.append((.characters, target))
+        }
+
+        guard !goals.isEmpty else { return }
+        let name = presetName.trimmingCharacters(in: .whitespaces)
+
+        if preset.isBuiltIn {
+            // Duplicate the built-in preset
+            _ = sessionService.duplicatePreset(preset, name: name)
+        } else {
+            // Update the existing preset
+            sessionService.updatePreset(preset, name: name, goals: goals)
+        }
+
+        onSave()
+        dismiss()
     }
 }
