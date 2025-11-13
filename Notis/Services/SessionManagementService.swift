@@ -24,6 +24,61 @@ class SessionManagementService: ObservableObject {
     private init() {
         loadPresets()
         createBuiltInPresetsIfNeeded()
+
+        // Observe Core Data context saves to update session goals automatically
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(contextDidSave(_:)),
+            name: .NSManagedObjectContextDidSave,
+            object: viewContext
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func contextDidSave(_ notification: Notification) {
+        guard isSessionActive, let userInfo = notification.userInfo else { return }
+
+        // Check if any Sheet objects were updated
+        if let updatedObjects = userInfo[NSUpdatedObjectsKey] as? Set<NSManagedObject> {
+            let updatedSheets = updatedObjects.compactMap { $0 as? Sheet }
+            if !updatedSheets.isEmpty {
+                DispatchQueue.main.async {
+                    self.updateSessionGoalsFromSheets()
+                }
+            }
+        }
+    }
+
+    private func updateSessionGoalsFromSheets() {
+        guard isSessionActive else { return }
+
+        // Update all session goals
+        for goal in sessionGoals {
+            guard let goalType = GoalType(rawValue: goal.goalType ?? "words") else { continue }
+
+            switch goalType {
+            case .words:
+                goal.currentCount = calculateSessionWordCount()
+            case .characters:
+                goal.currentCount = calculateSessionCharacterCount()
+            case .time:
+                if let session = activeSession, let startTime = session.startTime {
+                    let elapsed = Date().timeIntervalSince(startTime)
+                    goal.currentCount = Int32(elapsed / 60)
+                }
+            }
+        }
+
+        do {
+            try viewContext.save()
+            // Trigger SwiftUI update by reassigning the array
+            sessionGoals = sessionGoals
+        } catch {
+            print("Failed to update session goals: \(error)")
+        }
     }
 
     // MARK: - Session Control
@@ -142,17 +197,18 @@ class SessionManagementService: ObservableObject {
     func updateSessionProgress() {
         guard isSessionActive, let session = activeSession else { return }
 
-        for goal in sessionGoals {
-            updateSessionGoal(goal)
+        // Only update time goals here (word/character goals update automatically via Core Data observer)
+        for goal in sessionGoals where goal.goalType == "time" {
+            if let startTime = session.startTime {
+                let elapsed = Date().timeIntervalSince(startTime)
+                goal.currentCount = Int32(elapsed / 60)
+            }
         }
 
         do {
             try viewContext.save()
-
-            // Reload goals from Core Data to trigger SwiftUI update
-            if let goals = session.sessionGoals as? Set<SessionGoal> {
-                sessionGoals = Array(goals).sorted { ($0.id?.uuidString ?? "") < ($1.id?.uuidString ?? "") }
-            }
+            // Trigger SwiftUI update
+            sessionGoals = sessionGoals
         } catch {
             print("Failed to save session progress: \(error)")
         }
