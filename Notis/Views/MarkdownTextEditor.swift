@@ -659,6 +659,7 @@ struct MarkdownTextEditor: View {
                                         updateCursorPosition(textView.selectedRange)
                                     }
                                 }
+                            }
                             .onAppear {
                                 // Configure TextEditor for stability (only once)
                                 if !hasConfiguredTextView {
