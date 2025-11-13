@@ -325,7 +325,34 @@ class GoalsService: ObservableObject {
     
     private func getWordCountForTag(_ tag: Tag) -> Int32 {
         guard let sheetTags = tag.sheetTags as? Set<SheetTag> else { return 0 }
-        return sheetTags.compactMap { $0.sheet?.wordCount }.reduce(0, +)
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        var totalDailyWords: Int32 = 0
+
+        for sheetTag in sheetTags {
+            guard let sheet = sheetTag.sheet, !sheet.isInTrash else { continue }
+
+            // Check if sheet was created today
+            let isCreatedToday: Bool
+            if let createdAt = sheet.createdAt {
+                let createdDay = calendar.startOfDay(for: createdAt)
+                isCreatedToday = createdDay >= today
+            } else {
+                isCreatedToday = false
+            }
+
+            if isCreatedToday {
+                // New sheet created today - count all words
+                totalDailyWords += sheet.wordCount
+            } else {
+                // Existing sheet - count delta from baseline
+                let delta = sheet.wordCount - sheet.baselineWordCount
+                totalDailyWords += max(0, delta)
+            }
+        }
+
+        return totalDailyWords
     }
     
     private func getCharacterCountForTag(_ tag: Tag) -> Int32 {
@@ -337,10 +364,36 @@ class GoalsService: ObservableObject {
         let context = PersistenceController.shared.container.viewContext
         let request: NSFetchRequest<Sheet> = Sheet.fetchRequest()
         request.predicate = NSPredicate(format: "isInTrash == NO")
-        
+
         do {
             let sheets = try context.fetch(request)
-            return sheets.reduce(0) { $0 + $1.wordCount }
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+
+            var totalDailyWords: Int32 = 0
+
+            for sheet in sheets {
+                // Check if sheet was created today
+                let isCreatedToday: Bool
+                if let createdAt = sheet.createdAt {
+                    let createdDay = calendar.startOfDay(for: createdAt)
+                    isCreatedToday = createdDay >= today
+                } else {
+                    isCreatedToday = false
+                }
+
+                if isCreatedToday {
+                    // New sheet created today - count all words
+                    totalDailyWords += sheet.wordCount
+                } else {
+                    // Existing sheet - count delta from baseline
+                    let delta = sheet.wordCount - sheet.baselineWordCount
+                    // Clamp negative deltas to 0 (deleted words don't count negatively)
+                    totalDailyWords += max(0, delta)
+                }
+            }
+
+            return totalDailyWords
         } catch {
             print("Failed to fetch sheets for total word count: \(error)")
             return 0
@@ -388,6 +441,8 @@ class GoalsService: ObservableObject {
             let calendar = Calendar.current
             let today = calendar.startOfDay(for: Date())
 
+            var shouldResetBaselines = false
+
             for goal in goals {
                 // All goals are now daily recurring goals (no deadlines)
 
@@ -399,17 +454,41 @@ class GoalsService: ObservableObject {
                     if lastResetDay < today {
                         saveGoalHistory(for: goal, date: lastResetDay)
                         resetGoal(goal)
+                        shouldResetBaselines = true
                     }
                 } else {
                     // No last reset date, initialize it
                     goal.lastResetDate = Date()
+                    shouldResetBaselines = true
                 }
+            }
+
+            // Store baseline word counts for all sheets when day resets
+            if shouldResetBaselines {
+                storeSheetBaselines()
             }
 
             try context.save()
             objectWillChange.send()
         } catch {
             print("Failed to check and reset daily goals: \(error)")
+        }
+    }
+
+    private func storeSheetBaselines() {
+        let context = PersistenceController.shared.container.viewContext
+        let sheetRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+        sheetRequest.predicate = NSPredicate(format: "isInTrash == NO")
+
+        do {
+            let sheets = try context.fetch(sheetRequest)
+            for sheet in sheets {
+                // Store current word count as baseline for the new day
+                sheet.baselineWordCount = sheet.wordCount
+            }
+            try context.save()
+        } catch {
+            print("Failed to store sheet baselines: \(error)")
         }
     }
 
