@@ -99,6 +99,19 @@ struct MaintenanceIssue {
     }
 }
 
+struct StorageStatistics {
+    let totalSheets: Int
+    let markdownStorageSheets: Int
+    let coreDataOnlySheets: Int
+    let emptySheets: Int
+    let trashedSheets: Int
+
+    var markdownPercentage: Double {
+        guard totalSheets > 0 else { return 0 }
+        return Double(markdownStorageSheets) / Double(totalSheets) * 100
+    }
+}
+
 struct MaintenanceReport {
     let id = UUID()
     let timestamp = Date()
@@ -106,15 +119,16 @@ struct MaintenanceReport {
     let fixedIssues: [MaintenanceIssue]
     let duration: TimeInterval
     let totalEntitiesScanned: Int
-    
+    let storageStats: StorageStatistics?
+
     var criticalIssues: [MaintenanceIssue] {
         issues.filter { $0.severity == .critical }
     }
-    
+
     var autoFixableIssues: [MaintenanceIssue] {
         issues.filter { $0.canAutoFix }
     }
-    
+
     var isHealthy: Bool {
         criticalIssues.isEmpty && issues.count < 5
     }
@@ -176,25 +190,31 @@ class DatabaseMaintenance: ObservableObject {
         progress = 0.75
         let migrationIssues = await validateMigrationAndRepair()
         allIssues.append(contentsOf: migrationIssues)
-        
+
+        // Stage 6: Storage Statistics
+        currentOperation = "Collecting storage statistics..."
+        progress = 0.85
+        let storageStats = await collectStorageStatistics()
+
         // Auto-fix if requested
         if autoFix {
             currentOperation = "Auto-fixing issues..."
-            progress = 0.8
+            progress = 0.9
             fixedIssues = await autoFixIssues(allIssues)
             allIssues.removeAll { issue in
                 fixedIssues.contains { $0.id == issue.id }
             }
         }
-        
+
         progress = 1.0
         currentOperation = "Maintenance complete"
-        
+
         let report = MaintenanceReport(
             issues: allIssues,
             fixedIssues: fixedIssues,
             duration: Date().timeIntervalSince(startTime),
-            totalEntitiesScanned: totalScanned
+            totalEntitiesScanned: totalScanned,
+            storageStats: storageStats
         )
         
         lastReport = report
@@ -207,29 +227,94 @@ class DatabaseMaintenance: ObservableObject {
         let startTime = Date()
         currentOperation = "Quick health check..."
         progress = 0.0
-        
+
         var issues: [MaintenanceIssue] = []
-        
+
         // Quick checks only - most critical issues
+        progress = 0.3
         issues.append(contentsOf: await findOrphanedRecords())
+        progress = 0.6
         issues.append(contentsOf: await findMissingIDs())
-        
+
+        // Collect storage statistics
+        currentOperation = "Collecting storage statistics..."
+        progress = 0.8
+        let storageStats = await collectStorageStatistics()
+
         let report = MaintenanceReport(
             issues: issues,
             fixedIssues: [],
             duration: Date().timeIntervalSince(startTime),
-            totalEntitiesScanned: await getTotalEntityCount()
+            totalEntitiesScanned: await getTotalEntityCount(),
+            storageStats: storageStats
         )
-        
+
         progress = 1.0
         currentOperation = "Health check complete"
         lastReport = report
-        
+
         return report
     }
     
     func fixSingleIssue(_ issue: MaintenanceIssue) async -> Bool {
         return await attemptAutoFix(issue)
+    }
+
+    // MARK: - Storage Statistics
+
+    func collectStorageStatistics() async -> StorageStatistics {
+        let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+
+        do {
+            let allSheets = try context.fetch(fetchRequest)
+            let totalSheets = allSheets.count
+
+            var markdownCount = 0
+            var coreDataOnlyCount = 0
+            var emptyCount = 0
+            var trashedCount = 0
+
+            for sheet in allSheets {
+                // Check if trashed
+                if sheet.isInTrash {
+                    trashedCount += 1
+                    continue
+                }
+
+                // Check if content is empty
+                let content = sheet.unifiedContent
+                let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmedContent.isEmpty {
+                    emptyCount += 1
+                    coreDataOnlyCount += 1
+                    continue
+                }
+
+                // Check storage type
+                if sheet.usesMarkdownStorage {
+                    markdownCount += 1
+                } else {
+                    coreDataOnlyCount += 1
+                }
+            }
+
+            return StorageStatistics(
+                totalSheets: totalSheets,
+                markdownStorageSheets: markdownCount,
+                coreDataOnlySheets: coreDataOnlyCount,
+                emptySheets: emptyCount,
+                trashedSheets: trashedCount
+            )
+        } catch {
+            Logger.shared.error("Failed to collect storage statistics", error: error, category: .coreData)
+            return StorageStatistics(
+                totalSheets: 0,
+                markdownStorageSheets: 0,
+                coreDataOnlySheets: 0,
+                emptySheets: 0,
+                trashedSheets: 0
+            )
+        }
     }
 }
 
