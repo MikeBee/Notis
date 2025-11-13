@@ -157,7 +157,7 @@ class SessionManagementService: ObservableObject {
             goal.currentCount = calculateSessionWordCount()
         case .characters:
             goal.currentCount = calculateSessionCharacterCount()
-        case .minutes:
+        case .time:
             if let session = activeSession, let startTime = session.startTime {
                 let elapsed = Date().timeIntervalSince(startTime)
                 goal.currentCount = Int32(elapsed / 60)
@@ -251,8 +251,8 @@ class SessionManagementService: ObservableObject {
         }
 
         // Create built-in presets
-        createBuiltInPreset(name: "Quick Sprint", goals: [(.words, 500), (.minutes, 30)])
-        createBuiltInPreset(name: "Deep Work", goals: [(.words, 2000), (.minutes, 120)])
+        createBuiltInPreset(name: "Quick Sprint", goals: [(.words, 500), (.time, 30)])
+        createBuiltInPreset(name: "Deep Work", goals: [(.words, 2000), (.time, 120)])
         createBuiltInPreset(name: "Morning Pages", goals: [(.words, 750)])
 
         loadPresets() // Reload to include new presets
