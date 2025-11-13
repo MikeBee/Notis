@@ -720,6 +720,7 @@ struct MarkdownTextEditor: View {
                 }
             }
         }
+        .frame(minHeight: 400) // Minimum height to prevent jumping
         .clipped() // Prevent content from overflowing
         .toolbar {
             if !hideShortcutBar {
@@ -996,12 +997,16 @@ struct MarkdownTextEditor: View {
     private func findAndConfigureTextView(in view: UIView) {
         for subview in view.subviews {
             if let textView = subview as? UITextView {
-                // Enable scrolling but hide indicators to avoid nested scrollbar appearance
+                // Configure for smooth scrolling without jumping
                 textView.isScrollEnabled = true
                 textView.showsVerticalScrollIndicator = false
                 textView.showsHorizontalScrollIndicator = false
+                textView.contentInsetAdjustmentBehavior = .never
                 textView.textContainer.widthTracksTextView = true
-                textView.textContainer.heightTracksTextView = true
+                textView.textContainer.heightTracksTextView = false
+
+                // Add bottom padding to ensure text is visible when typing at bottom
+                textView.textContainerInset = UIEdgeInsets(top: 0, left: 0, bottom: 200, right: 0)
 
                 return
             } else {
