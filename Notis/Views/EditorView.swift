@@ -508,7 +508,6 @@ struct MarkdownEditor: View {
                     )
                     .focused($contentFocused)
                     .frame(minHeight: geometry.size.height - 120)
-                    .padding(.bottom, appState.isFullScreen ? 40 : 200)
                     .id(sheet.id ?? UUID())
                     .overlay(alignment: .topLeading) {
                         if isReadOnlyMode {
@@ -527,6 +526,10 @@ struct MarkdownEditor: View {
                             }
                         }
                     }
+
+                    // Scrollable whitespace to keep cursor visible above keyboard and bottom UI
+                    Color.clear
+                        .frame(height: appState.isFullScreen ? 300 : 400)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
