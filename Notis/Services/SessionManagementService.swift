@@ -140,21 +140,22 @@ class SessionManagementService: ObservableObject {
     }
 
     func updateSessionProgress() {
-        guard isSessionActive else { return }
+        guard isSessionActive, let session = activeSession else { return }
 
-        print("Updating session progress...")
         for goal in sessionGoals {
             updateSessionGoal(goal)
-            print("Goal \(goal.goalType ?? "unknown"): current=\(goal.currentCount), target=\(goal.targetCount)")
         }
 
         do {
             try viewContext.save()
+
+            // Reload goals from Core Data to trigger SwiftUI update
+            if let goals = session.sessionGoals as? Set<SessionGoal> {
+                sessionGoals = Array(goals).sorted { ($0.id?.uuidString ?? "") < ($1.id?.uuidString ?? "") }
+            }
         } catch {
             print("Failed to save session progress: \(error)")
         }
-
-        objectWillChange.send()
     }
 
     private func updateSessionGoal(_ goal: SessionGoal) {
@@ -201,27 +202,22 @@ class SessionManagementService: ObservableObject {
             let sheets = try viewContext.fetch(request)
             var sessionWords: Int32 = 0
 
-            print("Calculating session word count. Baselines: \(sessionStartWordCounts)")
-
             for sheet in sheets {
                 guard let sheetID = sheet.id else { continue }
 
                 if let baseline = sessionStartWordCounts[sheetID] {
                     // Existing sheet - calculate delta from session start
                     let delta = sheet.wordCount - baseline
-                    print("  Sheet \(sheetID): current=\(sheet.wordCount), baseline=\(baseline), delta=\(delta)")
                     sessionWords += max(0, delta) // Clamp negative to 0
                 } else {
                     // New sheet created during session
-                    print("  Sheet \(sheetID): new sheet, words=\(sheet.wordCount)")
                     sessionWords += sheet.wordCount
                 }
             }
 
-            print("Total session words: \(sessionWords)")
             return sessionWords
         } catch {
-            print("Failed to calculate session word count: \(error)")
+            print("Session word count calculation error: \(error)")
             return 0
         }
     }

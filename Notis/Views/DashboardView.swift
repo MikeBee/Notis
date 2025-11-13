@@ -1921,7 +1921,9 @@ struct SessionGoalProgressRow: View {
     
     private var progress: Double {
         guard goal.targetCount > 0 else { return 0 }
-        return Double(goal.currentCount) / Double(goal.targetCount)
+        let calculatedProgress = Double(goal.currentCount) / Double(goal.targetCount)
+        guard !calculatedProgress.isNaN && !calculatedProgress.isInfinite else { return 0 }
+        return min(max(calculatedProgress, 0), 1) // Clamp between 0 and 1
     }
     
     var body: some View {
