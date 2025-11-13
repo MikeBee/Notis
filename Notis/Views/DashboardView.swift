@@ -300,7 +300,6 @@ struct ProgressContent: View {
             if sessionService.isSessionActive {
                 ActiveSessionBanner(
                     session: sessionService.activeSession,
-                    sessionGoals: sessionService.sessionGoals,
                     onEndSession: {
                         showingEndSessionDialog = true
                     },
@@ -1810,7 +1809,6 @@ struct DailyGoalListRow: View {
 
 struct ActiveSessionBanner: View {
     let session: WritingSession?
-    let sessionGoals: [SessionGoal]
     let onEndSession: () -> Void
     @ObservedObject var sessionService: SessionManagementService
     @Environment(\.colorScheme) private var colorScheme
@@ -1818,28 +1816,55 @@ struct ActiveSessionBanner: View {
     @State private var timer: Timer?
     @State private var progressTimer: Timer?
 
+    private var allGoalsCompleted: Bool {
+        !sessionService.sessionGoals.isEmpty &&
+        sessionService.sessionGoals.allSatisfy { $0.currentCount >= $0.targetCount }
+    }
+
+    private var bannerGradient: LinearGradient {
+        if allGoalsCompleted {
+            return LinearGradient(
+                colors: [Color.green, Color.green.opacity(0.8)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            return LinearGradient(
+                colors: [UlyssesDesign.Colors.accent, UlyssesDesign.Colors.accent.opacity(0.8)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
     var body: some View {
         VStack(spacing: UlyssesDesign.Spacing.sm) {
             // Header
             HStack {
-                Image(systemName: "timer")
+                Image(systemName: allGoalsCompleted ? "checkmark.circle.fill" : "timer")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
                 Text(session?.presetName ?? "Writing Session")
                     .font(UlyssesDesign.Typography.sheetMeta)
                     .fontWeight(.semibold)
                     .foregroundColor(.white)
-                
+
                 Spacer()
-                
+
+                if allGoalsCompleted {
+                    Text("Goals Complete!")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+
                 Text(elapsedTime)
                     .font(.system(size: 14, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
             }
-            
+
             // Session Goals Progress
-            if !sessionGoals.isEmpty {
-                ForEach(sessionGoals, id: \.id) { goal in
+            if !sessionService.sessionGoals.isEmpty {
+                ForEach(sessionService.sessionGoals, id: \.id) { goal in
                     SessionGoalProgressRow(goal: goal)
                 }
             }
@@ -1861,13 +1886,7 @@ struct ActiveSessionBanner: View {
             .buttonStyle(PlainButtonStyle())
         }
         .padding(UlyssesDesign.Spacing.md)
-        .background(
-            LinearGradient(
-                colors: [UlyssesDesign.Colors.accent, UlyssesDesign.Colors.accent.opacity(0.8)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
+        .background(bannerGradient)
         .cornerRadius(UlyssesDesign.CornerRadius.medium)
         .onAppear {
             updateElapsedTime()
