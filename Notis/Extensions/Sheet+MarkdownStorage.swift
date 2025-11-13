@@ -44,13 +44,6 @@ extension Sheet {
             return content ?? ""
         }
         set {
-            // Don't save to filesystem if sheet is in trash
-            if isInTrash {
-                Logger.shared.debug("Skipping save for trashed sheet: \(title ?? "Untitled")", category: .fileSystem)
-                // Just update in-memory content, don't persist to file
-                return
-            }
-
             // If already using markdown storage, update it
             if let metadata = markdownMetadata {
                 updateMarkdownFile(content: newValue, existingMetadata: metadata)
@@ -66,22 +59,6 @@ extension Sheet {
 
     /// Migrate this sheet to the new markdown storage system
     private func migrateToMarkdownStorage(content newContent: String) {
-        // Don't migrate if sheet is in trash
-        if isInTrash {
-            Logger.shared.debug("Skipping migration for trashed sheet: \(title ?? "Untitled")", category: .fileSystem)
-            return
-        }
-
-        // Don't migrate empty or whitespace-only content
-        let trimmedContent = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedContent.isEmpty else {
-            // Keep empty content in CoreData
-            Logger.shared.debug("Sheet has no content, keeping in CoreData: \(title ?? "Untitled")", category: .fileSystem)
-            content = newContent
-            updateMetadata(with: newContent)
-            return
-        }
-
         guard let uuid = id?.uuidString else {
             Logger.shared.error("Cannot migrate sheet without UUID", category: .fileSystem)
             return
@@ -90,16 +67,32 @@ extension Sheet {
         // Build metadata from CoreData sheet
         var metadata = buildNoteMetadata()
 
+        // Check if content is empty for title generation
+        let trimmedContent = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
+
         // Auto-generate better title if it's "Untitled" or empty
         if metadata.title.isEmpty || metadata.title == "Untitled" {
-            let generatedTitle = generateTitleFromContent(trimmedContent)
-            metadata.title = generatedTitle
+            if trimmedContent.isEmpty {
+                // For empty sheets, use a timestamp-based title
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
+                metadata.title = "Note \(dateFormatter.string(from: Date()))"
+            } else {
+                let generatedTitle = generateTitleFromContent(trimmedContent)
+                metadata.title = generatedTitle
+            }
             // Update CoreData title too
-            title = generatedTitle
+            title = metadata.title
         }
 
-        // Determine folder path from group hierarchy
-        let folderPath = buildFolderPath()
+        // Determine folder path from group hierarchy or .trash
+        let folderPath: String?
+        if isInTrash {
+            folderPath = ".trash"
+            Logger.shared.debug("Migrating trashed sheet to .trash folder: \(title ?? "Untitled")", category: .fileSystem)
+        } else {
+            folderPath = buildFolderPath()
+        }
 
         // Create markdown file
         let result = MarkdownFileService.shared.createFile(
@@ -129,12 +122,16 @@ extension Sheet {
 
         // Update CoreData metadata
         updateMetadata(with: newContent)
+
+        if trimmedContent.isEmpty {
+            Logger.shared.debug("Migrated empty sheet to filesystem: \(title ?? "Untitled")", category: .fileSystem)
+        }
     }
 
     /// Update existing markdown file
     private func updateMarkdownFile(content newContent: String, existingMetadata: NoteMetadata) {
-        // Don't update file if sheet is in trash
-        if isInTrash {
+        guard let oldPath = existingMetadata.path else {
+            Logger.shared.error("Cannot update file without path", category: .fileSystem)
             return
         }
 
@@ -158,26 +155,41 @@ extension Sheet {
         // Update status
         updatedMetadata.status = isFavorite ? "favorite" : "draft"
 
-        // Check if title changed and file needs to be renamed
+        let oldURL = MarkdownFileService.shared.getNotesDirectory().appendingPathComponent(oldPath)
+        let currentFolder = (oldPath as NSString).deletingLastPathComponent
+        let isCurrentlyInTrash = currentFolder == ".trash"
+
+        // Check if trash status changed or title changed
+        let trashStatusChanged = isInTrash != isCurrentlyInTrash
         let titleChanged = existingMetadata.title != newTitle
-        if titleChanged, let oldPath = existingMetadata.path {
-            // Generate new file path with new title
-            let oldURL = MarkdownFileService.shared.getNotesDirectory().appendingPathComponent(oldPath)
-            let folder = (oldPath as NSString).deletingLastPathComponent
-            let folderPath = folder.isEmpty ? nil : folder
 
-            // Generate unique filename for new title
-            let newURL = MarkdownFileService.shared.uniqueFileURL(title: newTitle, folderPath: folderPath)
+        if trashStatusChanged || titleChanged {
+            // Determine target folder
+            let targetFolderPath: String?
+            if isInTrash {
+                targetFolderPath = ".trash"
+                Logger.shared.debug("Moving sheet to .trash folder: \(newTitle)", category: .fileSystem)
+            } else if trashStatusChanged && !isInTrash {
+                // Restored from trash - move back to original group folder
+                targetFolderPath = buildFolderPath()
+                Logger.shared.debug("Restoring sheet from .trash folder: \(newTitle)", category: .fileSystem)
+            } else {
+                // Just a rename in same folder
+                targetFolderPath = currentFolder.isEmpty ? nil : currentFolder
+            }
 
-            // Move the file to new name
+            // Generate new file path
+            let newURL = MarkdownFileService.shared.uniqueFileURL(title: newTitle, folderPath: targetFolderPath)
+
+            // Move the file to new location/name
             if MarkdownFileService.shared.moveFile(from: oldURL, to: newURL),
                let newRelativePath = MarkdownFileService.shared.relativePath(for: newURL) {
                 // Update path in metadata
                 updatedMetadata.path = newRelativePath
-                // Update fileURL in CoreData to point to renamed file
+                // Update fileURL in CoreData to point to new location
                 self.fileURL = newURL.path
             } else {
-                Logger.shared.warning("Failed to rename file from '\(existingMetadata.title)' to '\(newTitle)', keeping original path", category: .fileSystem)
+                Logger.shared.warning("Failed to move file from '\(oldPath)' to '\(targetFolderPath ?? "")/\(newTitle)', keeping original path", category: .fileSystem)
             }
         }
 

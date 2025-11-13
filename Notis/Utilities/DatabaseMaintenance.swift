@@ -278,7 +278,7 @@ class DatabaseMaintenance: ObservableObject {
                 // Check if trashed
                 if sheet.isInTrash {
                     trashedCount += 1
-                    continue
+                    // Continue checking - trashed sheets are now also stored as markdown
                 }
 
                 // Check if content is empty
@@ -286,11 +286,9 @@ class DatabaseMaintenance: ObservableObject {
                 let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmedContent.isEmpty {
                     emptyCount += 1
-                    coreDataOnlyCount += 1
-                    continue
                 }
 
-                // Check storage type
+                // Check storage type (all sheets migrate to markdown, including empty and trashed)
                 if sheet.usesMarkdownStorage {
                     markdownCount += 1
                 } else {
