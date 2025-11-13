@@ -1916,7 +1916,7 @@ struct ActiveSessionBanner: View {
 }
 
 struct SessionGoalProgressRow: View {
-    let goal: SessionGoal
+    @ObservedObject var goal: SessionGoal
     @Environment(\.colorScheme) private var colorScheme
     
     private var progress: Double {
