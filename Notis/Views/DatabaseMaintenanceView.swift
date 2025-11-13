@@ -320,7 +320,53 @@ struct DatabaseMaintenanceView: View {
                         .foregroundColor(.red)
                 }
             }
-            
+
+            // Storage statistics
+            if let stats = report.storageStats {
+                Divider()
+
+                HStack {
+                    Image(systemName: "externaldrive")
+                        .foregroundColor(.accentColor)
+                    Text("Storage Distribution")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Markdown Files")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("\(stats.markdownStorageSheets)")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Core Data Only")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("\(stats.coreDataOnlySheets)")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+
+                    if stats.emptySheets > 0 {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Empty")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Text("\(stats.emptySheets)")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                        }
+                    }
+
+                    Spacer()
+                }
+            }
+
             // Scan info
             HStack {
                 Text("Scanned \(report.totalEntitiesScanned) entities")
@@ -434,7 +480,72 @@ struct MaintenanceReportView: View {
                     Spacer()
                 }
             }
-            
+
+            // Storage statistics detail
+            if let stats = report.storageStats {
+                Divider()
+                    .padding(.vertical, 4)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "externaldrive")
+                            .foregroundColor(.accentColor)
+                        Text("Storage Distribution")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+
+                    HStack(spacing: 20) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Markdown Files")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            HStack(spacing: 4) {
+                                Text("\(stats.markdownStorageSheets)")
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                Text("(\(String(format: "%.1f", stats.markdownPercentage))%)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Core Data Only")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text("\(stats.coreDataOnlySheets)")
+                                .font(.title3)
+                                .fontWeight(.bold)
+                        }
+
+                        if stats.emptySheets > 0 {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Empty Sheets")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text("\(stats.emptySheets)")
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.orange)
+                            }
+                        }
+
+                        if stats.trashedSheets > 0 {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("In Trash")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text("\(stats.trashedSheets)")
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    }
+                }
+            }
+
             HStack {
                 Text("Scanned \(report.totalEntitiesScanned) entities")
                 Spacer()
