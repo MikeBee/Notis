@@ -17,7 +17,7 @@ struct DatabaseMaintenanceView: View {
     @State private var showingFirstDeleteConfirmation = false
     @State private var showingSecondDeleteConfirmation = false
     @State private var deleteConfirmationText = ""
-    
+
     init(context: NSManagedObjectContext) {
         _maintenance = StateObject(wrappedValue: DatabaseMaintenance(context: context))
     }
