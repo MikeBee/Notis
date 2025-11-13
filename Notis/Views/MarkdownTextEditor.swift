@@ -996,8 +996,8 @@ struct MarkdownTextEditor: View {
     private func findAndConfigureTextView(in view: UIView) {
         for subview in view.subviews {
             if let textView = subview as? UITextView {
-                // Disable internal scrolling - let parent ScrollView handle it
-                textView.isScrollEnabled = false
+                // Enable scrolling but hide indicators to avoid nested scrollbar appearance
+                textView.isScrollEnabled = true
                 textView.showsVerticalScrollIndicator = false
                 textView.showsHorizontalScrollIndicator = false
                 textView.textContainer.widthTracksTextView = true
