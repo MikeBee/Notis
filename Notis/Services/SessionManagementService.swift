@@ -142,8 +142,16 @@ class SessionManagementService: ObservableObject {
     func updateSessionProgress() {
         guard isSessionActive else { return }
 
+        print("Updating session progress...")
         for goal in sessionGoals {
             updateSessionGoal(goal)
+            print("Goal \(goal.goalType ?? "unknown"): current=\(goal.currentCount), target=\(goal.targetCount)")
+        }
+
+        do {
+            try viewContext.save()
+        } catch {
+            print("Failed to save session progress: \(error)")
         }
 
         objectWillChange.send()
@@ -193,19 +201,24 @@ class SessionManagementService: ObservableObject {
             let sheets = try viewContext.fetch(request)
             var sessionWords: Int32 = 0
 
+            print("Calculating session word count. Baselines: \(sessionStartWordCounts)")
+
             for sheet in sheets {
                 guard let sheetID = sheet.id else { continue }
 
                 if let baseline = sessionStartWordCounts[sheetID] {
                     // Existing sheet - calculate delta from session start
                     let delta = sheet.wordCount - baseline
+                    print("  Sheet \(sheetID): current=\(sheet.wordCount), baseline=\(baseline), delta=\(delta)")
                     sessionWords += max(0, delta) // Clamp negative to 0
                 } else {
                     // New sheet created during session
+                    print("  Sheet \(sheetID): new sheet, words=\(sheet.wordCount)")
                     sessionWords += sheet.wordCount
                 }
             }
 
+            print("Total session words: \(sessionWords)")
             return sessionWords
         } catch {
             print("Failed to calculate session word count: \(error)")
@@ -320,6 +333,67 @@ class SessionManagementService: ObservableObject {
             loadPresets()
         } catch {
             print("Failed to delete preset: \(error)")
+        }
+    }
+
+    func updatePreset(_ preset: SessionGoalPreset, name: String, goals: [(type: GoalType, target: Int32)]) {
+        guard !preset.isBuiltIn else { return } // Don't update built-in presets
+
+        preset.name = name
+
+        // Remove existing goals
+        if let existingGoals = preset.templateGoals as? Set<SessionGoal> {
+            for goal in existingGoals {
+                viewContext.delete(goal)
+            }
+        }
+
+        // Add new goals
+        for (type, target) in goals {
+            let goal = SessionGoal(context: viewContext)
+            goal.id = UUID()
+            goal.goalType = type.rawValue
+            goal.targetCount = target
+            goal.currentCount = 0
+            goal.isCompleted = false
+            preset.addToTemplateGoals(goal)
+        }
+
+        do {
+            try viewContext.save()
+            loadPresets()
+        } catch {
+            print("Failed to update preset: \(error)")
+        }
+    }
+
+    func duplicatePreset(_ preset: SessionGoalPreset, name: String) -> SessionGoalPreset? {
+        let newPreset = SessionGoalPreset(context: viewContext)
+        newPreset.id = UUID()
+        newPreset.name = name
+        newPreset.createdAt = Date()
+        newPreset.isBuiltIn = false
+
+        // Copy goals from original preset
+        if let originalGoals = preset.templateGoals as? Set<SessionGoal> {
+            for originalGoal in originalGoals {
+                let goal = SessionGoal(context: viewContext)
+                goal.id = UUID()
+                goal.goalType = originalGoal.goalType
+                goal.targetCount = originalGoal.targetCount
+                goal.currentCount = 0
+                goal.isCompleted = false
+                newPreset.addToTemplateGoals(goal)
+            }
+        }
+
+        do {
+            try viewContext.save()
+            loadPresets()
+            return newPreset
+        } catch {
+            print("Failed to duplicate preset: \(error)")
+            return nil
         }
     }
 
