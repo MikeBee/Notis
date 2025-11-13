@@ -508,6 +508,7 @@ struct MarkdownEditor: View {
                     )
                     .focused($contentFocused)
                     .frame(minHeight: geometry.size.height - 120)
+                    .padding(.bottom, appState.isFullScreen ? 40 : 200)
                     .id(sheet.id ?? UUID())
                     .overlay(alignment: .topLeading) {
                         if isReadOnlyMode {

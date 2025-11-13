@@ -488,7 +488,6 @@ class GoalsService: ObservableObject {
             let sheets = try context.fetch(sheetRequest)
             // If we have sheets with content but no baseline, initialize all baselines
             if !sheets.isEmpty {
-                print("Initializing baselines for existing sheets...")
                 storeSheetBaselines()
             }
         } catch {
