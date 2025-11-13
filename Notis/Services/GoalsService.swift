@@ -466,12 +466,33 @@ class GoalsService: ObservableObject {
             // Store baseline word counts for all sheets when day resets
             if shouldResetBaselines {
                 storeSheetBaselines()
+            } else {
+                // Check if baselines have ever been set - if not, initialize them now
+                initializeBaselinesIfNeeded()
             }
 
             try context.save()
             objectWillChange.send()
         } catch {
             print("Failed to check and reset daily goals: \(error)")
+        }
+    }
+
+    private func initializeBaselinesIfNeeded() {
+        let context = PersistenceController.shared.container.viewContext
+        let sheetRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+        sheetRequest.predicate = NSPredicate(format: "isInTrash == NO AND baselineWordCount == 0 AND wordCount > 0")
+        sheetRequest.fetchLimit = 1
+
+        do {
+            let sheets = try context.fetch(sheetRequest)
+            // If we have sheets with content but no baseline, initialize all baselines
+            if !sheets.isEmpty {
+                print("Initializing baselines for existing sheets...")
+                storeSheetBaselines()
+            }
+        } catch {
+            print("Failed to check baseline initialization: \(error)")
         }
     }
 

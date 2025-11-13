@@ -303,7 +303,8 @@ struct ProgressContent: View {
                     sessionGoals: sessionService.sessionGoals,
                     onEndSession: {
                         showingEndSessionDialog = true
-                    }
+                    },
+                    sessionService: sessionService
                 )
             }
 
@@ -1776,12 +1777,13 @@ struct DailyGoalListRow: View {
     }
 
     var body: some View {
-        HStack(spacing: UlyssesDesign.Spacing.md) {
+        HStack(spacing: UlyssesDesign.Spacing.sm) {
             // Date
             Text(dateFormatter.string(from: date))
-                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
-                .frame(width: 60, alignment: .leading)
+                .frame(width: 70, alignment: .leading)
+                .lineLimit(1)
             
             // Success/failure icon
             Image(systemName: history.wasCompleted ? "checkmark" : "xmark")
@@ -1811,9 +1813,11 @@ struct ActiveSessionBanner: View {
     let session: WritingSession?
     let sessionGoals: [SessionGoal]
     let onEndSession: () -> Void
+    @ObservedObject var sessionService: SessionManagementService
     @Environment(\.colorScheme) private var colorScheme
     @State private var elapsedTime: String = "0:00"
     @State private var timer: Timer?
+    @State private var progressTimer: Timer?
 
     var body: some View {
         VStack(spacing: UlyssesDesign.Spacing.sm) {
@@ -1871,9 +1875,16 @@ struct ActiveSessionBanner: View {
             timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
                 updateElapsedTime()
             }
+
+            // Update session progress every 5 seconds
+            sessionService.updateSessionProgress()
+            progressTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+                sessionService.updateSessionProgress()
+            }
         }
         .onDisappear {
             timer?.invalidate()
+            progressTimer?.invalidate()
         }
     }
     
@@ -1922,6 +1933,7 @@ struct SessionStartDialog: View {
     let onStartCustom: ([(type: GoalType, target: Int32)]) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @State private var showingCustomSession = false
     
     var body: some View {
         NavigationView {
@@ -1949,12 +1961,43 @@ struct SessionStartDialog: View {
                             .font(UlyssesDesign.Typography.sheetMeta)
                             .fontWeight(.semibold)
                             .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
-                        
+
                         ForEach(presets, id: \.id) { preset in
                             PresetCard(preset: preset) {
                                 onStartWithPreset(preset)
                             }
                         }
+                    }
+
+                    // Custom Session
+                    VStack(alignment: .leading, spacing: UlyssesDesign.Spacing.sm) {
+                        Text("Custom")
+                            .font(UlyssesDesign.Typography.sheetMeta)
+                            .fontWeight(.semibold)
+                            .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+
+                        Button(action: { showingCustomSession = true }) {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(UlyssesDesign.Colors.accent)
+
+                                Text("Create Custom Session")
+                                    .font(UlyssesDesign.Typography.sheetTitle)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(UlyssesDesign.Colors.tertiary(for: colorScheme))
+                            }
+                            .padding(UlyssesDesign.Spacing.md)
+                            .background(UlyssesDesign.Colors.hover.opacity(0.2))
+                            .cornerRadius(UlyssesDesign.CornerRadius.medium)
+                        }
+                        .buttonStyle(PlainButtonStyle())
                     }
                 }
                 .padding()
@@ -1967,6 +2010,13 @@ struct SessionStartDialog: View {
                         dismiss()
                     }
                 }
+            }
+            .sheet(isPresented: $showingCustomSession) {
+                CustomSessionCreationDialog(onStart: { goals in
+                    onStartCustom(goals)
+                    showingCustomSession = false
+                    dismiss()
+                })
             }
         }
     }
@@ -2019,5 +2069,129 @@ struct PresetCard: View {
             .cornerRadius(UlyssesDesign.CornerRadius.medium)
         }
         .buttonStyle(PlainButtonStyle())
+    }
+}
+
+struct CustomSessionCreationDialog: View {
+    let onStart: ([(type: GoalType, target: Int32)]) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var wordGoalEnabled = true
+    @State private var wordGoalTarget = "500"
+    @State private var timeGoalEnabled = false
+    @State private var timeGoalTarget = "30"
+    @State private var characterGoalEnabled = false
+    @State private var characterGoalTarget = "2000"
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Session Goals")) {
+                    // Words Goal
+                    Toggle(isOn: $wordGoalEnabled) {
+                        HStack {
+                            Image(systemName: "textformat")
+                                .foregroundColor(UlyssesDesign.Colors.accent)
+                            Text("Words")
+                        }
+                    }
+
+                    if wordGoalEnabled {
+                        HStack {
+                            Text("Target")
+                                .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                            TextField("500", text: $wordGoalTarget)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+
+                    // Time Goal
+                    Toggle(isOn: $timeGoalEnabled) {
+                        HStack {
+                            Image(systemName: "clock")
+                                .foregroundColor(UlyssesDesign.Colors.accent)
+                            Text("Time (minutes)")
+                        }
+                    }
+
+                    if timeGoalEnabled {
+                        HStack {
+                            Text("Target")
+                                .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                            TextField("30", text: $timeGoalTarget)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+
+                    // Characters Goal
+                    Toggle(isOn: $characterGoalEnabled) {
+                        HStack {
+                            Image(systemName: "character")
+                                .foregroundColor(UlyssesDesign.Colors.accent)
+                            Text("Characters")
+                        }
+                    }
+
+                    if characterGoalEnabled {
+                        HStack {
+                            Text("Target")
+                                .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                            TextField("2000", text: $characterGoalTarget)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+
+                Section {
+                    Button(action: startSession) {
+                        HStack {
+                            Spacer()
+                            Text("Start Session")
+                                .fontWeight(.semibold)
+                            Spacer()
+                        }
+                    }
+                    .disabled(!hasValidGoal)
+                }
+            }
+            .navigationTitle("Custom Session")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private var hasValidGoal: Bool {
+        (wordGoalEnabled && Int32(wordGoalTarget) ?? 0 > 0) ||
+        (timeGoalEnabled && Int32(timeGoalTarget) ?? 0 > 0) ||
+        (characterGoalEnabled && Int32(characterGoalTarget) ?? 0 > 0)
+    }
+
+    private func startSession() {
+        var goals: [(type: GoalType, target: Int32)] = []
+
+        if wordGoalEnabled, let target = Int32(wordGoalTarget), target > 0 {
+            goals.append((.words, target))
+        }
+
+        if timeGoalEnabled, let target = Int32(timeGoalTarget), target > 0 {
+            goals.append((.time, target))
+        }
+
+        if characterGoalEnabled, let target = Int32(characterGoalTarget), target > 0 {
+            goals.append((.characters, target))
+        }
+
+        guard !goals.isEmpty else { return }
+        onStart(goals)
     }
 }
