@@ -246,7 +246,9 @@ class SessionManagementService: ObservableObject {
             for sheet in sheets {
                 if let sheetID = sheet.id {
                     sessionStartWordCounts[sheetID] = sheet.wordCount
-                    sessionStartCharacterCounts[sheetID] = sheet.characterCount
+                    // Calculate characters from content
+                    let characters = Int32(sheet.unifiedContent.count)
+                    sessionStartCharacterCounts[sheetID] = characters
                 }
             }
         } catch {
@@ -293,13 +295,16 @@ class SessionManagementService: ObservableObject {
             for sheet in sheets {
                 guard let sheetID = sheet.id else { continue }
 
+                // Calculate current character count from content
+                let currentCharacters = Int32(sheet.unifiedContent.count)
+
                 if let baseline = sessionStartCharacterCounts[sheetID] {
                     // Existing sheet - calculate delta from session start
-                    let delta = sheet.characterCount - baseline
+                    let delta = currentCharacters - baseline
                     sessionCharacters += max(0, delta) // Clamp negative to 0
                 } else {
                     // New sheet created during session
-                    sessionCharacters += sheet.characterCount
+                    sessionCharacters += currentCharacters
                 }
             }
 
