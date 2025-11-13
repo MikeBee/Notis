@@ -798,9 +798,6 @@ struct MarkdownTextEditor: View {
             lastTextLength = text.count
             cursorPosition = text.count
 
-            // Reset configuration flag for new instances
-            hasConfiguredTextView = false
-
             // Initialize cursor position tracking
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 updateCurrentLine()
@@ -997,12 +994,18 @@ struct MarkdownTextEditor: View {
         DispatchQueue.main.async {
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                let window = windowScene.windows.first {
-                self.findAndConfigureTextView(in: window)
+                self.findAndConfigureTextView(in: window, depth: 0)
             }
         }
     }
 
-    private func findAndConfigureTextView(in view: UIView) {
+    private func findAndConfigureTextView(in view: UIView, depth: Int) {
+        // Prevent excessive recursion depth (max 15 levels)
+        guard depth < 15 else { return }
+
+        // Early exit if already configured
+        guard !hasConfiguredTextView else { return }
+
         for subview in view.subviews {
             if let textView = subview as? UITextView {
                 // Configure for smooth scrolling without jumping
@@ -1021,7 +1024,7 @@ struct MarkdownTextEditor: View {
 
                 return
             } else {
-                findAndConfigureTextView(in: subview)
+                findAndConfigureTextView(in: subview, depth: depth + 1)
             }
         }
     }
