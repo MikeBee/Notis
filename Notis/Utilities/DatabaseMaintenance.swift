@@ -314,6 +314,55 @@ class DatabaseMaintenance: ObservableObject {
             )
         }
     }
+
+    // MARK: - Bulk Migration
+
+    func migrateAllSheetsToMarkdown() async -> (migrated: Int, failed: Int) {
+        let fetchRequest: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+
+        do {
+            let allSheets = try context.fetch(fetchRequest)
+            var migratedCount = 0
+            var failedCount = 0
+
+            currentOperation = "Migrating sheets to markdown..."
+            progress = 0.0
+
+            for (index, sheet) in allSheets.enumerated() {
+                // Update progress
+                progress = Double(index) / Double(allSheets.count)
+                currentOperation = "Migrating: \(sheet.title ?? "Untitled")..."
+
+                // Skip if already using markdown storage
+                if sheet.usesMarkdownStorage {
+                    continue
+                }
+
+                // Trigger migration by accessing unifiedContent
+                let content = sheet.unifiedContent
+                // Set it back to trigger migration
+                sheet.unifiedContent = content
+
+                // Save context to persist the migration
+                do {
+                    try context.save()
+                    migratedCount += 1
+                    Logger.shared.info("Migrated sheet to markdown: \(sheet.title ?? "Untitled")", category: .fileSystem)
+                } catch {
+                    failedCount += 1
+                    Logger.shared.error("Failed to migrate sheet: \(sheet.title ?? "Untitled")", error: error, category: .fileSystem)
+                }
+            }
+
+            progress = 1.0
+            currentOperation = "Migration complete"
+
+            return (migratedCount, failedCount)
+        } catch {
+            Logger.shared.error("Failed to fetch sheets for migration", error: error, category: .coreData)
+            return (0, 0)
+        }
+    }
 }
 
 // MARK: - Stage 1: Data Integrity Validators

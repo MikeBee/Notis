@@ -17,6 +17,8 @@ struct DatabaseMaintenanceView: View {
     @State private var showingFirstDeleteConfirmation = false
     @State private var showingSecondDeleteConfirmation = false
     @State private var deleteConfirmationText = ""
+    @State private var showingMigrationAlert = false
+    @State private var migrationResult: (migrated: Int, failed: Int)?
     
     init(context: NSManagedObjectContext) {
         _maintenance = StateObject(wrappedValue: DatabaseMaintenance(context: context))
@@ -70,6 +72,19 @@ struct DatabaseMaintenanceView: View {
             }
         } message: {
             Text("Are you absolutely sure? This will permanently erase ALL your data including:\n\n• All sheets and their content\n• All tags and tag associations\n• All goals and progress\n• All annotations\n• All metadata\n\nThis action is IRREVERSIBLE.")
+        }
+        .alert("Migration Complete", isPresented: $showingMigrationAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            if let result = migrationResult {
+                if result.failed == 0 {
+                    Text("Successfully migrated \(result.migrated) sheet(s) to markdown files.")
+                } else {
+                    Text("Migrated \(result.migrated) sheet(s) successfully.\nFailed to migrate \(result.failed) sheet(s).")
+                }
+            } else {
+                Text("Migration completed.")
+            }
         }
     }
 
@@ -226,6 +241,42 @@ struct DatabaseMaintenanceView: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Color(.systemGray4), lineWidth: 1)
+                    )
+                    .cornerRadius(12)
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                // Migrate All Sheets to Markdown
+                Button(action: {
+                    Task {
+                        let result = await maintenance.migrateAllSheetsToMarkdown()
+                        migrationResult = result
+                        showingMigrationAlert = true
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.title2)
+                            .foregroundColor(.blue)
+
+                        VStack(alignment: .leading) {
+                            Text("Migrate All to Markdown")
+                                .font(.headline)
+                            Text("Convert all sheets to markdown files")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .background(Color(.systemBackground))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
                     )
                     .cornerRadius(12)
                 }
