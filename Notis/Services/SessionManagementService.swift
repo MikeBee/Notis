@@ -20,6 +20,7 @@ class SessionManagementService: ObservableObject {
 
     private let viewContext = PersistenceController.shared.container.viewContext
     private var sessionStartWordCounts: [UUID: Int32] = [:] // Sheet ID -> word count at session start
+    private var sessionStartCharacterCounts: [UUID: Int32] = [:] // Sheet ID -> character count at session start
 
     private init() {
         loadPresets()
@@ -188,6 +189,7 @@ class SessionManagementService: ObservableObject {
             sessionGoals = []
             isSessionActive = false
             sessionStartWordCounts.removeAll()
+            sessionStartCharacterCounts.removeAll()
             objectWillChange.send()
         } catch {
             print("Failed to end session: \(error)")
@@ -234,6 +236,7 @@ class SessionManagementService: ObservableObject {
 
     private func storeSessionBaseline() {
         sessionStartWordCounts.removeAll()
+        sessionStartCharacterCounts.removeAll()
 
         let request: NSFetchRequest<Sheet> = Sheet.fetchRequest()
         request.predicate = NSPredicate(format: "isInTrash == NO")
@@ -243,6 +246,7 @@ class SessionManagementService: ObservableObject {
             for sheet in sheets {
                 if let sheetID = sheet.id {
                     sessionStartWordCounts[sheetID] = sheet.wordCount
+                    sessionStartCharacterCounts[sheetID] = sheet.characterCount
                 }
             }
         } catch {
@@ -279,9 +283,31 @@ class SessionManagementService: ObservableObject {
     }
 
     private func calculateSessionCharacterCount() -> Int32 {
-        // Similar to word count, but based on character count
-        // For now, return 0 as character tracking would need baselineCharacterCount
-        return 0
+        let request: NSFetchRequest<Sheet> = Sheet.fetchRequest()
+        request.predicate = NSPredicate(format: "isInTrash == NO")
+
+        do {
+            let sheets = try viewContext.fetch(request)
+            var sessionCharacters: Int32 = 0
+
+            for sheet in sheets {
+                guard let sheetID = sheet.id else { continue }
+
+                if let baseline = sessionStartCharacterCounts[sheetID] {
+                    // Existing sheet - calculate delta from session start
+                    let delta = sheet.characterCount - baseline
+                    sessionCharacters += max(0, delta) // Clamp negative to 0
+                } else {
+                    // New sheet created during session
+                    sessionCharacters += sheet.characterCount
+                }
+            }
+
+            return sessionCharacters
+        } catch {
+            print("Session character count calculation error: \(error)")
+            return 0
+        }
     }
 
     // MARK: - Preset Management
