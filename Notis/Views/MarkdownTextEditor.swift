@@ -577,11 +577,6 @@ struct MarkdownTextEditor: View {
         return result
     }
 
-    private func isSentenceCurrent(_ sentence: SentenceInfo) -> Bool {
-        return NSLocationInRange(cursorPosition, sentence.range) ||
-               (cursorPosition == sentence.range.location + sentence.range.length)
-    }
-
     private var attributedStringForFocusMode: AttributedString {
         var result = AttributedString()
 
@@ -589,7 +584,11 @@ struct MarkdownTextEditor: View {
             var sentenceAttr = AttributedString(sentence.text)
 
             // Dim non-current sentences with a semi-transparent background overlay
-            if !isSentenceCurrent(sentence) {
+            // Use the tracked currentSentenceRange instead of recalculating
+            let isCurrentSentence = (sentence.range.location == currentSentenceRange.location &&
+                                    sentence.range.length == currentSentenceRange.length)
+
+            if !isCurrentSentence {
                 sentenceAttr.backgroundColor = Color(.systemBackground).opacity(0.75)
             }
             // Make the text itself transparent so we only see the background dimming
