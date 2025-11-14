@@ -497,6 +497,7 @@ struct MarkdownTextEditor: View {
     @FocusState private var isTextEditorFocused: Bool
     @AppStorage("showLineNumbers") private var showLineNumbers: Bool = false
     @State private var hasConfiguredTextView = false
+    @State private var currentSentenceRange: NSRange = NSRange(location: 0, length: 0)
     
     private var safeFontSize: CGFloat {
         guard fontSize.isFinite && !fontSize.isNaN && fontSize > 0 else { return 16 }
@@ -548,7 +549,57 @@ struct MarkdownTextEditor: View {
     private var paragraphs: [String] {
         text.components(separatedBy: .newlines)
     }
-    
+
+    private struct SentenceInfo: Identifiable {
+        let id: Int
+        let text: String
+        let range: NSRange
+    }
+
+    private var sentences: [SentenceInfo] {
+        let nsText = text as NSString
+        guard nsText.length > 0 else { return [] }
+
+        var result: [SentenceInfo] = []
+        let tagger = NSLinguisticTagger(tagSchemes: [.tokenType], options: 0)
+        tagger.string = text
+
+        var sentenceId = 0
+        tagger.enumerateTags(in: NSRange(location: 0, length: nsText.length),
+                            unit: .sentence,
+                            scheme: .tokenType,
+                            options: []) { _, range, _ in
+            let sentenceText = nsText.substring(with: range)
+            result.append(SentenceInfo(id: sentenceId, text: sentenceText, range: range))
+            sentenceId += 1
+        }
+
+        return result
+    }
+
+    private func isSentenceCurrent(_ sentence: SentenceInfo) -> Bool {
+        return NSLocationInRange(cursorPosition, sentence.range) ||
+               (cursorPosition == sentence.range.location + sentence.range.length)
+    }
+
+    private var attributedStringForFocusMode: AttributedString {
+        var result = AttributedString()
+
+        for sentence in sentences {
+            var sentenceAttr = AttributedString(sentence.text)
+
+            // Dim non-current sentences with a semi-transparent background overlay
+            if !isSentenceCurrent(sentence) {
+                sentenceAttr.backgroundColor = Color(.systemBackground).opacity(0.75)
+            }
+            // Current sentence has no background (shows underlying text clearly)
+
+            result.append(sentenceAttr)
+        }
+
+        return result
+    }
+
     private func getCurrentLineIndex(from position: Int) -> Int {
         guard position >= 0 else { 
             return 0 
@@ -669,29 +720,19 @@ struct MarkdownTextEditor: View {
                                 }
                             }
                     }
-                    // Focus Mode Overlay - Only active when not in typewriter mode
+                    // Focus Mode Overlay - Sentence-based dimming (Only active when not in typewriter mode)
                     if isFocusMode && !isTypewriterMode {
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
-                                // Create a view that exactly matches the spacing structure
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Rectangle()
-                                        .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.75))
-                                        .frame(height: safeFontSize * safeLineSpacing)
-
-                                    // Add paragraph spacing if not empty
-                                    if !paragraph.isEmpty {
-                                        Rectangle()
-                                            .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.75))
-                                            .frame(height: safeParagraphSpacing)
-                                    }
-                                }
-                                .animation(.easeInOut(duration: 0.2), value: currentLineIndex)
-                            }
+                        // Create an overlay that dims all text except the current sentence
+                        ZStack(alignment: .topLeading) {
+                            // Render all sentences with opacity based on whether they're current
+                            Text(attributedStringForFocusMode)
+                                .font(getFont(size: safeFontSize))
+                                .lineSpacing(safeLineSpacing + safeParagraphSpacing * 0.5)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, effectiveEditorMargins)
+                                .padding(.vertical, 8)
+                                .allowsHitTesting(false)
                         }
-                        .allowsHitTesting(false)
-                        .padding(.horizontal, effectiveEditorMargins)
-                        .padding(.vertical, 8)
                     }
 
                     // Typewriter Mode Overlay - dims all lines except current line
@@ -787,6 +828,17 @@ struct MarkdownTextEditor: View {
                 // Update current line when focus changes
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     updateCurrentLine()
+                    if isFocusMode {
+                        updateCurrentSentence()
+                    }
+                }
+            }
+        }
+        .onChange(of: isFocusMode) { _, enabled in
+            if enabled {
+                // Update sentence tracking when Focus mode is enabled
+                DispatchQueue.main.async {
+                    updateCurrentSentence()
                 }
             }
         }
@@ -801,6 +853,10 @@ struct MarkdownTextEditor: View {
             // Initialize cursor position tracking
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 updateCurrentLine()
+                // Initialize sentence tracking for Focus mode
+                if isFocusMode {
+                    updateCurrentSentence()
+                }
             }
 
         }
@@ -829,7 +885,7 @@ struct MarkdownTextEditor: View {
         // Debounce cursor updates to reduce jumping
         let newPosition = range.location
         guard newPosition != cursorPosition else { return }
-        
+
         DispatchQueue.main.async {
             self.cursorPosition = newPosition
             let newLineIndex = self.getCurrentLineIndex(from: newPosition)
@@ -838,7 +894,52 @@ struct MarkdownTextEditor: View {
                     self.currentLineIndex = newLineIndex
                 }
             }
+
+            // Update current sentence for Focus mode
+            if self.isFocusMode {
+                self.updateCurrentSentence()
+            }
         }
+    }
+
+    private func updateCurrentSentence() {
+        let newSentenceRange = getCurrentSentenceRange(at: cursorPosition)
+        if newSentenceRange.location != currentSentenceRange.location ||
+           newSentenceRange.length != currentSentenceRange.length {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                currentSentenceRange = newSentenceRange
+            }
+        }
+    }
+
+    private func getCurrentSentenceRange(at position: Int) -> NSRange {
+        let nsText = text as NSString
+        guard nsText.length > 0 else { return NSRange(location: 0, length: 0) }
+
+        // Clamp position to valid range
+        let safePosition = max(0, min(position, nsText.length - 1))
+
+        // Use NSLinguisticTagger to find sentence boundaries
+        let tagger = NSLinguisticTagger(tagSchemes: [.tokenType], options: 0)
+        tagger.string = text
+
+        var sentenceRange = NSRange(location: 0, length: 0)
+        tagger.enumerateTags(in: NSRange(location: 0, length: nsText.length),
+                            unit: .sentence,
+                            scheme: .tokenType,
+                            options: [.omitWhitespace]) { _, range, _ in
+            if NSLocationInRange(safePosition, range) {
+                sentenceRange = range
+                return
+            }
+        }
+
+        // Fallback: if no sentence found, return the whole text
+        if sentenceRange.length == 0 {
+            sentenceRange = NSRange(location: 0, length: nsText.length)
+        }
+
+        return sentenceRange
     }
     
     
