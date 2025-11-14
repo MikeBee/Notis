@@ -664,8 +664,8 @@ struct MarkdownTextEditor: View {
                     .frame(width: lineNumberWidth)
                     .padding(.leading, 8)
                     .padding(.vertical, 8)
-                    .padding(.top, isTypewriterMode ? geometry.size.height * 0.25 : 0)
-                    .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.75 : 0)
+                    .padding(.top, isTypewriterMode ? geometry.size.height * 0.45 : 0)
+                    .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.55 : 0)
                 }
 
                 // Editor Content
@@ -696,8 +696,8 @@ struct MarkdownTextEditor: View {
                             .autocorrectionDisabled(disableQuickType)
                             .padding(.horizontal, effectiveEditorMargins)
                             .padding(.vertical, 8)
-                            .padding(.top, isTypewriterMode ? geometry.size.height * 0.25 : 0)
-                            .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.75 : 0)
+                            .padding(.top, isTypewriterMode ? geometry.size.height * 0.45 : 0)
+                            .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.55 : 0)
                             .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidChangeNotification)) { notification in
                                 if let textView = notification.object as? UITextView, textView.isFirstResponder {
                                     let currentText = textView.text ?? ""
@@ -797,8 +797,8 @@ struct MarkdownTextEditor: View {
                         .allowsHitTesting(false)
                         .padding(.horizontal, effectiveEditorMargins)
                         .padding(.vertical, 8)
-                        .padding(.top, geometry.size.height * 0.25)
-                        .padding(.bottom, geometry.size.height * 0.75)
+                        .padding(.top, geometry.size.height * 0.45)
+                        .padding(.bottom, geometry.size.height * 0.55)
                     }
                 }
             }
