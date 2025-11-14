@@ -720,21 +720,41 @@ struct MarkdownTextEditor: View {
                                 }
                             }
                     }
-                    // Focus Mode Overlay - Dims non-current paragraph (Only active when not in typewriter mode)
+
+                    // FOCUS MODE OVERLAY - CURRENTLY DISABLED
+                    // This feature is not fully working and needs more tuning before re-enabling.
+                    //
+                    // PROBLEM: Rectangle overlay heights don't align properly with actual text rendering.
+                    // The alignment varies with font size - works at one size but breaks at others.
+                    //
+                    // APPROACH TRIED: Rectangle-based overlay similar to Typewriter Mode
+                    // - Each line gets a Rectangle with calculated height
+                    // - Current line's rectangle is Color.clear (shows text)
+                    // - Other lines have semi-transparent rectangles (dims text)
+                    //
+                    // CHALLENGE: Finding the right height multiplier
+                    // - Too large (1.05): Rectangle from line above bleeds onto current line
+                    // - Too small (0.85): Rectangles don't fully cover their lines, wrong lines show through
+                    // - The "right" value changes with font size settings
+                    //
+                    // MULTIPLIERS TRIED:
+                    // Line height: 0.85, 0.88, 0.95, 1.05 (all had issues at different font sizes)
+                    // Paragraph spacing: 0.7, 0.8, 0.9 (same problem)
+                    //
+                    // PREVIOUS WORKING CODE (disabled):
+                    /*
                     if isFocusMode && !isTypewriterMode {
-                        // Use same overlay structure as typewriter mode but with lighter opacity
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
                                 VStack(alignment: .leading, spacing: 0) {
                                     Rectangle()
                                         .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.65))
-                                        .frame(height: safeFontSize * safeLineSpacing * 1.05) // Increased to fully cover line
+                                        .frame(height: safeFontSize * safeLineSpacing * 1.05)
 
-                                    // Add paragraph spacing if not empty
                                     if !paragraph.isEmpty {
                                         Rectangle()
                                             .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.65))
-                                            .frame(height: safeParagraphSpacing * 0.9) // Increased to cover spacing
+                                            .frame(height: safeParagraphSpacing * 0.9)
                                     }
                                 }
                                 .animation(.easeInOut(duration: 0.2), value: currentLineIndex)
@@ -744,6 +764,15 @@ struct MarkdownTextEditor: View {
                         .padding(.horizontal, effectiveEditorMargins)
                         .padding(.vertical, 8)
                     }
+                    */
+                    //
+                    // POTENTIAL FUTURE APPROACHES:
+                    // 1. Use UITextView introspection to get actual line rectangles from layout manager
+                    // 2. Use a blur effect instead of solid overlays
+                    // 3. Modify TextEditor's attributed string directly (if possible)
+                    // 4. Accept that Focus Mode = paragraph-based only works at specific font sizes
+                    //
+                    // TODO: Revisit this feature with a more robust solution
 
                     // Typewriter Mode Overlay - dims all lines except current line
                     if isTypewriterMode {
