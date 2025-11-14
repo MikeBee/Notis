@@ -664,8 +664,8 @@ struct MarkdownTextEditor: View {
                     .frame(width: lineNumberWidth)
                     .padding(.leading, 8)
                     .padding(.vertical, 8)
-                    .padding(.top, isTypewriterMode ? geometry.size.height * 0.25 : 0)
-                    .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.75 : 0)
+                    .padding(.top, isTypewriterMode ? geometry.size.height * 0.45 : (isFocusMode ? geometry.size.height * 0.25 : 0))
+                    .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.55 : (isFocusMode ? geometry.size.height * 0.75 : 0))
                 }
 
                 // Editor Content
@@ -696,8 +696,8 @@ struct MarkdownTextEditor: View {
                             .autocorrectionDisabled(disableQuickType)
                             .padding(.horizontal, effectiveEditorMargins)
                             .padding(.vertical, 8)
-                            .padding(.top, isTypewriterMode ? geometry.size.height * 0.25 : 0)
-                            .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.75 : 0)
+                            .padding(.top, isTypewriterMode ? geometry.size.height * 0.45 : (isFocusMode ? geometry.size.height * 0.25 : 0))
+                            .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.55 : (isFocusMode ? geometry.size.height * 0.75 : 0))
                             .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidChangeNotification)) { notification in
                                 if let textView = notification.object as? UITextView, textView.isFirstResponder {
                                     let currentText = textView.text ?? ""
@@ -720,21 +720,22 @@ struct MarkdownTextEditor: View {
                                 }
                             }
                     }
-                    // Focus Mode Overlay - Dims non-current paragraph (Only active when not in typewriter mode)
+
+                    // Focus Mode Overlay - dims all lines except current line (positioned at upper quarter)
+                    // Uses same overlay approach as Typewriter Mode but with upper quarter positioning
                     if isFocusMode && !isTypewriterMode {
-                        // Use same overlay structure as typewriter mode but with lighter opacity
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
                                 VStack(alignment: .leading, spacing: 0) {
                                     Rectangle()
                                         .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.65))
-                                        .frame(height: safeFontSize * safeLineSpacing * 1.05) // Increased to fully cover line
+                                        .frame(height: safeFontSize * safeLineSpacing * 0.95) // Slightly smaller to prevent bleeding
 
-                                    // Add paragraph spacing if not empty
+                                    // Add paragraph spacing if not empty, but smaller
                                     if !paragraph.isEmpty {
                                         Rectangle()
                                             .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.65))
-                                            .frame(height: safeParagraphSpacing * 0.9) // Increased to cover spacing
+                                            .frame(height: safeParagraphSpacing * 0.8) // Reduced to prevent overlap
                                     }
                                 }
                                 .animation(.easeInOut(duration: 0.2), value: currentLineIndex)
@@ -743,7 +744,28 @@ struct MarkdownTextEditor: View {
                         .allowsHitTesting(false)
                         .padding(.horizontal, effectiveEditorMargins)
                         .padding(.vertical, 8)
+                        .padding(.top, geometry.size.height * 0.25)  // Upper quarter positioning
+                        .padding(.bottom, geometry.size.height * 0.75)
                     }
+
+                    // OLDER FOCUS MODE ATTEMPTS - PRESERVED FOR REFERENCE
+                    // These approaches had alignment issues that varied with font size
+                    //
+                    // PROBLEM: Rectangle overlay heights don't align properly with actual text rendering.
+                    // The alignment varies with font size - works at one size but breaks at others.
+                    //
+                    // MULTIPLIERS TRIED:
+                    // Line height: 0.85, 0.88, 0.95, 1.05 (all had issues at different font sizes)
+                    // Paragraph spacing: 0.7, 0.8, 0.9 (same problem)
+                    //
+                    // APPROACH TRIED: Text-based overlay with AttributedString
+                    // - Created transparent text overlay with background colors
+                    // - Problem: Text rendering in Text view doesn't align with TextEditor
+                    //
+                    // POTENTIAL FUTURE APPROACHES:
+                    // 1. Use UITextView introspection to get actual line rectangles from layout manager
+                    // 2. Use a blur effect instead of solid overlays
+                    // 3. Modify TextEditor's attributed string directly (if possible)
 
                     // Typewriter Mode Overlay - dims all lines except current line
                     if isTypewriterMode {
@@ -768,8 +790,8 @@ struct MarkdownTextEditor: View {
                         .allowsHitTesting(false)
                         .padding(.horizontal, effectiveEditorMargins)
                         .padding(.vertical, 8)
-                        .padding(.top, geometry.size.height * 0.25)
-                        .padding(.bottom, geometry.size.height * 0.75)
+                        .padding(.top, geometry.size.height * 0.45)
+                        .padding(.bottom, geometry.size.height * 0.55)
                     }
                 }
             }
