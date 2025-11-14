@@ -720,19 +720,29 @@ struct MarkdownTextEditor: View {
                                 }
                             }
                     }
-                    // Focus Mode Overlay - Sentence-based dimming (Only active when not in typewriter mode)
+                    // Focus Mode Overlay - Dims non-current paragraph (Only active when not in typewriter mode)
                     if isFocusMode && !isTypewriterMode {
-                        // Create an overlay that dims all text except the current sentence
-                        // The overlay text is transparent - we only see the dimming backgrounds
-                        ZStack(alignment: .topLeading) {
-                            Text(attributedStringForFocusMode)
-                                .font(getFont(size: safeFontSize))
-                                .lineSpacing(safeLineSpacing + safeParagraphSpacing * 0.5)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, effectiveEditorMargins)
-                                .padding(.vertical, 8)
-                                .allowsHitTesting(false)
+                        // Use a simple dimming overlay similar to typewriter mode but lighter
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Rectangle()
+                                        .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.65))
+                                        .frame(height: safeFontSize * safeLineSpacing)
+
+                                    // Add paragraph spacing if not empty
+                                    if !paragraph.isEmpty {
+                                        Rectangle()
+                                            .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.65))
+                                            .frame(height: safeParagraphSpacing)
+                                    }
+                                }
+                                .animation(.easeInOut(duration: 0.2), value: currentLineIndex)
+                            }
                         }
+                        .allowsHitTesting(false)
+                        .padding(.horizontal, effectiveEditorMargins)
+                        .padding(.vertical, 8)
                     }
 
                     // Typewriter Mode Overlay - dims all lines except current line
