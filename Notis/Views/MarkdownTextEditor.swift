@@ -722,19 +722,19 @@ struct MarkdownTextEditor: View {
                     }
                     // Focus Mode Overlay - Dims non-current paragraph (Only active when not in typewriter mode)
                     if isFocusMode && !isTypewriterMode {
-                        // Use a simple dimming overlay similar to typewriter mode but lighter
+                        // Use same overlay structure as typewriter mode but with lighter opacity
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
                                 VStack(alignment: .leading, spacing: 0) {
                                     Rectangle()
                                         .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.65))
-                                        .frame(height: safeFontSize * safeLineSpacing * 0.88) // More reduction to prevent bleeding onto next line
+                                        .frame(height: safeFontSize * safeLineSpacing * 0.95) // Match typewriter mode
 
                                     // Add paragraph spacing if not empty, but smaller
                                     if !paragraph.isEmpty {
                                         Rectangle()
                                             .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.65))
-                                            .frame(height: safeParagraphSpacing * 0.7) // Further reduced to prevent overlap
+                                            .frame(height: safeParagraphSpacing * 0.8) // Match typewriter mode
                                     }
                                 }
                                 .animation(.easeInOut(duration: 0.2), value: currentLineIndex)
