@@ -728,13 +728,13 @@ struct MarkdownTextEditor: View {
                                 VStack(alignment: .leading, spacing: 0) {
                                     Rectangle()
                                         .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.65))
-                                        .frame(height: safeFontSize * safeLineSpacing * 0.85) // Reduced to prevent bleeding
+                                        .frame(height: safeFontSize * safeLineSpacing * 1.05) // Increased to fully cover line
 
-                                    // Add paragraph spacing if not empty, but smaller
+                                    // Add paragraph spacing if not empty
                                     if !paragraph.isEmpty {
                                         Rectangle()
                                             .fill(index == currentLineIndex ? Color.clear : Color(.systemBackground).opacity(0.65))
-                                            .frame(height: safeParagraphSpacing * 0.7) // Reduced to prevent overlap
+                                            .frame(height: safeParagraphSpacing * 0.9) // Increased to cover spacing
                                     }
                                 }
                                 .animation(.easeInOut(duration: 0.2), value: currentLineIndex)
