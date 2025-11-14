@@ -592,7 +592,8 @@ struct MarkdownTextEditor: View {
             if !isSentenceCurrent(sentence) {
                 sentenceAttr.backgroundColor = Color(.systemBackground).opacity(0.75)
             }
-            // Current sentence has no background (shows underlying text clearly)
+            // Make the text itself transparent so we only see the background dimming
+            sentenceAttr.foregroundColor = Color.clear
 
             result.append(sentenceAttr)
         }
@@ -723,8 +724,8 @@ struct MarkdownTextEditor: View {
                     // Focus Mode Overlay - Sentence-based dimming (Only active when not in typewriter mode)
                     if isFocusMode && !isTypewriterMode {
                         // Create an overlay that dims all text except the current sentence
+                        // The overlay text is transparent - we only see the dimming backgrounds
                         ZStack(alignment: .topLeading) {
-                            // Render all sentences with opacity based on whether they're current
                             Text(attributedStringForFocusMode)
                                 .font(getFont(size: safeFontSize))
                                 .lineSpacing(safeLineSpacing + safeParagraphSpacing * 0.5)
