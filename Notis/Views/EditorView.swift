@@ -594,6 +594,17 @@ struct MarkdownEditor: View {
         .onChange(of: appState.showSheetList) { _, _ in
             updateViewModeForPaneVisibility()
         }
+        .onChange(of: sheet.modifiedAt) { oldValue, newValue in
+            // Reload content when sheet is modified externally (e.g., from Find & Replace)
+            if oldValue != newValue {
+                DispatchQueue.main.async {
+                    let newContent = sheet.unifiedContent
+                    if newContent != content {
+                        content = newContent
+                    }
+                }
+            }
+        }
     }
     
     private func loadSheetContent() {
