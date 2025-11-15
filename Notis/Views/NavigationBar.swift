@@ -27,15 +27,15 @@ struct NavigationBar: View {
                                 ? UlyssesDesign.Colors.accent
                                 : UlyssesDesign.Colors.secondary(for: colorScheme)
                         )
+                        .frame(width: 28, height: 28)
+                        .background(
+                            appState.paneState == .allPanes
+                                ? UlyssesDesign.Colors.accent.opacity(0.1)
+                                : UlyssesDesign.Colors.hover
+                        )
+                        .cornerRadius(UlyssesDesign.CornerRadius.small)
                 }
                 .buttonStyle(PlainButtonStyle())
-                .frame(width: 28, height: 28)
-                .background(
-                    appState.paneState == .allPanes
-                        ? UlyssesDesign.Colors.accent.opacity(0.1)
-                        : UlyssesDesign.Colors.hover
-                )
-                .cornerRadius(UlyssesDesign.CornerRadius.small)
                 .help(appState.paneState.rawValue)
                 
                 // View mode selector (down arrow)
