@@ -18,24 +18,25 @@ struct NavigationBar: View {
         HStack(spacing: UlyssesDesign.Spacing.md) {
             // Left side controls
             HStack(spacing: UlyssesDesign.Spacing.sm) {
-                // Library toggle (sidebar icon)
-                Button(action: toggleLibrary) {
-                    Image(systemName: "sidebar.left")
+                // Pane state cycler (3 states: All Panes, Middle & Editor, Editor Only)
+                Button(action: cyclePaneState) {
+                    Image(systemName: appState.paneState.icon)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(
-                            appState.showLibrary 
-                                ? UlyssesDesign.Colors.accent 
+                            appState.paneState == .allPanes
+                                ? UlyssesDesign.Colors.accent
                                 : UlyssesDesign.Colors.secondary(for: colorScheme)
                         )
                 }
                 .buttonStyle(PlainButtonStyle())
                 .frame(width: 28, height: 28)
                 .background(
-                    appState.showLibrary 
+                    appState.paneState == .allPanes
                         ? UlyssesDesign.Colors.accent.opacity(0.1)
                         : Color.clear
                 )
                 .cornerRadius(UlyssesDesign.CornerRadius.small)
+                .help(appState.paneState.rawValue)
                 
                 // View mode selector (down arrow)
                 Menu {
@@ -84,63 +85,69 @@ struct NavigationBar: View {
             // Right side controls
             HStack(spacing: UlyssesDesign.Spacing.sm) {
                 // Template button
-                Button(action: showTemplates) {
-                    Image(systemName: "doc.text.magnifyingglass")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                if appState.showTemplateIcon {
+                    Button(action: showTemplates) {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .frame(width: 28, height: 28)
+                    .background(Color.clear)
+                    .cornerRadius(UlyssesDesign.CornerRadius.small)
+                    .help("Templates")
                 }
-                .buttonStyle(PlainButtonStyle())
-                .frame(width: 28, height: 28)
-                .background(Color.clear)
-                .cornerRadius(UlyssesDesign.CornerRadius.small)
-                .help("Templates")
-                
+
                 // Dashboard button
-                Menu {
-                    Button("Overview") {
-                        showDashboard(.overview)
+                if appState.showDashboardIcon {
+                    Menu {
+                        Button("Overview") {
+                            showDashboard(.overview)
+                        }
+                        Button("Progress") {
+                            showDashboard(.progress)
+                        }
+                        Button("Goals") {
+                            showDashboard(.goals)
+                        }
+                        Button("Outline") {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                appState.showOutlinePane.toggle()
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "chart.line.uptrend.xyaxis")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
                     }
-                    Button("Progress") {
-                        showDashboard(.progress)
+                    .buttonStyle(PlainButtonStyle())
+                    .frame(width: 28, height: 28)
+                    .background(Color.clear)
+                    .cornerRadius(UlyssesDesign.CornerRadius.small)
+                    .menuStyle(BorderlessButtonMenuStyle())
+                }
+
+                // Help button
+                if appState.showHelpIcon {
+                    Button(action: showHelp) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                            .scaleEffect(isHelpButtonHovering ? 1.1 : 1.0)
                     }
-                    Button("Goals") {
-                        showDashboard(.goals)
-                    }
-                    Button("Outline") {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            appState.showOutlinePane.toggle()
+                    .buttonStyle(PlainButtonStyle())
+                    .frame(width: 28, height: 28)
+                    .background(UlyssesDesign.Colors.hover.opacity(isHelpButtonHovering ? 1 : 0))
+                    .cornerRadius(UlyssesDesign.CornerRadius.small)
+                    .scaleEffect(isHelpButtonHovering ? 1.05 : 1.0)
+                    .onHover { hovering in
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                            isHelpButtonHovering = hovering
                         }
                     }
-                } label: {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
                 }
-                .buttonStyle(PlainButtonStyle())
-                .frame(width: 28, height: 28)
-                .background(Color.clear)
-                .cornerRadius(UlyssesDesign.CornerRadius.small)
-                .menuStyle(BorderlessButtonMenuStyle())
-                
-                // Help button
-                Button(action: showHelp) {
-                    Image(systemName: "questionmark.circle")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
-                        .scaleEffect(isHelpButtonHovering ? 1.1 : 1.0)
-                }
-                .buttonStyle(PlainButtonStyle())
-                .frame(width: 28, height: 28)
-                .background(UlyssesDesign.Colors.hover.opacity(isHelpButtonHovering ? 1 : 0))
-                .cornerRadius(UlyssesDesign.CornerRadius.small)
-                .scaleEffect(isHelpButtonHovering ? 1.05 : 1.0)
-                .onHover { hovering in
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
-                        isHelpButtonHovering = hovering
-                    }
-                }
-                
-                // Settings button
+
+                // Settings button (always visible - not toggleable)
                 Button(action: openSettings) {
                     Image(systemName: "gearshape")
                         .font(.system(size: 14, weight: .medium))
@@ -174,17 +181,8 @@ struct NavigationBar: View {
         )
     }
     
-    private func toggleLibrary() {
-        withAnimation(.easeInOut(duration: 0.25)) {
-            appState.showLibrary.toggle()
-            
-            // If we're hiding the library and currently in library-only mode,
-            // switch to a sensible view mode
-            if !appState.showLibrary && appState.viewMode == .libraryOnly {
-                appState.viewMode = appState.showSheetList ? .sheetsOnly : .editorOnly
-            }
-        }
-        
+    private func cyclePaneState() {
+        appState.cyclePaneState()
         HapticService.shared.buttonTap()
     }
     

@@ -425,6 +425,76 @@ class AppState: ObservableObject {
     @AppStorage("showSheetNavigation") var showSheetNavigation: Bool = true
     @Published var isFullScreen: Bool = false
 
+    // Icon Visibility Settings
+    @AppStorage("showTemplateIcon") var showTemplateIcon: Bool = true
+    @AppStorage("showDashboardIcon") var showDashboardIcon: Bool = true
+    @AppStorage("showHelpIcon") var showHelpIcon: Bool = true
+    @AppStorage("showOutlineIcon") var showOutlineIcon: Bool = true
+    @AppStorage("showFavoriteIcon") var showFavoriteIcon: Bool = true
+    @AppStorage("showReadOnlyIcon") var showReadOnlyIcon: Bool = true
+    @AppStorage("showFullScreenIcon") var showFullScreenIcon: Bool = true
+    @AppStorage("showNavigationButtons") var showNavigationButtons: Bool = true
+    @AppStorage("showEditorOnlyIcon") var showEditorOnlyIcon: Bool = true
+    @AppStorage("showWordCounter") var showWordCounter: Bool = true
+
+    // Pane State Management (for 3-state cycling)
+    @AppStorage("paneState") private var storedPaneState: String = PaneState.allPanes.rawValue
+
+    var paneState: PaneState {
+        get {
+            PaneState(rawValue: storedPaneState) ?? .allPanes
+        }
+        set {
+            storedPaneState = newValue.rawValue
+            applyPaneState(newValue)
+            objectWillChange.send()
+        }
+    }
+
+    enum PaneState: String, CaseIterable {
+        case allPanes = "All Panes"
+        case middleAndEditor = "Middle & Editor"
+        case editorOnly = "Editor Only"
+
+        var icon: String {
+            switch self {
+            case .allPanes:
+                return "sidebar.left"
+            case .middleAndEditor:
+                return "sidebar.left.and.right"
+            case .editorOnly:
+                return "rectangle"
+            }
+        }
+    }
+
+    func cyclePaneState() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            switch paneState {
+            case .allPanes:
+                paneState = .middleAndEditor
+            case .middleAndEditor:
+                paneState = .editorOnly
+            case .editorOnly:
+                paneState = .allPanes
+            }
+        }
+    }
+
+    func applyPaneState(_ state: PaneState) {
+        switch state {
+        case .allPanes:
+            showLibrary = true
+            showSheetList = true
+        case .middleAndEditor:
+            showLibrary = false
+            showSheetList = true
+        case .editorOnly:
+            showLibrary = false
+            showSheetList = false
+        }
+    }
+
     // Last opened sheet for restoration
     @AppStorage("lastOpenedSheetID") private var lastOpenedSheetID: String = ""
     

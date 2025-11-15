@@ -201,7 +201,7 @@ struct SheetListView: View {
                     
                     // Edit Order Button (for manual sorting)
                     if appState.sheetSortOption == .manual {
-                        Button(action: { 
+                        Button(action: {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 isEditingOrder.toggle()
                             }
@@ -213,7 +213,22 @@ struct SheetListView: View {
                         .buttonStyle(PlainButtonStyle())
                         .help(isEditingOrder ? "Done Editing" : "Edit Sheet Order")
                     }
-                    
+
+                    // Editor Only Button
+                    if appState.showEditorOnlyIcon {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                appState.paneState = .editorOnly
+                            }
+                        }) {
+                            Image(systemName: "rectangle")
+                                .font(.system(size: 21, weight: .medium))
+                                .foregroundColor(appState.paneState == .editorOnly ? .accentColor : .primary)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Editor Only")
+                    }
+
                     Button(action: createNewSheet) {
                         Image(systemName: "plus")
                             .font(.system(size: 21, weight: .medium))

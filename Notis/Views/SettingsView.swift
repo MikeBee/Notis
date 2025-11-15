@@ -341,6 +341,55 @@ struct SettingsView: View {
                     Label("Appearance", systemImage: "paintbrush.fill")
                 }
 
+                // MARK: - Icon Manager
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Global Status Bar Icons")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        Toggle("Template Icon", isOn: $appState.showTemplateIcon)
+                        Toggle("Dashboard Icon", isOn: $appState.showDashboardIcon)
+                        Toggle("Help Icon", isOn: $appState.showHelpIcon)
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Editor Icons")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        Toggle("Navigation Buttons", isOn: $appState.showNavigationButtons)
+                        Toggle("Favorite Icon", isOn: $appState.showFavoriteIcon)
+                        Toggle("Outline Toggle", isOn: $appState.showOutlineIcon)
+                        Toggle("Read-Only Mode", isOn: $appState.showReadOnlyIcon)
+                        Toggle("Full Screen Icon", isOn: $appState.showFullScreenIcon)
+                        Toggle("Word Counter", isOn: $appState.showWordCounter)
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Sheet List Icons")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        Toggle("Editor Only Icon", isOn: $appState.showEditorOnlyIcon)
+                    }
+
+                    Text("Note: Settings icon, Library pane viewer, and Library pane icons cannot be toggled.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 8)
+
+                } header: {
+                    Label("Icon Manager", systemImage: "app.badge")
+                } footer: {
+                    Text("Control which icons appear in the status bar, editor, and sheet list.")
+                        .font(.caption)
+                }
+
                 // MARK: - Writing
                 Section {
                     HStack {
