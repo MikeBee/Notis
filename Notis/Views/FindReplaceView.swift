@@ -32,12 +32,33 @@ struct FindReplaceView: View {
     @State private var currentMatch = 0
     @State private var totalMatches = 0
     @State private var searchResults: [NSRange] = []
-    @State private var showingError = false
-    @State private var errorMessage = ""
+    @State private var showingMessage = false
+    @State private var message = ""
+    @State private var messageType: MessageType = .info
     @State private var recentSearches: [String] = []
     @State private var showHistory = false
 
     @FocusState private var searchFieldFocused: Bool
+
+    enum MessageType {
+        case success, error, info
+
+        var color: Color {
+            switch self {
+            case .success: return .green
+            case .error: return .orange
+            case .info: return .blue
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .success: return "checkmark.circle.fill"
+            case .error: return "exclamationmark.triangle.fill"
+            case .info: return "info.circle.fill"
+            }
+        }
+    }
 
     enum SearchScope: String, CaseIterable {
         case currentNote = "Current Note"
@@ -316,8 +337,7 @@ struct FindReplaceView: View {
                                         searchScope = scope
                                         if scope == .allNotes {
                                             // Future: implement multi-note search
-                                            errorMessage = "Multi-note search coming soon!"
-                                            showingError = true
+                                            showMessage("Multi-note search & replace coming soon!", type: .info, autoDismiss: true)
                                         }
                                     }) {
                                         HStack(spacing: UlyssesDesign.Spacing.xs) {
@@ -340,17 +360,17 @@ struct FindReplaceView: View {
                         }
                     }
 
-                    // Error message
-                    if showingError {
+                    // Message banner (success, error, info)
+                    if showingMessage {
                         HStack {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.orange)
-                            Text(errorMessage)
+                            Image(systemName: messageType.icon)
+                                .foregroundColor(messageType.color)
+                            Text(message)
                                 .font(UlyssesDesign.Typography.caption)
                                 .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
                             Spacer()
                             Button("Dismiss") {
-                                showingError = false
+                                showingMessage = false
                             }
                             .buttonStyle(PlainButtonStyle())
                             .font(UlyssesDesign.Typography.caption)
@@ -358,8 +378,9 @@ struct FindReplaceView: View {
                         .padding(UlyssesDesign.Spacing.md)
                         .background(
                             RoundedRectangle(cornerRadius: UlyssesDesign.CornerRadius.medium)
-                                .fill(Color.orange.opacity(0.1))
+                                .fill(messageType.color.opacity(0.15))
                         )
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
                 .padding(UlyssesDesign.Spacing.xl)
@@ -372,6 +393,25 @@ struct FindReplaceView: View {
         .onAppear {
             searchFieldFocused = true
             loadRecentSearches()
+        }
+    }
+
+    // MARK: - Helper Functions
+
+    private func showMessage(_ text: String, type: MessageType, autoDismiss: Bool = true) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            message = text
+            messageType = type
+            showingMessage = true
+        }
+
+        if autoDismiss {
+            // Auto-dismiss after 3 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showingMessage = false
+                }
+            }
         }
     }
 
@@ -403,8 +443,7 @@ struct FindReplaceView: View {
                 let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsText.length))
                 searchResults = matches.map { $0.range }
             } catch {
-                errorMessage = "Invalid regular expression: \(error.localizedDescription)"
-                showingError = true
+                showMessage("Invalid regular expression: \(error.localizedDescription)", type: .error, autoDismiss: false)
                 return
             }
         } else {
@@ -492,7 +531,11 @@ struct FindReplaceView: View {
 
         let range = searchResults[currentMatch]
         let nsText = text as NSString
+        let oldText = nsText.substring(with: range)
         text = nsText.replacingCharacters(in: range, with: replaceText)
+
+        // Show success message
+        showMessage("Replaced '\(oldText)' with '\(replaceText)'", type: .success, autoDismiss: true)
 
         // Update search results after replacement
         performSearch()
@@ -510,10 +553,11 @@ struct FindReplaceView: View {
 
         // Show confirmation for large replacements
         if searchResults.count > 50 {
-            errorMessage = "This will replace \(searchResults.count) matches. Please use Replace button for large operations."
-            showingError = true
+            showMessage("This will replace \(searchResults.count) matches. Please use Replace button for large operations.", type: .error, autoDismiss: false)
             return
         }
+
+        let matchCount = searchResults.count
 
         // Replace from last to first to maintain ranges
         let sortedResults = searchResults.sorted { $0.location > $1.location }
@@ -528,8 +572,7 @@ struct FindReplaceView: View {
         text = newText
 
         // Show success message
-        errorMessage = "Replaced \(replacementCount) occurrence\(replacementCount == 1 ? "" : "s")"
-        showingError = true
+        showMessage("✓ Replaced \(replacementCount) occurrence\(replacementCount == 1 ? "" : "s") of '\(searchText)' with '\(replaceText)'", type: .success, autoDismiss: true)
 
         performSearch()
     }

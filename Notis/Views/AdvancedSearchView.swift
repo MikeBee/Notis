@@ -16,7 +16,7 @@ struct AdvancedSearchView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var appState: AppState
-    
+
     @State private var searchText = ""
     @State private var selectedGroup: Group?
     @State private var searchInTitles = true
@@ -29,6 +29,7 @@ struct AdvancedSearchView: View {
     @State private var isSearching = false
     @State private var showResults = false
     @State private var searchAnimation = false
+    @State private var showFindReplace = false
     
     enum DateFilter: String, CaseIterable {
         case any = "Any time"
@@ -98,6 +99,25 @@ struct AdvancedSearchView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
                 Spacer()
+
+                Button(action: {
+                    showFindReplace = true
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 14))
+                        Text("Find & Replace")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.accentColor)
+                    .foregroundColor(.white)
+                    .cornerRadius(6)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Open Find & Replace (⌘F)")
+
                 Button("Done") {
                     dismiss()
                 }
@@ -227,6 +247,28 @@ struct AdvancedSearchView: View {
         }
         .frame(width: 500, height: 700)
         .background(windowBackgroundColor)
+        .sheet(isPresented: $showFindReplace) {
+            if let selectedSheet = appState.selectedSheet {
+                FindReplaceView(
+                    text: Binding(
+                        get: { selectedSheet.unifiedContent },
+                        set: { newValue in
+                            // Update content
+                            selectedSheet.unifiedContent = newValue
+                            // Mark as modified
+                            selectedSheet.modifiedAt = Date()
+                            // Save to CoreData (markdown file sync happens via unifiedContent setter)
+                            do {
+                                try viewContext.save()
+                            } catch {
+                                print("Error saving after find & replace: \(error)")
+                            }
+                        }
+                    ),
+                    currentSheet: selectedSheet
+                )
+            }
+        }
     }
     
     private func performSearch() {
