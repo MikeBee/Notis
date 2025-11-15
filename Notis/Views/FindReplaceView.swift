@@ -254,23 +254,37 @@ struct FindReplaceView: View {
                                 .buttonStyle(PlainButtonStyle())
                                 .disabled(searchResults.isEmpty)
                                 .keyboardShortcut(.return, modifiers: .command)
-                                .help("Replace (⌘↩)")
+                                .help("Replace current match (⌘↩)")
 
                                 Button(action: replaceAllMatches) {
-                                    Text("All")
+                                    Text("Replace All")
                                         .font(UlyssesDesign.Typography.buttonLabel)
-                                        .foregroundColor(searchResults.isEmpty ? UlyssesDesign.Colors.tertiary(for: colorScheme) : UlyssesDesign.Colors.accent)
+                                        .foregroundColor(searchResults.isEmpty ? UlyssesDesign.Colors.tertiary(for: colorScheme) : .white)
                                         .padding(.horizontal, UlyssesDesign.Spacing.md)
                                         .padding(.vertical, UlyssesDesign.Spacing.xs)
                                         .background(
                                             RoundedRectangle(cornerRadius: UlyssesDesign.CornerRadius.small)
-                                                .stroke(searchResults.isEmpty ? UlyssesDesign.Colors.border(for: colorScheme) : UlyssesDesign.Colors.accent, lineWidth: 1)
+                                                .fill(searchResults.isEmpty ? UlyssesDesign.Colors.surface(for: colorScheme) : Color.orange)
                                         )
                                 }
                                 .buttonStyle(PlainButtonStyle())
                                 .disabled(searchResults.isEmpty)
                                 .keyboardShortcut(.return, modifiers: [.command, .option])
-                                .help("Replace All (⌘⌥↩)")
+                                .help("Replace all \(totalMatches) matches (⌘⌥↩)")
+                            }
+                        }
+
+                        // Replacement info
+                        if !searchResults.isEmpty {
+                            HStack {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                                Text("Click 'Replace All' to replace all \(totalMatches) matches")
+                                    .font(UlyssesDesign.Typography.caption)
+                                    .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                                    .padding(.leading, UlyssesDesign.Spacing.xs)
+                                Spacer()
                             }
                         }
                     }
@@ -324,41 +338,8 @@ struct FindReplaceView: View {
                         }
                     }
 
-                    // Search Scope (only if we have access to other notes)
-                    if currentSheet != nil {
-                        VStack(alignment: .leading, spacing: UlyssesDesign.Spacing.md) {
-                            Text("Search In")
-                                .font(UlyssesDesign.Typography.caption)
-                                .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
-
-                            HStack(spacing: UlyssesDesign.Spacing.sm) {
-                                ForEach(SearchScope.allCases, id: \.self) { scope in
-                                    Button(action: {
-                                        searchScope = scope
-                                        if scope == .allNotes {
-                                            // Future: implement multi-note search
-                                            showMessage("Multi-note search & replace coming soon!", type: .info, autoDismiss: true)
-                                        }
-                                    }) {
-                                        HStack(spacing: UlyssesDesign.Spacing.xs) {
-                                            Image(systemName: scope.icon)
-                                                .font(.system(size: 12))
-                                            Text(scope.rawValue)
-                                                .font(UlyssesDesign.Typography.caption)
-                                        }
-                                        .foregroundColor(searchScope == scope ? .white : UlyssesDesign.Colors.primary(for: colorScheme))
-                                        .padding(.horizontal, UlyssesDesign.Spacing.md)
-                                        .padding(.vertical, UlyssesDesign.Spacing.xs)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: UlyssesDesign.CornerRadius.small)
-                                                .fill(searchScope == scope ? UlyssesDesign.Colors.accent : UlyssesDesign.Colors.surface(for: colorScheme))
-                                        )
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                }
-                            }
-                        }
-                    }
+                    // Search Scope - Removed for now to avoid confusion
+                    // Multi-note search will be added in a future update
 
                     // Message banner (success, error, info)
                     if showingMessage {
@@ -386,7 +367,7 @@ struct FindReplaceView: View {
                 .padding(UlyssesDesign.Spacing.xl)
             }
         }
-        .frame(width: 500, height: 550)
+        .frame(width: 500, height: 480)
         .background(UlyssesDesign.Colors.background(for: colorScheme))
         .cornerRadius(UlyssesDesign.CornerRadius.large)
         .shadow(color: UlyssesDesign.Shadows.strong, radius: 20)
