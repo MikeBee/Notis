@@ -20,17 +20,17 @@ struct NavigationBar: View {
             HStack(spacing: UlyssesDesign.Spacing.sm) {
                 // Pane state cycler (3 states: All Panes, Middle & Editor, Editor Only)
                 Button(action: cyclePaneState) {
-                    Image(systemName: appState.paneState.icon)
+                    Image(systemName: "sidebar.left")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(
                             appState.paneState == .allPanes
                                 ? UlyssesDesign.Colors.accent
-                                : UlyssesDesign.Colors.secondary(for: colorScheme)
+                                : UlyssesDesign.Colors.primary(for: colorScheme)
                         )
                         .frame(width: 28, height: 28)
                         .background(
                             appState.paneState == .allPanes
-                                ? UlyssesDesign.Colors.accent.opacity(0.1)
+                                ? UlyssesDesign.Colors.accent.opacity(0.15)
                                 : UlyssesDesign.Colors.hover
                         )
                         .cornerRadius(UlyssesDesign.CornerRadius.small)
