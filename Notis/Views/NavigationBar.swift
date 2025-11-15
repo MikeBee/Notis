@@ -33,7 +33,7 @@ struct NavigationBar: View {
                 .background(
                     appState.paneState == .allPanes
                         ? UlyssesDesign.Colors.accent.opacity(0.1)
-                        : Color.clear
+                        : UlyssesDesign.Colors.hover.opacity(0.5)
                 )
                 .cornerRadius(UlyssesDesign.CornerRadius.small)
                 .help(appState.paneState.rawValue)
