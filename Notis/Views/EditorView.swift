@@ -285,13 +285,24 @@ struct EditorView: View {
         .background(Color(.systemBackground))
         .sheet(isPresented: $showFindReplace) {
             if let selectedSheet = appState.selectedSheet {
-                FindReplaceView(text: Binding(
-                    get: { selectedSheet.unifiedContent },
-                    set: { newValue in
-                        selectedSheet.unifiedContent = newValue
-                        try? viewContext.save()
-                    }
-                ))
+                FindReplaceView(
+                    text: Binding(
+                        get: { selectedSheet.unifiedContent },
+                        set: { newValue in
+                            // Update content
+                            selectedSheet.unifiedContent = newValue
+                            // Mark as modified
+                            selectedSheet.modifiedAt = Date()
+                            // Save to CoreData (markdown file sync happens via unifiedContent setter)
+                            do {
+                                try viewContext.save()
+                            } catch {
+                                print("Error saving after find & replace: \(error)")
+                            }
+                        }
+                    ),
+                    currentSheet: selectedSheet
+                )
             }
         }
         .onChange(of: appState.isFullScreen) { _, newValue in
@@ -301,6 +312,14 @@ struct EditorView: View {
                 appState.showSheetList = true
             }
         }
+        .background(
+            // Hidden button to provide ⌘F keyboard shortcut
+            Button("") {
+                showFindReplace = true
+            }
+            .keyboardShortcut("f", modifiers: .command)
+            .hidden()
+        )
     }
     
     private func exportSheet(_ sheet: Sheet) {
