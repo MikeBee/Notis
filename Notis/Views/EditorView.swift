@@ -20,7 +20,7 @@ struct EditorView: View {
     @AppStorage("paragraphSpacing") private var paragraphSpacing: Double = 8
     @AppStorage("fontFamily") private var fontFamily: String = "system"
     @AppStorage("editorMargins") private var editorMargins: Double = 40
-    @AppStorage("showWordCounter") private var showWordCounter: Bool = true
+    // showWordCounter now controlled by appState
     // hideShortcutBar now controlled by appState
     @AppStorage("disableQuickType") private var disableQuickType: Bool = false
     @AppStorage("showTagsPane") private var showTagsPane: Bool = true
@@ -54,52 +54,58 @@ struct EditorView: View {
                     if !appState.isFullScreen {
                         HStack {
                         // Navigation Buttons
-                        HStack(spacing: 8) {
-                            Button(action: {
-                                _ = appState.navigateBackInHistory()
-                            }) {
-                                Image(systemName: "chevron.left")
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(appState.canNavigateBackInHistory() ? .secondary : .secondary.opacity(0.3))
+                        if appState.showNavigationButtons {
+                            HStack(spacing: 8) {
+                                Button(action: {
+                                    _ = appState.navigateBackInHistory()
+                                }) {
+                                    Image(systemName: "chevron.left")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(appState.canNavigateBackInHistory() ? .secondary : .secondary.opacity(0.3))
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .disabled(!appState.canNavigateBackInHistory())
+                                .keyboardShortcut(.leftArrow, modifiers: [.command])
+                                .help("Back in History (⌘←)")
+
+                                Button(action: {
+                                    _ = appState.navigateForwardInHistory()
+                                }) {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(appState.canNavigateForwardInHistory() ? .secondary : .secondary.opacity(0.3))
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .disabled(!appState.canNavigateForwardInHistory())
+                                .keyboardShortcut(.rightArrow, modifiers: [.command])
+                                .help("Forward in History (⌘→)")
                             }
-                            .buttonStyle(PlainButtonStyle())
-                            .disabled(!appState.canNavigateBackInHistory())
-                            .keyboardShortcut(.leftArrow, modifiers: [.command])
-                            .help("Back in History (⌘←)")
-                            
-                            Button(action: {
-                                _ = appState.navigateForwardInHistory()
-                            }) {
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(appState.canNavigateForwardInHistory() ? .secondary : .secondary.opacity(0.3))
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .disabled(!appState.canNavigateForwardInHistory())
-                            .keyboardShortcut(.rightArrow, modifiers: [.command])
-                            .help("Forward in History (⌘→)")
                         }
-                        
+
                         Spacer()
-                        
+
                         // Favorite Button
-                        FavoriteButton(sheet: selectedSheet)
-                        
-                        // Outline Toggle Button
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.25)) {
-                                appState.showOutlinePane.toggle()
-                            }
-                        }) {
-                            Image(systemName: appState.showOutlinePane ? "sidebar.trailing.fill" : "sidebar.trailing")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(appState.showOutlinePane ? .accentColor : .secondary)
+                        if appState.showFavoriteIcon {
+                            FavoriteButton(sheet: selectedSheet)
                         }
-                        .buttonStyle(PlainButtonStyle())
-                        .help(appState.showOutlinePane ? "Hide Outline (⌘O)" : "Show Outline (⌘O)")
-                        
+
+                        // Outline Toggle Button
+                        if appState.showOutlineIcon {
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    appState.showOutlinePane.toggle()
+                                }
+                            }) {
+                                Image(systemName: appState.showOutlinePane ? "sidebar.trailing.fill" : "sidebar.trailing")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(appState.showOutlinePane ? .accentColor : .secondary)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .help(appState.showOutlinePane ? "Hide Outline (⌘O)" : "Show Outline (⌘O)")
+                        }
+
                         // Read-Only Mode Toggle (only show if content exists)
-                        if !selectedSheet.unifiedContent.isEmpty {
+                        if appState.showReadOnlyIcon && !selectedSheet.unifiedContent.isEmpty {
                             Button(action: {
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     isReadOnlyMode.toggle()
@@ -112,16 +118,18 @@ struct EditorView: View {
                             .buttonStyle(PlainButtonStyle())
                             .help(isReadOnlyMode ? "Switch to Edit Mode" : "Switch to Read-Only View")
                         }
-                        
+
                         // Full Screen Button
-                        Button(action: toggleFullScreen) {
-                            Image(systemName: appState.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(.secondary)
+                        if appState.showFullScreenIcon {
+                            Button(action: toggleFullScreen) {
+                                Image(systemName: appState.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .keyboardShortcut("f", modifiers: [.command, .control])
+                            .help(appState.isFullScreen ? "Exit Full Screen" : "Enter Full Screen")
                         }
-                        .buttonStyle(PlainButtonStyle())
-                        .keyboardShortcut("f", modifiers: [.command, .control])
-                        .help(appState.isFullScreen ? "Exit Full Screen" : "Enter Full Screen")
                         
                         // Editor Options Menu
                         Menu {
@@ -204,7 +212,7 @@ struct EditorView: View {
                         )
 
                         // Word Counter at bottom if enabled (hidden in full screen)
-                        if showWordCounter && !appState.isFullScreen {
+                        if appState.showWordCounter && !appState.isFullScreen {
                             WordCounterView(sheet: selectedSheet)
                                 .padding(.horizontal, (appState.viewMode == .threePane && !appState.isFullScreen) ? 20 : CGFloat(safeEditorMargins))
                                 .padding(.bottom, 8)
