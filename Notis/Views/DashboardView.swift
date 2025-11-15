@@ -545,10 +545,14 @@ struct GoalsContent: View {
         goalsService.getTodaysGoals()
     }
     
-    private var allGoalHistoryForToday: [(goal: Goal, history: GoalHistory)] {
+    private var priorDayHistory: [(goal: Goal, history: GoalHistory, date: Date)] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        return goalsService.getAllGoalHistoryForDate(today)
+        // Get recent history and filter out today's entries
+        return goalsService.getAllGoalHistoryRecent(limit: 50).filter { item in
+            let historyDate = calendar.startOfDay(for: item.date)
+            return historyDate < today
+        }
     }
     
     var body: some View {
@@ -706,30 +710,30 @@ struct GoalsContent: View {
     private func historySection() -> some View {
         VStack(spacing: UlyssesDesign.Spacing.md) {
             HStack {
-                Text("Today's Progress")
+                Text("History")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
-                
+
                 Spacer()
-                
+
                 Button("View All") {
                     // Show full history view
                 }
                 .font(.caption)
                 .foregroundColor(UlyssesDesign.Colors.accent)
             }
-            
-            if allGoalHistoryForToday.isEmpty {
+
+            if priorDayHistory.isEmpty {
                 VStack(spacing: UlyssesDesign.Spacing.sm) {
                     Image(systemName: "calendar")
                         .font(.system(size: 32))
                         .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
-                    
-                    Text("No progress today")
+
+                    Text("No prior day goals yet")
                         .font(UlyssesDesign.Typography.sheetMeta)
                         .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
-                    
-                    Text("Complete your goals to see today's progress")
+
+                    Text("Complete your goals each day to see progress")
                         .font(.caption)
                         .foregroundColor(UlyssesDesign.Colors.tertiary(for: colorScheme))
                         .multilineTextAlignment(.center)
@@ -738,8 +742,8 @@ struct GoalsContent: View {
                 .padding(.vertical, UlyssesDesign.Spacing.xl)
             } else {
                 LazyVStack(spacing: UlyssesDesign.Spacing.xs) {
-                    ForEach(allGoalHistoryForToday, id: \.history.id) { item in
-                        DailyGoalListRow(goal: item.goal, history: item.history, date: Date())
+                    ForEach(priorDayHistory, id: \.history.id) { item in
+                        DailyGoalListRow(goal: item.goal, history: item.history, date: item.date)
                     }
                 }
             }
