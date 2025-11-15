@@ -338,8 +338,73 @@ struct FindReplaceView: View {
                         }
                     }
 
-                    // Search Scope - Removed for now to avoid confusion
-                    // Multi-note search will be added in a future update
+                    Divider()
+                        .background(UlyssesDesign.Colors.dividerColor(for: colorScheme))
+
+                    // Search Scope
+                    if currentSheet != nil {
+                        VStack(alignment: .leading, spacing: UlyssesDesign.Spacing.md) {
+                            HStack {
+                                Text("Search Scope")
+                                    .font(UlyssesDesign.Typography.caption)
+                                    .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+
+                                Spacer()
+
+                                Text("Currently searching in: \(searchScope.rawValue)")
+                                    .font(UlyssesDesign.Typography.caption)
+                                    .foregroundColor(UlyssesDesign.Colors.tertiary(for: colorScheme))
+                                    .italic()
+                            }
+
+                            HStack(spacing: UlyssesDesign.Spacing.sm) {
+                                ForEach(SearchScope.allCases, id: \.self) { scope in
+                                    Button(action: {
+                                        if scope == .allNotes {
+                                            // Future: implement multi-note search
+                                            showMessage("Multi-note search & replace coming soon!", type: .info, autoDismiss: true)
+                                        } else {
+                                            searchScope = scope
+                                            performSearch() // Re-run search with new scope
+                                        }
+                                    }) {
+                                        HStack(spacing: UlyssesDesign.Spacing.xs) {
+                                            Image(systemName: scope.icon)
+                                                .font(.system(size: 12))
+                                            Text(scope.rawValue)
+                                                .font(UlyssesDesign.Typography.caption)
+                                        }
+                                        .foregroundColor(searchScope == scope ? .white : UlyssesDesign.Colors.primary(for: colorScheme))
+                                        .padding(.horizontal, UlyssesDesign.Spacing.md)
+                                        .padding(.vertical, UlyssesDesign.Spacing.xs)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: UlyssesDesign.CornerRadius.small)
+                                                .fill(searchScope == scope ? UlyssesDesign.Colors.accent : UlyssesDesign.Colors.surface(for: colorScheme))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: UlyssesDesign.CornerRadius.small)
+                                                .stroke(UlyssesDesign.Colors.border(for: colorScheme), lineWidth: 0.5)
+                                        )
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .disabled(scope == .allNotes) // Disable All Notes until implemented
+                                    .opacity(scope == .allNotes ? 0.5 : 1.0)
+                                }
+                            }
+
+                            if searchScope == .currentNote {
+                                HStack {
+                                    Image(systemName: "info.circle")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                                    Text("Searching only in the currently open note")
+                                        .font(UlyssesDesign.Typography.caption)
+                                        .foregroundColor(UlyssesDesign.Colors.tertiary(for: colorScheme))
+                                    Spacer()
+                                }
+                            }
+                        }
+                    }
 
                     // Message banner (success, error, info)
                     if showingMessage {
@@ -367,7 +432,7 @@ struct FindReplaceView: View {
                 .padding(UlyssesDesign.Spacing.xl)
             }
         }
-        .frame(width: 500, height: 480)
+        .frame(width: 500, height: 580)
         .background(UlyssesDesign.Colors.background(for: colorScheme))
         .cornerRadius(UlyssesDesign.CornerRadius.large)
         .shadow(color: UlyssesDesign.Shadows.strong, radius: 20)
