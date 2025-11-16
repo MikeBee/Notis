@@ -85,6 +85,13 @@ struct CommandPalette: View {
                 action: { openSettings() }
             ),
             Command(
+                id: "keyboard-shortcuts",
+                title: "Keyboard Shortcuts",
+                description: "View and customize keyboard shortcuts",
+                icon: "keyboard",
+                action: { openKeyboardShortcuts() }
+            ),
+            Command(
                 id: "advanced-search",
                 title: "Advanced Search",
                 description: "Search with filters and options",
@@ -272,7 +279,11 @@ struct CommandPalette: View {
     private func openSettings() {
         NotificationCenter.default.post(name: .showSettings, object: nil)
     }
-    
+
+    private func openKeyboardShortcuts() {
+        NotificationCenter.default.post(name: .showKeyboardShortcuts, object: nil)
+    }
+
     private func openAdvancedSearch() {
         NotificationCenter.default.post(name: .showAdvancedSearch, object: nil)
     }

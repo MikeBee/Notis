@@ -186,6 +186,9 @@ struct ContentView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(appState: appState, isPresented: $showSettings)
         }
+        .sheet(isPresented: $showKeyboardShortcuts) {
+            KeyboardShortcutsSettingsView()
+        }
         .sheet(isPresented: $showAdvancedSearch) {
             AdvancedSearchView(appState: appState)
         }
