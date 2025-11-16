@@ -96,8 +96,8 @@ struct EditorView: View {
                                     appState.showOutlinePane.toggle()
                                 }
                             }) {
-                                Image(systemName: appState.showOutlinePane ? "sidebar.trailing.fill" : "sidebar.trailing")
-                                    .font(.system(size: 18, weight: .medium))
+                                Image(systemName: "sidebar.right")
+                                    .font(.system(size: 18, weight: appState.showOutlinePane ? .semibold : .medium))
                                     .foregroundColor(appState.showOutlinePane ? .accentColor : .secondary)
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -215,7 +215,7 @@ struct EditorView: View {
                         if appState.showWordCounter && !appState.isFullScreen {
                             WordCounterView(sheet: selectedSheet)
                                 .padding(.horizontal, (appState.viewMode == .threePane && !appState.isFullScreen) ? 20 : CGFloat(safeEditorMargins))
-                                .padding(.bottom, 8)
+                                .padding(.bottom, 4)
                                 .background(Color(.systemBackground))
                         }
 
@@ -398,7 +398,7 @@ struct WordCounterView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 }
 
@@ -510,8 +510,8 @@ struct MarkdownEditor: View {
                         }
                     }
                     .padding(.horizontal, editorMargins)
-                    .padding(.top, appState.isFullScreen ? 40 : 20)
-                    .padding(.bottom, paragraphSpacing + 12)
+                    .padding(.top, appState.isFullScreen ? 20 : 8)
+                    .padding(.bottom, paragraphSpacing + 4)
 
                     // Content Editor
                     MarkdownTextEditor(
