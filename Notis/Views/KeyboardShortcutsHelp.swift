@@ -73,7 +73,7 @@ struct KeyboardShortcutsHelp: View {
         let shortcut: DisplayShortcut
 
         var body: some View {
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 HStack(spacing: 2) {
                     // Display shortcuts as individual keys
                     ForEach(shortcut.keys.map(String.init), id: \.self) { key in
@@ -176,9 +176,9 @@ struct KeyboardShortcutsHelp: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
 
                 // Search bar
                 HStack {
@@ -197,18 +197,18 @@ struct KeyboardShortcutsHelp: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
                 .background(Color.secondary.opacity(0.1))
-                .cornerRadius(8)
-                .padding(.horizontal, 24)
-                .padding(.bottom, 16)
+                .cornerRadius(6)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
 
                 Divider()
 
                 // Shortcuts content
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 16) {
+                    LazyVStack(alignment: .leading, spacing: 10) {
                         // Keyboard shortcuts from manager
                         ForEach(filteredCategories, id: \.self) { category in
                             let shortcuts = getShortcuts(for: category)
@@ -241,7 +241,7 @@ struct KeyboardShortcutsHelp: View {
 
                                 VStack(spacing: 0) {
                                     ForEach(markdownShortcuts.filter { searchText.isEmpty || $0.0.localizedCaseInsensitiveContains(searchText) || $0.1.localizedCaseInsensitiveContains(searchText) }, id: \.0) { shortcut in
-                                        HStack(spacing: 12) {
+                                        HStack(spacing: 8) {
                                             KeyboardKey(key: shortcut.0)
                                                 .frame(width: 110, alignment: .leading)
 
@@ -258,13 +258,13 @@ struct KeyboardShortcutsHelp: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 16)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
             }
-            .frame(width: 550, height: 600)
+            .frame(width: 520, height: 560)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 10)
                     .fill(colorScheme == .dark ? Color(red: 0.2, green: 0.2, blue: 0.2) : Color.white)
                     .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
             )
