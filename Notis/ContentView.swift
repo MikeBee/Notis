@@ -863,6 +863,8 @@ struct SecondaryEditorView: View {
     
     @State private var showStats = false
     @State private var isReadOnlyMode = false
+    @State private var showWordCounterTemporarily = true
+    @State private var wordCounterHideTimer: Timer?
     
     var body: some View {
         ZStack {
@@ -930,7 +932,9 @@ struct SecondaryEditorView: View {
                         hideShortcutBar: hideShortcutBar,
                         disableQuickType: disableQuickType,
                         showStats: $showStats,
-                        isReadOnlyMode: $isReadOnlyMode
+                        isReadOnlyMode: $isReadOnlyMode,
+                        showWordCounterTemporarily: $showWordCounterTemporarily,
+                        onWordCounterInteraction: { startWordCounterHideTimer() }
                     )
                 }
             } else {
@@ -953,6 +957,16 @@ struct SecondaryEditorView: View {
             }
         }
         .background(Color(.systemBackground))
+    }
+
+    private func startWordCounterHideTimer() {
+        // Auto-hide word counter after 3 seconds of inactivity
+        wordCounterHideTimer?.invalidate()
+        wordCounterHideTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+            withAnimation(.easeInOut(duration: 0.4)) {
+                showWordCounterTemporarily = false
+            }
+        }
     }
 }
 
