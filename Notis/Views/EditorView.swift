@@ -96,8 +96,8 @@ struct EditorView: View {
                                     appState.showOutlinePane.toggle()
                                 }
                             }) {
-                                Image(systemName: appState.showOutlinePane ? "sidebar.trailing.fill" : "sidebar.trailing")
-                                    .font(.system(size: 18, weight: .medium))
+                                Image(systemName: "sidebar.right")
+                                    .font(.system(size: 18, weight: appState.showOutlinePane ? .semibold : .medium))
                                     .foregroundColor(appState.showOutlinePane ? .accentColor : .secondary)
                             }
                             .buttonStyle(PlainButtonStyle())
