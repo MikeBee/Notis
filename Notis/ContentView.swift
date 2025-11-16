@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showDashboard = false
     @State private var showKeyboardShortcuts = false
+    @State private var showKeyboardShortcutsSettings = false
     @State private var showAdvancedSearch = false
     @State private var showTemplates = false
     @State private var dashboardType: DashboardType = .overview
@@ -186,7 +187,7 @@ struct ContentView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(appState: appState, isPresented: $showSettings)
         }
-        .sheet(isPresented: $showKeyboardShortcuts) {
+        .sheet(isPresented: $showKeyboardShortcutsSettings) {
             KeyboardShortcutsSettingsView()
         }
         .sheet(isPresented: $showAdvancedSearch) {
