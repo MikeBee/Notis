@@ -396,6 +396,13 @@ struct SettingsView: View {
 
                 // MARK: - System
                 Section {
+                    NavigationLink(destination: KeyboardShortcutsSettingsView()) {
+                        HStack {
+                            Label("Keyboard Shortcuts", systemImage: "keyboard")
+                            Spacer()
+                        }
+                    }
+
                     Toggle("Haptic Feedback", isOn: $enableHapticFeedback)
                 } header: {
                     Label("System", systemImage: "gearshape.fill")
