@@ -15,6 +15,8 @@ struct EditorView: View {
     @State private var showStats = false
     @State private var showFindReplace = false
     @State private var isReadOnlyMode = false
+    @State private var showWordCounterTemporarily = true
+    @State private var wordCounterHideTimer: Timer?
     @AppStorage("fontSize") private var fontSize: Double = 16
     @AppStorage("lineSpacing") private var lineSpacing: Double = 1.4
     @AppStorage("paragraphSpacing") private var paragraphSpacing: Double = 8
@@ -211,12 +213,22 @@ struct EditorView: View {
                             isReadOnlyMode: $isReadOnlyMode
                         )
 
-                        // Word Counter at bottom if enabled (hidden in full screen)
+                        // Word Counter at bottom if enabled (hidden in full screen, auto-hides after inactivity)
                         if appState.showWordCounter && !appState.isFullScreen {
                             WordCounterView(sheet: selectedSheet)
                                 .padding(.horizontal, (appState.viewMode == .threePane && !appState.isFullScreen) ? 20 : CGFloat(safeEditorMargins))
                                 .padding(.bottom, 4)
                                 .background(Color(.systemBackground))
+                                .opacity(showWordCounterTemporarily ? 1.0 : 0.3)
+                                .animation(.easeInOut(duration: 0.4), value: showWordCounterTemporarily)
+                                .onHover { isHovering in
+                                    if isHovering {
+                                        showWordCounterTemporarily = true
+                                        wordCounterHideTimer?.invalidate()
+                                    } else {
+                                        startWordCounterHideTimer()
+                                    }
+                                }
                         }
 
                         // Tag Editor (hidden in full screen)
@@ -531,6 +543,10 @@ struct MarkdownEditor: View {
                             scheduleAnnotationProcessing(newText)
                             scheduleTagProcessing(for: newText, sheet: sheet)
                             scheduleAutoSave()
+
+                            // Show word counter and reset hide timer when typing
+                            showWordCounterTemporarily = true
+                            startWordCounterHideTimer()
                         }
                     )
                     .focused($contentFocused)
@@ -643,6 +659,16 @@ struct MarkdownEditor: View {
         wordCountTimer?.invalidate()
         wordCountTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
             updateWordCountAndPreview()
+        }
+    }
+
+    private func startWordCounterHideTimer() {
+        // Auto-hide word counter after 3 seconds of inactivity
+        wordCounterHideTimer?.invalidate()
+        wordCounterHideTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+            withAnimation(.easeInOut(duration: 0.4)) {
+                showWordCounterTemporarily = false
+            }
         }
     }
 
