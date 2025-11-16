@@ -73,29 +73,31 @@ struct KeyboardShortcutsHelp: View {
         let shortcut: DisplayShortcut
 
         var body: some View {
-            HStack {
+            HStack(spacing: 12) {
                 HStack(spacing: 2) {
                     // Display shortcuts as individual keys
                     ForEach(shortcut.keys.map(String.init), id: \.self) { key in
                         KeyboardKey(key: key)
                     }
                 }
-                .frame(width: 120, alignment: .leading)
+                .frame(width: 110, alignment: .leading)
 
                 HStack(spacing: 4) {
                     Text(shortcut.description)
-                        .font(.system(size: 14))
+                        .font(.system(size: 13))
                         .foregroundColor(.primary)
 
                     if shortcut.needsConfirmation {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 10))
+                            .font(.system(size: 9))
                             .foregroundColor(.orange)
                     }
                 }
 
                 Spacer()
             }
+            .padding(.vertical, 3)
+            .padding(.horizontal, 2)
         }
     }
 
@@ -206,19 +208,20 @@ struct KeyboardShortcutsHelp: View {
 
                 // Shortcuts content
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 24) {
+                    LazyVStack(alignment: .leading, spacing: 16) {
                         // Keyboard shortcuts from manager
                         ForEach(filteredCategories, id: \.self) { category in
                             let shortcuts = getShortcuts(for: category)
 
                             if !shortcuts.isEmpty {
-                                VStack(alignment: .leading, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 6) {
                                     Text(category.rawValue)
-                                        .font(.headline)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.primary)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.secondary)
+                                        .textCase(.uppercase)
+                                        .padding(.bottom, 2)
 
-                                    VStack(spacing: 8) {
+                                    VStack(spacing: 2) {
                                         ForEach(shortcuts.indices, id: \.self) { index in
                                             ShortcutRow(shortcut: shortcuts[index])
                                         }
@@ -229,31 +232,34 @@ struct KeyboardShortcutsHelp: View {
 
                         // Markdown syntax (always shown if no search or search matches)
                         if searchText.isEmpty || markdownShortcuts.contains(where: { $0.0.localizedCaseInsensitiveContains(searchText) || $0.1.localizedCaseInsensitiveContains(searchText) }) {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 6) {
                                 Text("Markdown Syntax")
-                                    .font(.headline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.primary)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                                    .textCase(.uppercase)
+                                    .padding(.bottom, 2)
 
-                                VStack(spacing: 8) {
+                                VStack(spacing: 2) {
                                     ForEach(markdownShortcuts.filter { searchText.isEmpty || $0.0.localizedCaseInsensitiveContains(searchText) || $0.1.localizedCaseInsensitiveContains(searchText) }, id: \.0) { shortcut in
-                                        HStack {
+                                        HStack(spacing: 12) {
                                             KeyboardKey(key: shortcut.0)
-                                                .frame(width: 120, alignment: .leading)
+                                                .frame(width: 110, alignment: .leading)
 
                                             Text(shortcut.1)
-                                                .font(.system(size: 14))
+                                                .font(.system(size: 13))
                                                 .foregroundColor(.primary)
 
                                             Spacer()
                                         }
+                                        .padding(.vertical, 3)
+                                        .padding(.horizontal, 2)
                                     }
                                 }
                             }
                         }
                     }
                     .padding(.horizontal, 24)
-                    .padding(.vertical, 20)
+                    .padding(.vertical, 16)
                 }
             }
             .frame(width: 550, height: 600)
