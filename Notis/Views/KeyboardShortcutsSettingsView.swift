@@ -14,6 +14,8 @@ struct KeyboardShortcutsSettingsView: View {
     @State private var searchText = ""
     @State private var showingConflictAlert = false
     @State private var conflictMessage = ""
+    @State private var showingRecorder = false
+    @State private var recordingAction: ShortcutAction?
 
     private var filteredActions: [ShortcutAction] {
         if searchText.isEmpty {
@@ -119,6 +121,18 @@ struct KeyboardShortcutsSettingsView: View {
         } message: {
             Text(conflictMessage)
         }
+        .sheet(isPresented: $showingRecorder) {
+            if let action = recordingAction {
+                ShortcutRecorderView(
+                    isPresented: $showingRecorder,
+                    action: action,
+                    onConflict: { conflicting in
+                        conflictMessage = "This shortcut is already assigned to '\(conflicting.displayName)'. It will be replaced."
+                        showingConflictAlert = true
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -132,9 +146,17 @@ struct ShortcutRow: View {
 
     var body: some View {
         HStack {
-            // Action name
-            Text(action.displayName)
-                .font(.body)
+            // Action name with confirmation indicator
+            VStack(alignment: .leading, spacing: 2) {
+                Text(action.displayName)
+                    .font(.body)
+
+                if action.needsConfirmation {
+                    Text("Requires confirmation")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                }
+            }
 
             Spacer()
 
@@ -179,14 +201,26 @@ struct ShortcutRow: View {
 struct ShortcutRecorderView: View {
     @Binding var isPresented: Bool
     let action: ShortcutAction
+    var onConflict: ((ShortcutAction) -> Void)?
     @StateObject private var shortcutManager = KeyboardShortcutManager.shared
     @State private var recordedKeys: Set<String> = []
     @State private var recordedModifiers: EventModifiers = []
+    @State private var conflictingAction: ShortcutAction?
 
     var body: some View {
         VStack(spacing: 20) {
             Text("Record Shortcut for \(action.displayName)")
                 .font(.headline)
+
+            if action.needsConfirmation {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text("This action requires confirmation")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+            }
 
             Text("Press the key combination you want to use")
                 .font(.subheadline)
@@ -194,18 +228,26 @@ struct ShortcutRecorderView: View {
 
             HStack {
                 if !recordedModifiers.isEmpty || !recordedKeys.isEmpty {
-                    Text(getDisplayString())
-                        .font(.system(.title, design: .monospaced))
-                        .padding()
-                        .background(Color.accentColor.opacity(0.2))
-                        .cornerRadius(8)
+                    VStack(spacing: 4) {
+                        Text(getDisplayString())
+                            .font(.system(.title, design: .monospaced))
+                            .padding()
+                            .background(Color.accentColor.opacity(0.2))
+                            .cornerRadius(8)
+
+                        if let conflicting = conflictingAction {
+                            Text("⚠️ Conflicts with '\(conflicting.displayName)'")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                    }
                 } else {
                     Text("Waiting for input...")
                         .font(.title3)
                         .foregroundColor(.secondary)
                 }
             }
-            .frame(height: 80)
+            .frame(height: 100)
 
             HStack {
                 Button("Cancel") {
@@ -214,10 +256,13 @@ struct ShortcutRecorderView: View {
                 .buttonStyle(.bordered)
 
                 if !recordedKeys.isEmpty {
-                    Button("Save") {
+                    Button(conflictingAction != nil ? "Replace & Save" : "Save") {
                         if let key = recordedKeys.first {
                             let shortcut = KeyboardShortcut(key: key, modifiers: recordedModifiers)
-                            shortcutManager.setShortcut(shortcut, for: action)
+                            let conflict = shortcutManager.setShortcut(shortcut, for: action, replacing: true)
+                            if let conflict = conflict {
+                                onConflict?(conflict)
+                            }
                         }
                         isPresented = false
                     }
@@ -226,7 +271,22 @@ struct ShortcutRecorderView: View {
             }
         }
         .padding()
-        .frame(width: 400, height: 250)
+        .frame(width: 450, height: 280)
+        .onChange(of: recordedKeys) { _, _ in
+            checkForConflict()
+        }
+        .onChange(of: recordedModifiers) { _, _ in
+            checkForConflict()
+        }
+    }
+
+    private func checkForConflict() {
+        guard let key = recordedKeys.first else {
+            conflictingAction = nil
+            return
+        }
+        let shortcut = KeyboardShortcut(key: key, modifiers: recordedModifiers)
+        conflictingAction = shortcutManager.checkForConflict(shortcut, excluding: action)
     }
 
     private func getDisplayString() -> String {
