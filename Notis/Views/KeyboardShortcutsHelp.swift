@@ -59,90 +59,89 @@ struct KeyboardKey: View {
 struct KeyboardShortcutsHelp: View {
     @Binding var isPresented: Bool
     @Environment(\.colorScheme) var colorScheme
-    
-    private struct ShortcutGroup {
-        let title: String
-        let shortcuts: [KeyboardShortcut]
-    }
-    
-    private struct KeyboardShortcut {
+    @StateObject private var shortcutManager = KeyboardShortcutManager.shared
+    @State private var searchText = ""
+
+    private struct DisplayShortcut {
+        let action: ShortcutAction
         let keys: String
         let description: String
+        let needsConfirmation: Bool
     }
-    
+
     private struct ShortcutRow: View {
-        let shortcut: KeyboardShortcut
-        
+        let shortcut: DisplayShortcut
+
         var body: some View {
             HStack {
                 HStack(spacing: 2) {
-                    if isMarkdownShortcut {
-                        // Display markdown syntax as a single key
-                        KeyboardKey(key: shortcut.keys)
-                    } else {
-                        // Display regular shortcuts as individual keys
-                        ForEach(shortcut.keys.map(String.init), id: \.self) { key in
-                            KeyboardKey(key: key)
-                        }
+                    // Display shortcuts as individual keys
+                    ForEach(shortcut.keys.map(String.init), id: \.self) { key in
+                        KeyboardKey(key: key)
                     }
                 }
                 .frame(width: 120, alignment: .leading)
-                
-                Text(shortcut.description)
-                    .font(.system(size: 14))
-                    .foregroundColor(.primary)
-                
+
+                HStack(spacing: 4) {
+                    Text(shortcut.description)
+                        .font(.system(size: 14))
+                        .foregroundColor(.primary)
+
+                    if shortcut.needsConfirmation {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.orange)
+                    }
+                }
+
                 Spacer()
             }
         }
-        
-        private var isMarkdownShortcut: Bool {
-            shortcut.keys.contains("#") || shortcut.keys.contains("*") || 
-            shortcut.keys.contains("-") || shortcut.keys.contains("1.")
+    }
+
+    private var filteredCategories: [ShortcutCategory] {
+        if searchText.isEmpty {
+            return ShortcutCategory.allCases
+        }
+        return ShortcutCategory.allCases.filter { category in
+            getShortcuts(for: category).contains { shortcut in
+                shortcut.description.localizedCaseInsensitiveContains(searchText) ||
+                shortcut.keys.localizedCaseInsensitiveContains(searchText)
+            }
         }
     }
-    
-    private let shortcutGroups: [ShortcutGroup] = [
-        ShortcutGroup(title: "General", shortcuts: [
-            KeyboardShortcut(keys: "⌘K", description: "Command Palette"),
-            KeyboardShortcut(keys: "⌘,", description: "Settings"),
-            KeyboardShortcut(keys: "⌘/", description: "Show Keyboard Shortcuts")
-        ]),
-        ShortcutGroup(title: "Documents", shortcuts: [
-            KeyboardShortcut(keys: "⌘N", description: "New Sheet"),
-            KeyboardShortcut(keys: "⌘S", description: "Save (Auto-saved)"),
-            KeyboardShortcut(keys: "⌘←", description: "Previous Sheet"),
-            KeyboardShortcut(keys: "⌘→", description: "Next Sheet")
-        ]),
-        ShortcutGroup(title: "View", shortcuts: [
-            KeyboardShortcut(keys: "⌘1", description: "Show All Panes"),
-            KeyboardShortcut(keys: "⌘2", description: "Show Sheets & Editor"),
-            KeyboardShortcut(keys: "⌘3", description: "Show Editor Only"),
-            KeyboardShortcut(keys: "⌘⇧L", description: "Toggle Library Panel"),
-            KeyboardShortcut(keys: "⌘⇧R", description: "Toggle Sheet List"),
-            KeyboardShortcut(keys: "⌘O", description: "Toggle Outline Panel"),
-            KeyboardShortcut(keys: "⌘⇧D", description: "Toggle Dashboard")
-        ]),
-        ShortcutGroup(title: "Editor", shortcuts: [
-            KeyboardShortcut(keys: "⌘F", description: "Toggle Focus Mode"),
-            KeyboardShortcut(keys: "⌘T", description: "Toggle Typewriter Mode"),
-            KeyboardShortcut(keys: "⌘D", description: "Toggle Favorite")
-        ]),
-        ShortcutGroup(title: "Folder Management", shortcuts: [
-            KeyboardShortcut(keys: "⌘↑", description: "Move Folder Up"),
-            KeyboardShortcut(keys: "⌘↓", description: "Move Folder Down"),
-            KeyboardShortcut(keys: "⌘]", description: "Indent Folder"),
-            KeyboardShortcut(keys: "⌘[", description: "Outdent Folder")
-        ]),
-        ShortcutGroup(title: "Markdown Formatting", shortcuts: [
-            KeyboardShortcut(keys: "# Text", description: "Large Header"),
-            KeyboardShortcut(keys: "## Text", description: "Medium Header"),
-            KeyboardShortcut(keys: "### Text", description: "Small Header"),
-            KeyboardShortcut(keys: "**text**", description: "Bold Text"),
-            KeyboardShortcut(keys: "*text*", description: "Italic Text"),
-            KeyboardShortcut(keys: "- Item", description: "Bullet List"),
-            KeyboardShortcut(keys: "1. Item", description: "Numbered List")
-        ])
+
+    private func getShortcuts(for category: ShortcutCategory) -> [DisplayShortcut] {
+        let actions = ShortcutAction.allCases.filter { $0.category == category }
+        return actions.compactMap { action in
+            guard let shortcut = shortcutManager.getShortcut(for: action) else { return nil }
+            return DisplayShortcut(
+                action: action,
+                keys: shortcut.displayString,
+                description: action.displayName,
+                needsConfirmation: action.needsConfirmation
+            )
+        }.filter { shortcut in
+            if searchText.isEmpty { return true }
+            return shortcut.description.localizedCaseInsensitiveContains(searchText) ||
+                   shortcut.keys.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    private let markdownShortcuts: [(String, String)] = [
+        ("# Text", "Large Header"),
+        ("## Text", "Medium Header"),
+        ("### Text", "Small Header"),
+        ("**text**", "Bold Text"),
+        ("*text*", "Italic Text"),
+        ("~~text~~", "Strikethrough"),
+        ("==text==", "Highlight"),
+        ("::text::", "Annotation"),
+        ("- Item", "Bullet List"),
+        ("1. Item", "Numbered List"),
+        ("> Quote", "Block Quote"),
+        ("`code`", "Inline Code"),
+        ("```code```", "Code Block")
     ]
     
     var body: some View {
@@ -154,16 +153,16 @@ struct KeyboardShortcutsHelp: View {
                         isPresented = false
                     }
                 }
-            
+
             VStack(spacing: 0) {
                 // Header
                 HStack {
                     Text("Keyboard Shortcuts")
                         .font(.title2)
                         .fontWeight(.semibold)
-                    
+
                     Spacer()
-                    
+
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             isPresented = false
@@ -177,25 +176,77 @@ struct KeyboardShortcutsHelp: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 24)
+                .padding(.bottom, 12)
+
+                // Search bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 14))
+                    TextField("Search shortcuts...", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 14))
+                    if !searchText.isEmpty {
+                        Button(action: { searchText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 14))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.horizontal, 24)
                 .padding(.bottom, 16)
-                
+
                 Divider()
-                
+
                 // Shortcuts content
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
-                        ForEach(shortcutGroups.indices, id: \.self) { groupIndex in
-                            let group = shortcutGroups[groupIndex]
-                            
+                        // Keyboard shortcuts from manager
+                        ForEach(filteredCategories, id: \.self) { category in
+                            let shortcuts = getShortcuts(for: category)
+
+                            if !shortcuts.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text(category.rawValue)
+                                        .font(.headline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.primary)
+
+                                    VStack(spacing: 8) {
+                                        ForEach(shortcuts.indices, id: \.self) { index in
+                                            ShortcutRow(shortcut: shortcuts[index])
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Markdown syntax (always shown if no search or search matches)
+                        if searchText.isEmpty || markdownShortcuts.contains(where: { $0.0.localizedCaseInsensitiveContains(searchText) || $0.1.localizedCaseInsensitiveContains(searchText) }) {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text(group.title)
+                                Text("Markdown Syntax")
                                     .font(.headline)
                                     .fontWeight(.medium)
                                     .foregroundColor(.primary)
-                                
+
                                 VStack(spacing: 8) {
-                                    ForEach(group.shortcuts.indices, id: \.self) { shortcutIndex in
-                                        ShortcutRow(shortcut: group.shortcuts[shortcutIndex])
+                                    ForEach(markdownShortcuts.filter { searchText.isEmpty || $0.0.localizedCaseInsensitiveContains(searchText) || $0.1.localizedCaseInsensitiveContains(searchText) }, id: \.0) { shortcut in
+                                        HStack {
+                                            KeyboardKey(key: shortcut.0)
+                                                .frame(width: 120, alignment: .leading)
+
+                                            Text(shortcut.1)
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.primary)
+
+                                            Spacer()
+                                        }
                                     }
                                 }
                             }
@@ -205,7 +256,7 @@ struct KeyboardShortcutsHelp: View {
                     .padding(.vertical, 20)
                 }
             }
-            .frame(width: 450, height: 500)
+            .frame(width: 550, height: 600)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(colorScheme == .dark ? Color(red: 0.2, green: 0.2, blue: 0.2) : Color.white)
