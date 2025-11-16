@@ -96,7 +96,7 @@ struct KeyboardShortcutsHelp: View {
 
                 Spacer()
             }
-            .padding(.vertical, 3)
+            .padding(.vertical, 1)
             .padding(.horizontal, 2)
         }
     }
@@ -214,14 +214,14 @@ struct KeyboardShortcutsHelp: View {
                             let shortcuts = getShortcuts(for: category)
 
                             if !shortcuts.isEmpty {
-                                VStack(alignment: .leading, spacing: 6) {
+                                VStack(alignment: .leading, spacing: 4) {
                                     Text(category.rawValue)
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundColor(.secondary)
                                         .textCase(.uppercase)
-                                        .padding(.bottom, 2)
+                                        .padding(.bottom, 1)
 
-                                    VStack(spacing: 2) {
+                                    VStack(spacing: 0) {
                                         ForEach(shortcuts.indices, id: \.self) { index in
                                             ShortcutRow(shortcut: shortcuts[index])
                                         }
@@ -232,14 +232,14 @@ struct KeyboardShortcutsHelp: View {
 
                         // Markdown syntax (always shown if no search or search matches)
                         if searchText.isEmpty || markdownShortcuts.contains(where: { $0.0.localizedCaseInsensitiveContains(searchText) || $0.1.localizedCaseInsensitiveContains(searchText) }) {
-                            VStack(alignment: .leading, spacing: 6) {
+                            VStack(alignment: .leading, spacing: 4) {
                                 Text("Markdown Syntax")
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundColor(.secondary)
                                     .textCase(.uppercase)
-                                    .padding(.bottom, 2)
+                                    .padding(.bottom, 1)
 
-                                VStack(spacing: 2) {
+                                VStack(spacing: 0) {
                                     ForEach(markdownShortcuts.filter { searchText.isEmpty || $0.0.localizedCaseInsensitiveContains(searchText) || $0.1.localizedCaseInsensitiveContains(searchText) }, id: \.0) { shortcut in
                                         HStack(spacing: 12) {
                                             KeyboardKey(key: shortcut.0)
@@ -251,7 +251,7 @@ struct KeyboardShortcutsHelp: View {
 
                                             Spacer()
                                         }
-                                        .padding(.vertical, 3)
+                                        .padding(.vertical, 1)
                                         .padding(.horizontal, 2)
                                     }
                                 }
