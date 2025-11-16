@@ -498,6 +498,7 @@ struct MarkdownTextEditor: View {
     @AppStorage("showLineNumbers") private var showLineNumbers: Bool = false
     @State private var hasConfiguredTextView = false
     @State private var currentSentenceRange: NSRange = NSRange(location: 0, length: 0)
+    @State private var lastScrollTime: Date = Date.distantPast
     
     private var safeFontSize: CGFloat {
         guard fontSize.isFinite && !fontSize.isNaN && fontSize > 0 else { return 16 }
@@ -635,15 +636,39 @@ struct MarkdownTextEditor: View {
     }
     
     private func calculateLineHeight(for paragraph: String) -> CGFloat {
+        // Get font-specific multiplier for better readability across different fonts
+        let fontMultiplier = getFontLineHeightMultiplier()
+
         // Add the compensated paragraph spacing used in TextEditor
         let compensatedParagraphSpacing = safeParagraphSpacing * 0.5
-        let totalLineSpacing = safeLineSpacing + compensatedParagraphSpacing
-        
+        let totalLineSpacing = (safeLineSpacing * fontMultiplier) + compensatedParagraphSpacing
+
         // Calculate final height to match TextEditor exactly
         let lineHeight = safeFontSize * totalLineSpacing
         let paragraphSpacingHeight = paragraph.isEmpty ? 0 : safeParagraphSpacing
-        
+
         return lineHeight + paragraphSpacingHeight
+    }
+
+    private func getFontLineHeightMultiplier() -> CGFloat {
+        // Different fonts need different line height multipliers for optimal readability
+        switch fontFamily {
+        case "serif", "times":
+            // Serif fonts have larger ascenders/descenders, need more space
+            return 1.15
+        case "georgia":
+            // Georgia is designed for screen reading, needs slightly more space
+            return 1.18
+        case "monospace", "courier":
+            // Monospace fonts need consistent, generous spacing
+            return 1.20
+        case "helvetica", "avenir":
+            // Sans-serif fonts can use tighter spacing
+            return 1.05
+        default:
+            // System font - balanced spacing
+            return 1.10
+        }
     }
     
     var body: some View {
@@ -666,6 +691,7 @@ struct MarkdownTextEditor: View {
                     .padding(.vertical, 8)
                     .padding(.top, isFocusMode ? geometry.size.height * 0.25 : 0)
                     .padding(.bottom, isFocusMode ? geometry.size.height * 0.75 : 0)
+                    .animation(.easeInOut(duration: 0.3), value: isFocusMode)
                 }
 
                 // Editor Content
@@ -698,6 +724,7 @@ struct MarkdownTextEditor: View {
                             .padding(.vertical, 8)
                             .padding(.top, isFocusMode ? geometry.size.height * 0.25 : 0)
                             .padding(.bottom, isFocusMode ? geometry.size.height * 0.75 : 0)
+                            .animation(.easeInOut(duration: 0.3), value: isFocusMode)
                             .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidChangeNotification)) { notification in
                                 if let textView = notification.object as? UITextView, textView.isFirstResponder {
                                     let currentText = textView.text ?? ""
@@ -743,7 +770,7 @@ struct MarkdownTextEditor: View {
                                             .frame(height: safeParagraphSpacing * 0.8) // Reduced to prevent overlap
                                     }
                                 }
-                                .animation(.easeInOut(duration: 0.2), value: currentLineIndex)
+                                .animation(.easeInOut(duration: 0.25), value: currentLineIndex)
                             }
                         }
                         .allowsHitTesting(false)
@@ -751,6 +778,7 @@ struct MarkdownTextEditor: View {
                         .padding(.vertical, 8)
                         .padding(.top, geometry.size.height * 0.25)  // Upper quarter positioning
                         .padding(.bottom, geometry.size.height * 0.75)
+                        .transition(.opacity.animation(.easeInOut(duration: 0.3)))
                     }
 
                     // OLDER FOCUS MODE ATTEMPTS - PRESERVED FOR REFERENCE
@@ -827,8 +855,8 @@ struct MarkdownTextEditor: View {
             if oldValue != newValue {
                 onTextChange(newValue)
 
-                // Track writing activity for time-based goals (debounce this)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                // Track writing activity for time-based goals (optimized debounce for reduced lag)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     WritingSessionService.shared.recordActivity()
                 }
             }
@@ -900,23 +928,21 @@ struct MarkdownTextEditor: View {
     }
     
     private func updateCursorPosition(_ range: NSRange) {
-        // Debounce cursor updates to reduce jumping
+        // Optimized cursor updates with early exit to reduce lag
         let newPosition = range.location
         guard newPosition != cursorPosition else { return }
 
-        DispatchQueue.main.async {
-            self.cursorPosition = newPosition
-            let newLineIndex = self.getCurrentLineIndex(from: newPosition)
-            if newLineIndex != self.currentLineIndex {
-                withAnimation(.easeInOut(duration: 0.1)) {
-                    self.currentLineIndex = newLineIndex
-                }
+        self.cursorPosition = newPosition
+        let newLineIndex = self.getCurrentLineIndex(from: newPosition)
+        if newLineIndex != self.currentLineIndex {
+            withAnimation(.easeInOut(duration: 0.1)) {
+                self.currentLineIndex = newLineIndex
             }
+        }
 
-            // Update current sentence for Focus mode
-            if self.isFocusMode {
-                self.updateCurrentSentence()
-            }
+        // Update current sentence for Focus mode (only when needed)
+        if self.isFocusMode {
+            self.updateCurrentSentence()
         }
     }
 
@@ -965,6 +991,11 @@ struct MarkdownTextEditor: View {
     }
 
     private func scrollToTypewriterPosition(textView: UITextView, viewHeight: CGFloat) {
+        // Throttle scroll calculations to prevent over-processing (max 60fps = ~16ms, using 50ms for safety)
+        let now = Date()
+        let timeSinceLastScroll = now.timeIntervalSince(lastScrollTime)
+        guard timeSinceLastScroll > 0.05 else { return }
+
         // Get the rect of the cursor position
         guard let selectedRange = textView.selectedTextRange else { return }
         var caretRect = textView.caretRect(for: selectedRange.start)
@@ -979,18 +1010,35 @@ struct MarkdownTextEditor: View {
         let currentY = caretRect.origin.y - textView.contentOffset.y
         let scrollOffset = currentY - targetY
 
-        // Only scroll if the difference is significant (more than 20 points)
-        if abs(scrollOffset) > 20 {
+        // Only scroll if the difference is significant (more than 12 points for smoother response)
+        if abs(scrollOffset) > 12 {
+            lastScrollTime = now
             var newOffset = textView.contentOffset
             newOffset.y += scrollOffset
 
-            // Clamp to valid scroll range
+            // Clamp to valid scroll range with smooth end-of-document handling
             let maxOffset = max(0, textView.contentSize.height - textView.bounds.height)
-            newOffset.y = max(0, min(newOffset.y, maxOffset))
 
-            // Animate the scroll
-            UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut], animations: {
+            // Prevent bounce at top
+            if newOffset.y < 0 {
+                newOffset.y = 0
+            }
+            // Smooth handling near bottom - don't clamp as hard to allow natural flow
+            else if newOffset.y > maxOffset {
+                // Allow slight overscroll for smoother writing experience at document end
+                newOffset.y = min(newOffset.y, maxOffset + 20)
+            }
+
+            // Animate the scroll with smoother easing and slightly longer duration
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: {
                 textView.contentOffset = newOffset
+            }, completion: { finished in
+                // Bounce back to valid range if we overscrolled
+                if finished && newOffset.y > maxOffset {
+                    UIView.animate(withDuration: 0.15, delay: 0, options: [.curveEaseOut], animations: {
+                        textView.contentOffset.y = maxOffset
+                    })
+                }
             })
         }
     }
@@ -1193,8 +1241,11 @@ struct MarkdownTextEditor: View {
                 textView.textContainer.widthTracksTextView = true
                 textView.textContainer.heightTracksTextView = false
 
-                // Add bottom padding to ensure text is visible when typing at bottom
-                textView.textContainerInset = UIEdgeInsets(top: 0, left: 0, bottom: 200, right: 0)
+                // Add dynamic bottom padding based on screen height for consistent typewriter behavior
+                // Use 60% of screen height to ensure smooth writing at document end
+                let screenHeight = UIScreen.main.bounds.height
+                let dynamicBottomPadding = screenHeight * 0.6
+                textView.textContainerInset = UIEdgeInsets(top: 0, left: 0, bottom: dynamicBottomPadding, right: 0)
 
                 // Mark as configured to prevent repeated configuration
                 hasConfiguredTextView = true
