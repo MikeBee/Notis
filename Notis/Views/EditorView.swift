@@ -210,7 +210,9 @@ struct EditorView: View {
                             hideShortcutBar: appState.hideShortcutBar || appState.isFullScreen,
                             disableQuickType: disableQuickType,
                             showStats: $showStats,
-                            isReadOnlyMode: $isReadOnlyMode
+                            isReadOnlyMode: $isReadOnlyMode,
+                            showWordCounterTemporarily: $showWordCounterTemporarily,
+                            onWordCounterInteraction: { startWordCounterHideTimer() }
                         )
 
                         // Word Counter at bottom if enabled (hidden in full screen, auto-hides after inactivity)
@@ -355,7 +357,17 @@ struct EditorView: View {
             }
         }
     }
-    
+
+    private func startWordCounterHideTimer() {
+        // Auto-hide word counter after 3 seconds of inactivity
+        wordCounterHideTimer?.invalidate()
+        wordCounterHideTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+            withAnimation(.easeInOut(duration: 0.4)) {
+                showWordCounterTemporarily = false
+            }
+        }
+    }
+
 }
 
 struct WordCounterView: View {
@@ -458,6 +470,8 @@ struct MarkdownEditor: View {
     let disableQuickType: Bool
     @Binding var showStats: Bool
     @Binding var isReadOnlyMode: Bool
+    @Binding var showWordCounterTemporarily: Bool
+    var onWordCounterInteraction: () -> Void
     
     @State private var content: String = ""
     @State private var saveTimer: Timer?
@@ -546,7 +560,7 @@ struct MarkdownEditor: View {
 
                             // Show word counter and reset hide timer when typing
                             showWordCounterTemporarily = true
-                            startWordCounterHideTimer()
+                            onWordCounterInteraction()
                         }
                     )
                     .focused($contentFocused)
@@ -659,16 +673,6 @@ struct MarkdownEditor: View {
         wordCountTimer?.invalidate()
         wordCountTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
             updateWordCountAndPreview()
-        }
-    }
-
-    private func startWordCounterHideTimer() {
-        // Auto-hide word counter after 3 seconds of inactivity
-        wordCounterHideTimer?.invalidate()
-        wordCounterHideTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
-            withAnimation(.easeInOut(duration: 0.4)) {
-                showWordCounterTemporarily = false
-            }
         }
     }
 
