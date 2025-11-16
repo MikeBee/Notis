@@ -664,8 +664,8 @@ struct MarkdownTextEditor: View {
                     .frame(width: lineNumberWidth)
                     .padding(.leading, 8)
                     .padding(.vertical, 8)
-                    .padding(.top, isTypewriterMode ? geometry.size.height * 0.5 : (isFocusMode ? geometry.size.height * 0.25 : 0))
-                    .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.5 : (isFocusMode ? geometry.size.height * 0.75 : 0))
+                    .padding(.top, isFocusMode ? geometry.size.height * 0.25 : 0)
+                    .padding(.bottom, isFocusMode ? geometry.size.height * 0.75 : 0)
                 }
 
                 // Editor Content
@@ -696,8 +696,8 @@ struct MarkdownTextEditor: View {
                             .autocorrectionDisabled(disableQuickType)
                             .padding(.horizontal, effectiveEditorMargins)
                             .padding(.vertical, 8)
-                            .padding(.top, isTypewriterMode ? geometry.size.height * 0.5 : (isFocusMode ? geometry.size.height * 0.25 : 0))
-                            .padding(.bottom, isTypewriterMode ? geometry.size.height * 0.5 : (isFocusMode ? geometry.size.height * 0.75 : 0))
+                            .padding(.top, isFocusMode ? geometry.size.height * 0.25 : 0)
+                            .padding(.bottom, isFocusMode ? geometry.size.height * 0.75 : 0)
                             .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidChangeNotification)) { notification in
                                 if let textView = notification.object as? UITextView, textView.isFirstResponder {
                                     let currentText = textView.text ?? ""
@@ -708,6 +708,11 @@ struct MarkdownTextEditor: View {
 
                                     DispatchQueue.main.async {
                                         updateCursorPosition(textView.selectedRange)
+
+                                        // Typewriter mode: scroll to keep cursor at 40% from top
+                                        if isTypewriterMode {
+                                            scrollToTypewriterPosition(textView: textView, geometry: geometry)
+                                        }
                                     }
                                 }
                             }
@@ -847,6 +852,14 @@ struct MarkdownTextEditor: View {
                 }
             }
         }
+        .onChange(of: isTypewriterMode) { _, enabled in
+            if enabled && isTextEditorFocused {
+                // Scroll to typewriter position when mode is enabled
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    scrollToTypewriterPositionIfNeeded()
+                }
+            }
+        }
         .onTapGesture {
             isTextEditorFocused = true
         }
@@ -946,8 +959,68 @@ struct MarkdownTextEditor: View {
 
         return sentenceRange
     }
-    
-    
+
+    private func scrollToTypewriterPosition(textView: UITextView, geometry: GeometryProxy) {
+        scrollToTypewriterPosition(textView: textView, viewHeight: geometry.size.height)
+    }
+
+    private func scrollToTypewriterPosition(textView: UITextView, viewHeight: CGFloat) {
+        // Get the rect of the cursor position
+        guard let selectedRange = textView.selectedTextRange else { return }
+        var caretRect = textView.caretRect(for: selectedRange.start)
+
+        // Convert to text view's coordinate space
+        caretRect = textView.convert(caretRect, to: textView)
+
+        // Calculate target Y position (40% from top of visible area)
+        let targetY = viewHeight * 0.4
+
+        // Calculate how much we need to scroll
+        let currentY = caretRect.origin.y - textView.contentOffset.y
+        let scrollOffset = currentY - targetY
+
+        // Only scroll if the difference is significant (more than 20 points)
+        if abs(scrollOffset) > 20 {
+            var newOffset = textView.contentOffset
+            newOffset.y += scrollOffset
+
+            // Clamp to valid scroll range
+            let maxOffset = max(0, textView.contentSize.height - textView.bounds.height)
+            newOffset.y = max(0, min(newOffset.y, maxOffset))
+
+            // Animate the scroll
+            UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut], animations: {
+                textView.contentOffset = newOffset
+            })
+        }
+    }
+
+    private func scrollToTypewriterPositionIfNeeded() {
+        // Find the active UITextView in the view hierarchy
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else { return }
+
+        findAndScrollTextView(in: window, depth: 0)
+    }
+
+    private func findAndScrollTextView(in view: UIView, depth: Int) {
+        // Prevent excessive recursion
+        guard depth < 15 else { return }
+
+        for subview in view.subviews {
+            if let textView = subview as? UITextView, textView.isFirstResponder {
+                // Found the active text view, scroll it
+                let viewHeight = textView.bounds.height
+                scrollToTypewriterPosition(textView: textView, viewHeight: viewHeight)
+                return
+            } else {
+                findAndScrollTextView(in: subview, depth: depth + 1)
+            }
+        }
+    }
+}
+
+
     private func updateCurrentLineFromPosition(_ position: Int) {
         DispatchQueue.main.async {
             currentLineIndex = getCurrentLineIndex(from: position)
