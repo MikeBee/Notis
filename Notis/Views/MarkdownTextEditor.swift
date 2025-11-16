@@ -1018,8 +1018,6 @@ struct MarkdownTextEditor: View {
             }
         }
     }
-}
-
 
     private func updateCurrentLineFromPosition(_ position: Int) {
         DispatchQueue.main.async {
