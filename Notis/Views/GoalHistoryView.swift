@@ -36,6 +36,43 @@ struct GoalHistoryView: View {
         formatter.dateStyle = .medium
         return formatter
     }
+
+    private var groupedByDate: [DateGroup] {
+        let calendar = Calendar.current
+        var groups: [Date: [(goal: Goal, history: GoalHistory, date: Date)]] = [:]
+
+        for item in recentHistory {
+            let startOfDay = calendar.startOfDay(for: item.date)
+            if groups[startOfDay] == nil {
+                groups[startOfDay] = []
+            }
+            groups[startOfDay]?.append(item)
+        }
+
+        return groups
+            .map { DateGroup(date: $0.key, items: $0.value) }
+            .sorted { $0.date > $1.date }
+    }
+
+    private func formatDateHeader(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+
+        if calendar.isDateInToday(date) {
+            return "Today"
+        } else if calendar.isDateInYesterday(date) {
+            return "Yesterday"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            return formatter.string(from: date)
+        }
+    }
+
+    private struct DateGroup {
+        let date: Date
+        let items: [(goal: Goal, history: GoalHistory, date: Date)]
+    }
  
     var body: some View {
         NavigationView {
@@ -109,12 +146,42 @@ struct GoalHistoryView: View {
                         }
                         .padding()
                     } else {
-                        LazyVStack(spacing: UlyssesDesign.Spacing.sm) {
-                            ForEach(recentHistory, id: \.history.id) { item in
-                                DailyGoalListRow(goal: item.goal, history: item.history, date: item.date)
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(groupedByDate.enumerated()), id: \.offset) { index, group in
+                                let isAlternate = index % 2 == 1
+
+                                Section {
+                                    ForEach(group.items, id: \.history.id) { item in
+                                        DailyGoalListRow(goal: item.goal, history: item.history, date: item.date)
+                                            .padding(.horizontal)
+                                            .padding(.vertical, 4)
+                                    }
+                                } header: {
+                                    HStack {
+                                        Text(formatDateHeader(group.date))
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(UlyssesDesign.Colors.primary(for: colorScheme))
+                                        Spacer()
+                                        Text("\(group.items.count) goal\(group.items.count == 1 ? "" : "s")")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(UlyssesDesign.Colors.secondary(for: colorScheme))
+                                    }
+                                    .padding(.horizontal)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        isAlternate
+                                            ? Color.secondary.opacity(colorScheme == .dark ? 0.15 : 0.08)
+                                            : Color.clear
+                                    )
+                                }
+                                .background(
+                                    isAlternate
+                                        ? Color.secondary.opacity(colorScheme == .dark ? 0.10 : 0.05)
+                                        : Color.clear
+                                )
                             }
                         }
-                        .padding()
+                        .padding(.top)
                     }
                 }
                 }
