@@ -1311,49 +1311,42 @@ struct ResizableDivider: View {
     @State private var dragStartWidth: Double = 0
 
     var body: some View {
-        ZStack {
-            // Invisible hit area (wider for easier interaction)
-            Rectangle()
-                .fill(Color.clear)
-                .frame(width: 12)
-                .contentShape(Rectangle())
-
-            // Visible divider line
-            Rectangle()
-                .fill((isHovering || isDragging) ? Color.accentColor : UlyssesDesign.Colors.dividerColor(for: colorScheme))
-                .frame(width: (isHovering || isDragging) ? 3 : 1)
-                .opacity((isHovering || isDragging) ? 1.0 : 0.6)
-        }
-        .frame(width: 12)
-        .onHover { hovering in
-            isHovering = hovering
-            if hovering {
-                NSCursor.resizeLeftRight.push()
-            } else if !isDragging {
-                NSCursor.pop()
+        Color.clear
+            .frame(width: 8)
+            .overlay(
+                Rectangle()
+                    .fill((isHovering || isDragging) ? Color.accentColor : UlyssesDesign.Colors.dividerColor(for: colorScheme))
+                    .frame(width: (isHovering || isDragging) ? 3 : 1)
+            )
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    isHovering = hovering
+                }
+                if hovering {
+                    NSCursor.resizeLeftRight.push()
+                } else if !isDragging {
+                    NSCursor.pop()
+                }
             }
-        }
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    if !isDragging {
-                        isDragging = true
-                        dragStartWidth = width
-                        NSCursor.resizeLeftRight.push()
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        if !isDragging {
+                            isDragging = true
+                            dragStartWidth = width
+                        }
+                        let newWidth = dragStartWidth + value.translation.width
+                        width = max(minWidth, min(maxWidth, newWidth))
                     }
-                    let newWidth = dragStartWidth + value.translation.width
-                    width = max(minWidth, min(maxWidth, newWidth))
-                }
-                .onEnded { _ in
-                    isDragging = false
-                    dragStartWidth = 0
-                    if !isHovering {
-                        NSCursor.pop()
+                    .onEnded { _ in
+                        isDragging = false
+                        dragStartWidth = 0
+                        if !isHovering {
+                            NSCursor.pop()
+                        }
                     }
-                }
-        )
-        .animation(.easeInOut(duration: 0.15), value: isHovering)
-        .animation(.easeInOut(duration: 0.15), value: isDragging)
+            )
     }
 }
 #endif
