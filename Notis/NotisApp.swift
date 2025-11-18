@@ -21,5 +21,10 @@ struct NotisApp: App {
             ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
         }
+        #if os(macOS)
+        .commands {
+            NotisCommands()
+        }
+        #endif
     }
 }
