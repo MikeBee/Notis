@@ -86,6 +86,7 @@ struct FileMenuCommands: View {
 
 struct EditMenuCommands: View {
     var body: some View {
+        #if os(macOS)
         Button("Copy") {
             NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
         }
@@ -109,6 +110,7 @@ struct EditMenuCommands: View {
         .keyboardShortcut("a", modifiers: .command)
 
         Divider()
+        #endif
 
         Button("Move to Trash") {
             NotificationCenter.default.post(name: .menuMoveToTrash, object: nil)
