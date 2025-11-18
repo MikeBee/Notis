@@ -266,143 +266,21 @@ struct ContentView: View {
                 createSheetFromTemplate(template)
             }
         }
-        // MARK: - Menu Command Handlers
-        .onReceive(NotificationCenter.default.publisher(for: .menuNewSheet)) { _ in
-            createNewSheet()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuNewGroup)) { _ in
-            createNewGroup()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuNewProject)) { _ in
-            createNewProject()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuToggleFavorite)) { _ in
-            toggleFavorite()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuMoveToTrash)) { _ in
-            moveToTrash()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuBold)) { _ in
-            NotificationCenter.default.post(name: .formatBold, object: nil)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuItalic)) { _ in
-            NotificationCenter.default.post(name: .formatItalic, object: nil)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuHighlight)) { _ in
-            NotificationCenter.default.post(name: .formatHighlight, object: nil)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuStrikethrough)) { _ in
-            NotificationCenter.default.post(name: .formatStrikethrough, object: nil)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuHeading)) { notification in
-            if let level = notification.object as? Int {
-                NotificationCenter.default.post(name: .formatHeading, object: level)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuToggleLibrary)) { _ in
-            withAnimation(.easeInOut(duration: 0.25)) {
-                appState.showLibrary.toggle()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuToggleSecondEditor)) { _ in
-            withAnimation(.easeInOut(duration: 0.25)) {
-                if appState.showSecondaryEditor {
-                    appState.closeSecondaryEditor()
-                } else if let selectedSheet = appState.selectedSheet {
-                    appState.openSecondaryEditor(with: selectedSheet)
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuToggleProgress)) { _ in
-            dashboardType = .overview
-            withAnimation(.easeInOut(duration: 0.25)) {
-                showDashboard.toggle()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuToggleTags)) { _ in
-            showTagsPane.toggle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuToggleLineNumbers)) { _ in
-            showLineNumbers.toggle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuTheme)) { notification in
-            if let themeString = notification.object as? String {
-                switch themeString {
-                case "light":
-                    appState.theme = .light
-                case "dark":
-                    appState.theme = .dark
-                case "system":
-                    appState.theme = .system
-                default:
-                    break
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuToggleFocusMode)) { _ in
-            appState.isFocusMode.toggle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuToggleTypewriterMode)) { _ in
-            appState.isTypewriterMode.toggle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuGoAll)) { _ in
-            appState.selectedEssential = "all"
-            appState.selectedGroup = nil
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuGoRecent)) { _ in
-            appState.selectedEssential = "recent"
-            appState.selectedGroup = nil
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuPreviousSheet)) { _ in
-            appState.navigateToPreviousSheet()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuNextSheet)) { _ in
-            appState.navigateToNextSheet()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuGoLibrary)) { _ in
-            withAnimation(.easeInOut(duration: 0.25)) {
-                appState.showLibrary = true
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuGoSheetList)) { _ in
-            withAnimation(.easeInOut(duration: 0.25)) {
-                appState.showSheetList = true
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuGoEditor)) { _ in
-            withAnimation(.easeInOut(duration: 0.25)) {
-                appState.viewMode = .editorOnly
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuGoDashboard)) { _ in
-            dashboardType = .overview
-            withAnimation(.easeInOut(duration: 0.25)) {
-                showDashboard = true
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuNewTab)) { _ in
-            #if os(macOS)
-            NSApp.sendAction(#selector(NSWindow.makeKeyAndOrderFront(_:)), to: nil, from: nil)
-            #endif
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuExport)) { _ in
-            showExport = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuExportToObsidian)) { _ in
-            exportToObsidian()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuStatistics)) { _ in
-            dashboardType = .overview
-            withAnimation(.easeInOut(duration: 0.25)) {
-                showDashboard = true
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .menuNavigation)) { _ in
-            withAnimation(.easeInOut(duration: 0.25)) {
-                appState.showLibrary = true
-                appState.showSheetList = true
-            }
-        }
+        // Menu command handlers extracted to separate modifier
+        .modifier(MenuCommandHandlers(
+            appState: appState,
+            showDashboard: $showDashboard,
+            showExport: $showExport,
+            dashboardType: $dashboardType,
+            showTagsPane: $showTagsPane,
+            showLineNumbers: $showLineNumbers,
+            createNewSheet: createNewSheet,
+            createNewGroup: createNewGroup,
+            createNewProject: createNewProject,
+            toggleFavorite: toggleFavorite,
+            moveToTrash: moveToTrash,
+            exportToObsidian: exportToObsidian
+        ))
         .onAppear {
             // Initialize app with 3-pane view and last opened sheet
             appState.initializeApp(context: viewContext)
@@ -645,13 +523,7 @@ struct ContentView: View {
             return
         }
 
-        ExportService.shared.exportToObsidian(sheet: selectedSheet) { success, message in
-            if success {
-                ExportService.shared.toastManager.show(message)
-            } else {
-                ExportService.shared.toastManager.show("Export failed: \(message)")
-            }
-        }
+        ExportService.shared.exportToObsidian(sheet: selectedSheet)
     }
 
 }
@@ -1214,6 +1086,215 @@ struct SecondaryEditorView: View {
                 showWordCounterTemporarily = false
             }
         }
+    }
+}
+
+// MARK: - Menu Command Handlers Modifier
+
+struct MenuCommandHandlers: ViewModifier {
+    @ObservedObject var appState: AppState
+    @Binding var showDashboard: Bool
+    @Binding var showExport: Bool
+    @Binding var dashboardType: DashboardType
+    @Binding var showTagsPane: Bool
+    @Binding var showLineNumbers: Bool
+    let createNewSheet: () -> Void
+    let createNewGroup: () -> Void
+    let createNewProject: () -> Void
+    let toggleFavorite: () -> Void
+    let moveToTrash: () -> Void
+    let exportToObsidian: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .menuNewSheet)) { _ in
+                createNewSheet()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuNewGroup)) { _ in
+                createNewGroup()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuNewProject)) { _ in
+                createNewProject()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuToggleFavorite)) { _ in
+                toggleFavorite()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuMoveToTrash)) { _ in
+                moveToTrash()
+            }
+            .modifier(MenuFormatHandlers())
+            .modifier(MenuViewHandlers(
+                appState: appState,
+                showDashboard: $showDashboard,
+                dashboardType: $dashboardType,
+                showTagsPane: $showTagsPane,
+                showLineNumbers: $showLineNumbers
+            ))
+            .modifier(MenuNavigationHandlers(appState: appState))
+            .modifier(MenuWindowHandlers(
+                showDashboard: $showDashboard,
+                showExport: $showExport,
+                dashboardType: $dashboardType,
+                exportToObsidian: exportToObsidian
+            ))
+    }
+}
+
+struct MenuFormatHandlers: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .menuBold)) { _ in
+                NotificationCenter.default.post(name: .formatBold, object: nil)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuItalic)) { _ in
+                NotificationCenter.default.post(name: .formatItalic, object: nil)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuHighlight)) { _ in
+                NotificationCenter.default.post(name: .formatHighlight, object: nil)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuStrikethrough)) { _ in
+                NotificationCenter.default.post(name: .formatStrikethrough, object: nil)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuHeading)) { notification in
+                if let level = notification.object as? Int {
+                    NotificationCenter.default.post(name: .formatHeading, object: level)
+                }
+            }
+    }
+}
+
+struct MenuViewHandlers: ViewModifier {
+    @ObservedObject var appState: AppState
+    @Binding var showDashboard: Bool
+    @Binding var dashboardType: DashboardType
+    @Binding var showTagsPane: Bool
+    @Binding var showLineNumbers: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .menuToggleLibrary)) { _ in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    appState.showLibrary.toggle()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuToggleSecondEditor)) { _ in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    if appState.showSecondaryEditor {
+                        appState.closeSecondaryEditor()
+                    } else if let selectedSheet = appState.selectedSheet {
+                        appState.openSecondaryEditor(with: selectedSheet)
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuToggleProgress)) { _ in
+                dashboardType = .overview
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showDashboard.toggle()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuToggleTags)) { _ in
+                showTagsPane.toggle()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuToggleLineNumbers)) { _ in
+                showLineNumbers.toggle()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuTheme)) { notification in
+                if let themeString = notification.object as? String {
+                    switch themeString {
+                    case "light":
+                        appState.theme = .light
+                    case "dark":
+                        appState.theme = .dark
+                    case "system":
+                        appState.theme = .system
+                    default:
+                        break
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuToggleFocusMode)) { _ in
+                appState.isFocusMode.toggle()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuToggleTypewriterMode)) { _ in
+                appState.isTypewriterMode.toggle()
+            }
+    }
+}
+
+struct MenuNavigationHandlers: ViewModifier {
+    @ObservedObject var appState: AppState
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .menuGoAll)) { _ in
+                appState.selectedEssential = "all"
+                appState.selectedGroup = nil
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuGoRecent)) { _ in
+                appState.selectedEssential = "recent"
+                appState.selectedGroup = nil
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuPreviousSheet)) { _ in
+                _ = appState.navigateToPreviousSheet()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuNextSheet)) { _ in
+                _ = appState.navigateToNextSheet()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuGoLibrary)) { _ in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    appState.showLibrary = true
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuGoSheetList)) { _ in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    appState.showSheetList = true
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuGoEditor)) { _ in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    appState.viewMode = .editorOnly
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuGoDashboard)) { _ in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    appState.showLibrary = true
+                    appState.showSheetList = true
+                }
+            }
+    }
+}
+
+struct MenuWindowHandlers: ViewModifier {
+    @Binding var showDashboard: Bool
+    @Binding var showExport: Bool
+    @Binding var dashboardType: DashboardType
+    let exportToObsidian: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .menuNewTab)) { _ in
+                #if os(macOS)
+                NSApp.sendAction(#selector(NSWindow.makeKeyAndOrderFront(_:)), to: nil, from: nil)
+                #endif
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuExport)) { _ in
+                showExport = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuExportToObsidian)) { _ in
+                exportToObsidian()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuStatistics)) { _ in
+                dashboardType = .overview
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showDashboard = true
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .menuNavigation)) { _ in
+                dashboardType = .overview
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showDashboard = true
+                }
+            }
     }
 }
 
