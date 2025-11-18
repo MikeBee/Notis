@@ -194,18 +194,8 @@ struct EditorView: View {
                             ),
                             fontFamily: fontFamily,
                             editorMargins: Binding(
-                                get: {
-                                    // Only override margins in 3-pane view AND not in full screen
-                                    if appState.viewMode == .threePane && !appState.isFullScreen {
-                                        return 20
-                                    } else {
-                                        return CGFloat(safeEditorMargins)
-                                    }
-                                },
-                                set: { newValue in
-                                    // Always allow setting changes - they'll take effect in non-3-pane modes
-                                    editorMargins = Double(newValue)
-                                }
+                                get: { CGFloat(safeEditorMargins) },
+                                set: { editorMargins = Double($0) }
                             ),
                             hideShortcutBar: appState.hideShortcutBar || appState.isFullScreen,
                             disableQuickType: disableQuickType,
@@ -218,7 +208,7 @@ struct EditorView: View {
                         // Word Counter at bottom if enabled (hidden in full screen, auto-hides after inactivity)
                         if appState.showWordCounter && !appState.isFullScreen {
                             WordCounterView(sheet: selectedSheet)
-                                .padding(.horizontal, (appState.viewMode == .threePane && !appState.isFullScreen) ? 20 : CGFloat(safeEditorMargins))
+                                .padding(.horizontal, CGFloat(safeEditorMargins))
                                 .padding(.bottom, 4)
                                 .background(Color(.systemBackground))
                                 .opacity(showWordCounterTemporarily ? 1.0 : 0.3)
@@ -236,7 +226,7 @@ struct EditorView: View {
                         // Tag Editor (hidden in full screen)
                         if showTagsPane && !appState.isFullScreen {
                             TagEditorView(sheet: selectedSheet)
-                                .padding(.horizontal, (appState.viewMode == .threePane && !appState.isFullScreen) ? 20 : CGFloat(safeEditorMargins))
+                                .padding(.horizontal, CGFloat(safeEditorMargins))
                                 .padding(.vertical, 12)
                                 .background(Color(.systemBackground))
                                 .overlay(
