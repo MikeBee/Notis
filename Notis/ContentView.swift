@@ -28,7 +28,7 @@ struct ContentView: View {
     @AppStorage("showTagsPane") private var showTagsPane: Bool = true
 
     // Resizable pane widths (Mac only)
-    #if os(macOS)
+    #if os(macOS) || targetEnvironment(macCatalyst)
     @AppStorage("libraryPaneWidth") private var libraryPaneWidth: Double = 280
     @AppStorage("sheetListPaneWidth") private var sheetListPaneWidth: Double = 360
     #endif
@@ -57,7 +57,7 @@ struct ContentView: View {
                     HStack(spacing: 0) {
                         // Library Sidebar (Pane 1) - Ulysses style
                         if appState.showLibrary {
-                            #if os(macOS)
+                            #if os(macOS) || targetEnvironment(macCatalyst)
                             LibrarySidebar(appState: appState)
                                 .frame(width: CGFloat(libraryPaneWidth))
                                 .background(UlyssesDesign.Colors.libraryBg(for: colorScheme ?? .light))
@@ -85,7 +85,7 @@ struct ContentView: View {
                         
                         // Sheet List (Pane 2) - Ulysses style (now has the lighter background)
                         if appState.showSheetList {
-                            #if os(macOS)
+                            #if os(macOS) || targetEnvironment(macCatalyst)
                             SheetListView(appState: appState)
                                 .frame(width: CGFloat(sheetListPaneWidth))
                                 .background(UlyssesDesign.Colors.background(for: colorScheme ?? .light))
@@ -1299,7 +1299,7 @@ struct MenuWindowHandlers: ViewModifier {
 }
 
 // MARK: - Resizable Divider (Mac only)
-#if os(macOS)
+#if os(macOS) || targetEnvironment(macCatalyst)
 struct ResizableDivider: View {
     let colorScheme: ColorScheme
     @Binding var width: Double
@@ -1323,11 +1323,13 @@ struct ResizableDivider: View {
                 withAnimation(.easeInOut(duration: 0.1)) {
                     isHovering = hovering
                 }
+                #if os(macOS)
                 if hovering {
                     NSCursor.resizeLeftRight.push()
                 } else if !isDragging {
                     NSCursor.pop()
                 }
+                #endif
             }
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
@@ -1342,9 +1344,11 @@ struct ResizableDivider: View {
                     .onEnded { _ in
                         isDragging = false
                         dragStartWidth = 0
+                        #if os(macOS)
                         if !isHovering {
                             NSCursor.pop()
                         }
+                        #endif
                     }
             )
     }
