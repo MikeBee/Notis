@@ -18,8 +18,14 @@ struct ContentView: View {
     @State private var showKeyboardShortcutsSettings = false
     @State private var showAdvancedSearch = false
     @State private var showTemplates = false
+    @State private var showExport = false
+    @State private var showStatistics = false
     @State private var dashboardType: DashboardType = .overview
     @StateObject private var templateService = TemplateService.shared
+
+    // Settings for menu toggles
+    @AppStorage("showLineNumbers") private var showLineNumbers: Bool = false
+    @AppStorage("showTagsPane") private var showTagsPane: Bool = true
 
     // Resizable pane widths (Mac only)
     #if os(macOS)
@@ -260,6 +266,143 @@ struct ContentView: View {
                 createSheetFromTemplate(template)
             }
         }
+        // MARK: - Menu Command Handlers
+        .onReceive(NotificationCenter.default.publisher(for: .menuNewSheet)) { _ in
+            createNewSheet()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuNewGroup)) { _ in
+            createNewGroup()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuNewProject)) { _ in
+            createNewProject()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuToggleFavorite)) { _ in
+            toggleFavorite()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuMoveToTrash)) { _ in
+            moveToTrash()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuBold)) { _ in
+            NotificationCenter.default.post(name: .formatBold, object: nil)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuItalic)) { _ in
+            NotificationCenter.default.post(name: .formatItalic, object: nil)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuHighlight)) { _ in
+            NotificationCenter.default.post(name: .formatHighlight, object: nil)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuStrikethrough)) { _ in
+            NotificationCenter.default.post(name: .formatStrikethrough, object: nil)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuHeading)) { notification in
+            if let level = notification.object as? Int {
+                NotificationCenter.default.post(name: .formatHeading, object: level)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuToggleLibrary)) { _ in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                appState.showLibrary.toggle()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuToggleSecondEditor)) { _ in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                if appState.showSecondaryEditor {
+                    appState.closeSecondaryEditor()
+                } else if let selectedSheet = appState.selectedSheet {
+                    appState.openSecondaryEditor(with: selectedSheet)
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuToggleProgress)) { _ in
+            dashboardType = .overview
+            withAnimation(.easeInOut(duration: 0.25)) {
+                showDashboard.toggle()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuToggleTags)) { _ in
+            showTagsPane.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuToggleLineNumbers)) { _ in
+            showLineNumbers.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuTheme)) { notification in
+            if let themeString = notification.object as? String {
+                switch themeString {
+                case "light":
+                    appState.theme = .light
+                case "dark":
+                    appState.theme = .dark
+                case "system":
+                    appState.theme = .system
+                default:
+                    break
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuToggleFocusMode)) { _ in
+            appState.isFocusMode.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuToggleTypewriterMode)) { _ in
+            appState.isTypewriterMode.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuGoAll)) { _ in
+            appState.selectedEssential = "all"
+            appState.selectedGroup = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuGoRecent)) { _ in
+            appState.selectedEssential = "recent"
+            appState.selectedGroup = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuPreviousSheet)) { _ in
+            appState.navigateToPreviousSheet()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuNextSheet)) { _ in
+            appState.navigateToNextSheet()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuGoLibrary)) { _ in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                appState.showLibrary = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuGoSheetList)) { _ in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                appState.showSheetList = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuGoEditor)) { _ in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                appState.viewMode = .editorOnly
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuGoDashboard)) { _ in
+            dashboardType = .overview
+            withAnimation(.easeInOut(duration: 0.25)) {
+                showDashboard = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuNewTab)) { _ in
+            #if os(macOS)
+            NSApp.sendAction(#selector(NSWindow.makeKeyAndOrderFront(_:)), to: nil, from: nil)
+            #endif
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuExport)) { _ in
+            showExport = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuExportToObsidian)) { _ in
+            exportToObsidian()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuStatistics)) { _ in
+            dashboardType = .overview
+            withAnimation(.easeInOut(duration: 0.25)) {
+                showDashboard = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .menuNavigation)) { _ in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                appState.showLibrary = true
+                appState.showSheetList = true
+            }
+        }
         .onAppear {
             // Initialize app with 3-pane view and last opened sheet
             appState.initializeApp(context: viewContext)
@@ -435,7 +578,7 @@ struct ContentView: View {
             newGroup.createdAt = Date()
             newGroup.modifiedAt = Date()
             newGroup.sortOrder = 0
-            
+
             do {
                 try viewContext.save()
                 appState.selectedGroup = newGroup
@@ -444,7 +587,73 @@ struct ContentView: View {
             }
         }
     }
-    
+
+    private func createNewProject() {
+        withAnimation {
+            // Create a new project (group with sub-structure)
+            let projectGroup = Group(context: viewContext)
+            projectGroup.id = UUID()
+            projectGroup.name = "New Project"
+            projectGroup.createdAt = Date()
+            projectGroup.modifiedAt = Date()
+            projectGroup.sortOrder = 0
+
+            do {
+                try viewContext.save()
+                appState.selectedGroup = projectGroup
+            } catch {
+                print("Failed to create project: \(error)")
+            }
+        }
+    }
+
+    private func toggleFavorite() {
+        guard let selectedSheet = appState.selectedSheet else { return }
+        withAnimation {
+            selectedSheet.isFavorite.toggle()
+            do {
+                try viewContext.save()
+            } catch {
+                print("Failed to toggle favorite: \(error)")
+            }
+        }
+    }
+
+    private func moveToTrash() {
+        guard let selectedSheet = appState.selectedSheet else { return }
+        withAnimation {
+            selectedSheet.isInTrash = true
+            selectedSheet.modifiedAt = Date()
+
+            // Clear selection and select another sheet
+            let sheets = appState.getSortedSheets().filter { $0 != selectedSheet }
+            appState.selectedSheet = sheets.first
+            appState.clearLastOpenedSheetIfNeeded(selectedSheet)
+
+            do {
+                try viewContext.save()
+                ExportService.shared.toastManager.show("Moved to Trash")
+            } catch {
+                print("Failed to move to trash: \(error)")
+            }
+        }
+    }
+
+    private func exportToObsidian() {
+        guard let selectedSheet = appState.selectedSheet else {
+            ExportService.shared.toastManager.show("No sheet selected")
+            return
+        }
+
+        ExportService.shared.exportToObsidian(sheet: selectedSheet) { success, message in
+            if success {
+                ExportService.shared.toastManager.show(message)
+            } else {
+                ExportService.shared.toastManager.show("Export failed: \(message)")
+            }
+        }
+    }
+
 }
 
 class AppState: ObservableObject {
