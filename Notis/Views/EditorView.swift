@@ -45,7 +45,7 @@ struct EditorView: View {
 
     private var safeEditorMargins: Double {
         guard editorMargins.isFinite && !editorMargins.isNaN && editorMargins >= 0 else { return 40 }
-        return max(0, min(400, editorMargins))
+        return max(0, min(600, editorMargins))
     }
 
     var body: some View {
