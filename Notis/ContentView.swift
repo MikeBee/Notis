@@ -20,7 +20,13 @@ struct ContentView: View {
     @State private var showTemplates = false
     @State private var dashboardType: DashboardType = .overview
     @StateObject private var templateService = TemplateService.shared
-    
+
+    // Resizable pane widths (Mac only)
+    #if os(macOS)
+    @AppStorage("libraryPaneWidth") private var libraryPaneWidth: Double = 280
+    @AppStorage("sheetListPaneWidth") private var sheetListPaneWidth: Double = 360
+    #endif
+
     private var colorScheme: ColorScheme? {
         switch appState.theme {
         case .light:
@@ -45,6 +51,19 @@ struct ContentView: View {
                     HStack(spacing: 0) {
                         // Library Sidebar (Pane 1) - Ulysses style
                         if appState.showLibrary {
+                            #if os(macOS)
+                            LibrarySidebar(appState: appState)
+                                .frame(width: CGFloat(libraryPaneWidth))
+                                .background(UlyssesDesign.Colors.libraryBg(for: colorScheme ?? .light))
+
+                            // Resizable divider
+                            ResizableDivider(
+                                colorScheme: colorScheme ?? .light,
+                                width: $libraryPaneWidth,
+                                minWidth: 200,
+                                maxWidth: 400
+                            )
+                            #else
                             LibrarySidebar(appState: appState)
                                 .frame(width: UlyssesDesign.Spacing.libraryWidth)
                                 .background(UlyssesDesign.Colors.libraryBg(for: colorScheme ?? .light))
@@ -55,10 +74,24 @@ struct ContentView: View {
                                         .opacity(0.6),
                                     alignment: .trailing
                                 )
+                            #endif
                         }
                         
                         // Sheet List (Pane 2) - Ulysses style (now has the lighter background)
                         if appState.showSheetList {
+                            #if os(macOS)
+                            SheetListView(appState: appState)
+                                .frame(width: CGFloat(sheetListPaneWidth))
+                                .background(UlyssesDesign.Colors.background(for: colorScheme ?? .light))
+
+                            // Resizable divider
+                            ResizableDivider(
+                                colorScheme: colorScheme ?? .light,
+                                width: $sheetListPaneWidth,
+                                minWidth: 250,
+                                maxWidth: 500
+                            )
+                            #else
                             SheetListView(appState: appState)
                                 .frame(width: UlyssesDesign.Spacing.sheetListWidth)
                                 .background(UlyssesDesign.Colors.background(for: colorScheme ?? .light))
@@ -69,6 +102,7 @@ struct ContentView: View {
                                         .opacity(0.6),
                                     alignment: .trailing
                                 )
+                            #endif
                         }
                         
                         // Editor Pane(s) (Pane 3) - Ulysses style
@@ -973,6 +1007,49 @@ struct SecondaryEditorView: View {
         }
     }
 }
+
+// MARK: - Resizable Divider (Mac only)
+#if os(macOS)
+struct ResizableDivider: View {
+    let colorScheme: ColorScheme
+    @Binding var width: Double
+    let minWidth: Double
+    let maxWidth: Double
+
+    @State private var isHovering = false
+    @State private var dragStartWidth: Double = 0
+
+    var body: some View {
+        Rectangle()
+            .fill(isHovering ? Color.accentColor : UlyssesDesign.Colors.dividerColor(for: colorScheme))
+            .frame(width: isHovering ? 3 : 1)
+            .opacity(isHovering ? 1.0 : 0.6)
+            .contentShape(Rectangle().inset(by: -3))
+            .onHover { hovering in
+                isHovering = hovering
+                if hovering {
+                    NSCursor.resizeLeftRight.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if dragStartWidth == 0 {
+                            dragStartWidth = width
+                        }
+                        let newWidth = dragStartWidth + value.translation.width
+                        width = max(minWidth, min(maxWidth, newWidth))
+                    }
+                    .onEnded { _ in
+                        dragStartWidth = 0
+                    }
+            )
+            .animation(.easeInOut(duration: 0.15), value: isHovering)
+    }
+}
+#endif
 
 #Preview {
     ContentView()
