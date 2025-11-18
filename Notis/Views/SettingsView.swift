@@ -111,7 +111,7 @@ struct SettingsView: View {
 
                     HStack {
                         Text("Editor Margins")
-                        Slider(value: $editorMargins, in: 0...400, step: 5)
+                        Slider(value: $editorMargins, in: 0...600, step: 5)
                         Text(editorMargins == 0 ? "None" : "\(Int(editorMargins))pt")
                             .foregroundColor(.secondary)
                             .frame(width: 50)
