@@ -18,20 +18,8 @@ struct ContentView: View {
     @State private var showKeyboardShortcutsSettings = false
     @State private var showAdvancedSearch = false
     @State private var showTemplates = false
-    @State private var showExport = false
-    @State private var showStatistics = false
     @State private var dashboardType: DashboardType = .overview
     @StateObject private var templateService = TemplateService.shared
-
-    // Settings for menu toggles
-    @AppStorage("showLineNumbers") private var showLineNumbers: Bool = false
-    @AppStorage("showTagsPane") private var showTagsPane: Bool = true
-
-    // Resizable pane widths (Mac only)
-    #if os(macOS) || targetEnvironment(macCatalyst)
-    @AppStorage("libraryPaneWidth") private var libraryPaneWidth: Double = 280
-    @AppStorage("sheetListPaneWidth") private var sheetListPaneWidth: Double = 360
-    #endif
 
     private var colorScheme: ColorScheme? {
         switch appState.theme {
@@ -57,19 +45,6 @@ struct ContentView: View {
                     HStack(spacing: 0) {
                         // Library Sidebar (Pane 1) - Ulysses style
                         if appState.showLibrary {
-                            #if os(macOS) || targetEnvironment(macCatalyst)
-                            LibrarySidebar(appState: appState)
-                                .frame(width: CGFloat(libraryPaneWidth))
-                                .background(UlyssesDesign.Colors.libraryBg(for: colorScheme ?? .light))
-
-                            // Resizable divider
-                            ResizableDivider(
-                                colorScheme: colorScheme ?? .light,
-                                width: $libraryPaneWidth,
-                                minWidth: 200,
-                                maxWidth: 400
-                            )
-                            #else
                             LibrarySidebar(appState: appState)
                                 .frame(width: UlyssesDesign.Spacing.libraryWidth)
                                 .background(UlyssesDesign.Colors.libraryBg(for: colorScheme ?? .light))
@@ -80,24 +55,10 @@ struct ContentView: View {
                                         .opacity(0.6),
                                     alignment: .trailing
                                 )
-                            #endif
                         }
                         
                         // Sheet List (Pane 2) - Ulysses style (now has the lighter background)
                         if appState.showSheetList {
-                            #if os(macOS) || targetEnvironment(macCatalyst)
-                            SheetListView(appState: appState)
-                                .frame(width: CGFloat(sheetListPaneWidth))
-                                .background(UlyssesDesign.Colors.background(for: colorScheme ?? .light))
-
-                            // Resizable divider
-                            ResizableDivider(
-                                colorScheme: colorScheme ?? .light,
-                                width: $sheetListPaneWidth,
-                                minWidth: 250,
-                                maxWidth: 500
-                            )
-                            #else
                             SheetListView(appState: appState)
                                 .frame(width: UlyssesDesign.Spacing.sheetListWidth)
                                 .background(UlyssesDesign.Colors.background(for: colorScheme ?? .light))
@@ -108,7 +69,6 @@ struct ContentView: View {
                                         .opacity(0.6),
                                     alignment: .trailing
                                 )
-                            #endif
                         }
                         
                         // Editor Pane(s) (Pane 3) - Ulysses style
@@ -266,21 +226,6 @@ struct ContentView: View {
                 createSheetFromTemplate(template)
             }
         }
-        // Menu command handlers extracted to separate modifier
-        .modifier(MenuCommandHandlers(
-            appState: appState,
-            showDashboard: $showDashboard,
-            showExport: $showExport,
-            dashboardType: $dashboardType,
-            showTagsPane: $showTagsPane,
-            showLineNumbers: $showLineNumbers,
-            createNewSheet: createNewSheet,
-            createNewGroup: createNewGroup,
-            createNewProject: createNewProject,
-            toggleFavorite: toggleFavorite,
-            moveToTrash: moveToTrash,
-            exportToObsidian: exportToObsidian
-        ))
         .onAppear {
             // Initialize app with 3-pane view and last opened sheet
             appState.initializeApp(context: viewContext)
@@ -464,66 +409,6 @@ struct ContentView: View {
                 print("Failed to create group: \(error)")
             }
         }
-    }
-
-    private func createNewProject() {
-        withAnimation {
-            // Create a new project (group with sub-structure)
-            let projectGroup = Group(context: viewContext)
-            projectGroup.id = UUID()
-            projectGroup.name = "New Project"
-            projectGroup.createdAt = Date()
-            projectGroup.modifiedAt = Date()
-            projectGroup.sortOrder = 0
-
-            do {
-                try viewContext.save()
-                appState.selectedGroup = projectGroup
-            } catch {
-                print("Failed to create project: \(error)")
-            }
-        }
-    }
-
-    private func toggleFavorite() {
-        guard let selectedSheet = appState.selectedSheet else { return }
-        withAnimation {
-            selectedSheet.isFavorite.toggle()
-            do {
-                try viewContext.save()
-            } catch {
-                print("Failed to toggle favorite: \(error)")
-            }
-        }
-    }
-
-    private func moveToTrash() {
-        guard let selectedSheet = appState.selectedSheet else { return }
-        withAnimation {
-            selectedSheet.isInTrash = true
-            selectedSheet.modifiedAt = Date()
-
-            // Clear selection and select another sheet
-            let sheets = appState.getSortedSheets().filter { $0 != selectedSheet }
-            appState.selectedSheet = sheets.first
-            appState.clearLastOpenedSheetIfNeeded(selectedSheet)
-
-            do {
-                try viewContext.save()
-                ExportService.shared.toastManager.show("Moved to Trash")
-            } catch {
-                print("Failed to move to trash: \(error)")
-            }
-        }
-    }
-
-    private func exportToObsidian() {
-        guard let selectedSheet = appState.selectedSheet else {
-            ExportService.shared.toastManager.show("No sheet selected")
-            return
-        }
-
-        ExportService.shared.exportToObsidian(sheet: selectedSheet)
     }
 
 }
@@ -1088,272 +973,6 @@ struct SecondaryEditorView: View {
         }
     }
 }
-
-// MARK: - Menu Command Handlers Modifier
-
-struct MenuCommandHandlers: ViewModifier {
-    @ObservedObject var appState: AppState
-    @Binding var showDashboard: Bool
-    @Binding var showExport: Bool
-    @Binding var dashboardType: DashboardType
-    @Binding var showTagsPane: Bool
-    @Binding var showLineNumbers: Bool
-    let createNewSheet: () -> Void
-    let createNewGroup: () -> Void
-    let createNewProject: () -> Void
-    let toggleFavorite: () -> Void
-    let moveToTrash: () -> Void
-    let exportToObsidian: () -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .onReceive(NotificationCenter.default.publisher(for: .menuNewSheet)) { _ in
-                createNewSheet()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuNewGroup)) { _ in
-                createNewGroup()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuNewProject)) { _ in
-                createNewProject()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuToggleFavorite)) { _ in
-                toggleFavorite()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuMoveToTrash)) { _ in
-                moveToTrash()
-            }
-            .modifier(MenuFormatHandlers())
-            .modifier(MenuViewHandlers(
-                appState: appState,
-                showDashboard: $showDashboard,
-                dashboardType: $dashboardType,
-                showTagsPane: $showTagsPane,
-                showLineNumbers: $showLineNumbers
-            ))
-            .modifier(MenuNavigationHandlers(appState: appState))
-            .modifier(MenuWindowHandlers(
-                showDashboard: $showDashboard,
-                showExport: $showExport,
-                dashboardType: $dashboardType,
-                exportToObsidian: exportToObsidian
-            ))
-    }
-}
-
-struct MenuFormatHandlers: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .onReceive(NotificationCenter.default.publisher(for: .menuBold)) { _ in
-                NotificationCenter.default.post(name: .formatBold, object: nil)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuItalic)) { _ in
-                NotificationCenter.default.post(name: .formatItalic, object: nil)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuHighlight)) { _ in
-                NotificationCenter.default.post(name: .formatHighlight, object: nil)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuStrikethrough)) { _ in
-                NotificationCenter.default.post(name: .formatStrikethrough, object: nil)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuHeading)) { notification in
-                if let level = notification.object as? Int {
-                    NotificationCenter.default.post(name: .formatHeading, object: level)
-                }
-            }
-    }
-}
-
-struct MenuViewHandlers: ViewModifier {
-    @ObservedObject var appState: AppState
-    @Binding var showDashboard: Bool
-    @Binding var dashboardType: DashboardType
-    @Binding var showTagsPane: Bool
-    @Binding var showLineNumbers: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .onReceive(NotificationCenter.default.publisher(for: .menuToggleLibrary)) { _ in
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    appState.showLibrary.toggle()
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuToggleSecondEditor)) { _ in
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    if appState.showSecondaryEditor {
-                        appState.closeSecondaryEditor()
-                    } else if let selectedSheet = appState.selectedSheet {
-                        appState.openSecondaryEditor(with: selectedSheet)
-                    }
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuToggleProgress)) { _ in
-                dashboardType = .overview
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    showDashboard.toggle()
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuToggleTags)) { _ in
-                showTagsPane.toggle()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuToggleLineNumbers)) { _ in
-                showLineNumbers.toggle()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuTheme)) { notification in
-                if let themeString = notification.object as? String {
-                    switch themeString {
-                    case "light":
-                        appState.theme = .light
-                    case "dark":
-                        appState.theme = .dark
-                    case "system":
-                        appState.theme = .system
-                    default:
-                        break
-                    }
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuToggleFocusMode)) { _ in
-                appState.isFocusMode.toggle()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuToggleTypewriterMode)) { _ in
-                appState.isTypewriterMode.toggle()
-            }
-    }
-}
-
-struct MenuNavigationHandlers: ViewModifier {
-    @ObservedObject var appState: AppState
-
-    func body(content: Content) -> some View {
-        content
-            .onReceive(NotificationCenter.default.publisher(for: .menuGoAll)) { _ in
-                appState.selectedEssential = "all"
-                appState.selectedGroup = nil
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuGoRecent)) { _ in
-                appState.selectedEssential = "recent"
-                appState.selectedGroup = nil
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuPreviousSheet)) { _ in
-                _ = appState.navigateToPreviousSheet()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuNextSheet)) { _ in
-                _ = appState.navigateToNextSheet()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuGoLibrary)) { _ in
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    appState.showLibrary = true
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuGoSheetList)) { _ in
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    appState.showSheetList = true
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuGoEditor)) { _ in
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    appState.viewMode = .editorOnly
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuGoDashboard)) { _ in
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    appState.showLibrary = true
-                    appState.showSheetList = true
-                }
-            }
-    }
-}
-
-struct MenuWindowHandlers: ViewModifier {
-    @Binding var showDashboard: Bool
-    @Binding var showExport: Bool
-    @Binding var dashboardType: DashboardType
-    let exportToObsidian: () -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .onReceive(NotificationCenter.default.publisher(for: .menuNewTab)) { _ in
-                #if os(macOS)
-                NSApp.sendAction(#selector(NSWindow.makeKeyAndOrderFront(_:)), to: nil, from: nil)
-                #endif
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuExport)) { _ in
-                showExport = true
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuExportToObsidian)) { _ in
-                exportToObsidian()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuStatistics)) { _ in
-                dashboardType = .overview
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    showDashboard = true
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .menuNavigation)) { _ in
-                dashboardType = .overview
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    showDashboard = true
-                }
-            }
-    }
-}
-
-// MARK: - Resizable Divider (Mac only)
-#if os(macOS) || targetEnvironment(macCatalyst)
-struct ResizableDivider: View {
-    let colorScheme: ColorScheme
-    @Binding var width: Double
-    let minWidth: Double
-    let maxWidth: Double
-
-    @State private var isHovering = false
-    @State private var isDragging = false
-    @State private var dragStartWidth: Double = 0
-
-    var body: some View {
-        Color.clear
-            .frame(width: 8)
-            .overlay(
-                Rectangle()
-                    .fill((isHovering || isDragging) ? Color.accentColor : UlyssesDesign.Colors.dividerColor(for: colorScheme))
-                    .frame(width: (isHovering || isDragging) ? 3 : 1)
-            )
-            .contentShape(Rectangle())
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.1)) {
-                    isHovering = hovering
-                }
-                #if os(macOS)
-                if hovering {
-                    NSCursor.resizeLeftRight.push()
-                } else if !isDragging {
-                    NSCursor.pop()
-                }
-                #endif
-            }
-            .gesture(
-                DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                    .onChanged { value in
-                        if !isDragging {
-                            isDragging = true
-                            dragStartWidth = width
-                        }
-                        let newWidth = dragStartWidth + value.translation.width
-                        width = max(minWidth, min(maxWidth, newWidth))
-                    }
-                    .onEnded { _ in
-                        isDragging = false
-                        dragStartWidth = 0
-                        #if os(macOS)
-                        if !isHovering {
-                            NSCursor.pop()
-                        }
-                        #endif
-                    }
-            )
-    }
-}
-#endif
 
 #Preview {
     ContentView()
